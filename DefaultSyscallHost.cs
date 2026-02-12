@@ -9,33 +9,33 @@ namespace AiVM.Core;
 
 public class DefaultSyscallHost : ISyscallHost
 {
-    public void ConsolePrintLine(string text) => Console.WriteLine(text);
+    public virtual void ConsolePrintLine(string text) => Console.WriteLine(text);
 
-    public void IoPrint(string text) => Console.WriteLine(text);
+    public virtual void IoPrint(string text) => Console.WriteLine(text);
 
-    public void IoWrite(string text) => Console.Write(text);
+    public virtual void IoWrite(string text) => Console.Write(text);
 
-    public string IoReadLine() => Console.ReadLine() ?? string.Empty;
+    public virtual string IoReadLine() => Console.ReadLine() ?? string.Empty;
 
-    public string IoReadAllStdin() => Console.In.ReadToEnd();
+    public virtual string IoReadAllStdin() => Console.In.ReadToEnd();
 
-    public string IoReadFile(string path) => File.ReadAllText(path);
+    public virtual string IoReadFile(string path) => File.ReadAllText(path);
 
-    public bool IoFileExists(string path) => File.Exists(path);
+    public virtual bool IoFileExists(string path) => File.Exists(path);
 
-    public bool IoPathExists(string path) => File.Exists(path) || Directory.Exists(path);
+    public virtual bool IoPathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
-    public void IoMakeDir(string path) => Directory.CreateDirectory(path);
+    public virtual void IoMakeDir(string path) => Directory.CreateDirectory(path);
 
-    public void IoWriteFile(string path, string text) => File.WriteAllText(path, text);
+    public virtual void IoWriteFile(string path, string text) => File.WriteAllText(path, text);
 
-    public string FsReadFile(string path) => File.ReadAllText(path);
+    public virtual string FsReadFile(string path) => File.ReadAllText(path);
 
-    public bool FsFileExists(string path) => File.Exists(path);
+    public virtual bool FsFileExists(string path) => File.Exists(path);
 
-    public int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
+    public virtual int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
 
-    public int NetListen(VmNetworkState state, int port)
+    public virtual int NetListen(VmNetworkState state, int port)
     {
         var listener = new TcpListener(IPAddress.Loopback, port);
         listener.Start();
@@ -44,7 +44,7 @@ public class DefaultSyscallHost : ISyscallHost
         return handle;
     }
 
-    public int NetListenTls(VmNetworkState state, int port, string certPath, string keyPath)
+    public virtual int NetListenTls(VmNetworkState state, int port, string certPath, string keyPath)
     {
         X509Certificate2 certificate;
         try
@@ -64,7 +64,7 @@ public class DefaultSyscallHost : ISyscallHost
         return handle;
     }
 
-    public int NetAccept(VmNetworkState state, int listenerHandle)
+    public virtual int NetAccept(VmNetworkState state, int listenerHandle)
     {
         if (!state.NetListeners.TryGetValue(listenerHandle, out var listener))
         {
@@ -99,7 +99,7 @@ public class DefaultSyscallHost : ISyscallHost
         return connHandle;
     }
 
-    public string NetReadHeaders(VmNetworkState state, int connectionHandle)
+    public virtual string NetReadHeaders(VmNetworkState state, int connectionHandle)
     {
         if (!state.NetConnections.TryGetValue(connectionHandle, out var client))
         {
@@ -161,7 +161,7 @@ public class DefaultSyscallHost : ISyscallHost
         return headerText;
     }
 
-    public bool NetWrite(VmNetworkState state, int connectionHandle, string text)
+    public virtual bool NetWrite(VmNetworkState state, int connectionHandle, string text)
     {
         if (!state.NetConnections.TryGetValue(connectionHandle, out var client))
         {
@@ -177,7 +177,7 @@ public class DefaultSyscallHost : ISyscallHost
         return true;
     }
 
-    public void NetClose(VmNetworkState state, int handle)
+    public virtual void NetClose(VmNetworkState state, int handle)
     {
         if (state.NetConnections.TryGetValue(handle, out var conn))
         {
@@ -200,9 +200,9 @@ public class DefaultSyscallHost : ISyscallHost
         }
     }
 
-    public void StdoutWriteLine(string text) => Console.WriteLine(text);
+    public virtual void StdoutWriteLine(string text) => Console.WriteLine(text);
 
-    public void ProcessExit(int code) => throw new AosProcessExitException(code);
+    public virtual void ProcessExit(int code) => throw new AosProcessExitException(code);
 
     private static int ParseContentLength(string raw)
     {
