@@ -2,6 +2,56 @@ namespace AiVM.Core;
 
 public static class VmSyscalls
 {
+    public static void ConsolePrintLine(string text)
+    {
+        Console.WriteLine(text);
+    }
+
+    public static void IoPrint(string text)
+    {
+        Console.WriteLine(text);
+    }
+
+    public static void IoWrite(string text)
+    {
+        Console.Write(text);
+    }
+
+    public static string IoReadLine()
+    {
+        return Console.ReadLine() ?? string.Empty;
+    }
+
+    public static string IoReadAllStdin()
+    {
+        return Console.In.ReadToEnd();
+    }
+
+    public static string IoReadFile(string path)
+    {
+        return File.ReadAllText(path);
+    }
+
+    public static bool IoFileExists(string path)
+    {
+        return File.Exists(path);
+    }
+
+    public static bool IoPathExists(string path)
+    {
+        return File.Exists(path) || Directory.Exists(path);
+    }
+
+    public static void IoMakeDir(string path)
+    {
+        Directory.CreateDirectory(path);
+    }
+
+    public static void IoWriteFile(string path, string text)
+    {
+        File.WriteAllText(path, text);
+    }
+
     public static int NetListen(VmNetworkState state, int port)
     {
         var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
