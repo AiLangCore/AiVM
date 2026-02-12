@@ -1,0 +1,20 @@
+namespace AiVM.Core;
+
+public static class VmEngine
+{
+    public static TValue Run<TNode, TValue>(
+        TNode bytecodeNode,
+        string entryName,
+        List<TValue> args,
+        IVmBytecodeAdapter<TNode, TValue> bytecodeAdapter,
+        IVmExecutionAdapter<TValue, TNode> executionAdapter)
+    {
+        var vm = VmProgramLoader.Load(bytecodeNode, bytecodeAdapter);
+        if (!vm.FunctionIndexByName.TryGetValue(entryName, out var entryIndex))
+        {
+            throw new VmRuntimeException("VM001", $"Entry function not found: {entryName}.", entryName);
+        }
+
+        return VmRunner.Run(vm, entryIndex, args, executionAdapter);
+    }
+}
