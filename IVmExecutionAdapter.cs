@@ -28,4 +28,8 @@ public interface IVmExecutionAdapter<TValue, TNode>
     TNode ValueToNode(TValue value);
 
     TValue ExecuteCall(string target, IReadOnlyList<TValue> args);
+
+    void TraceInstruction(string functionName, int pc, string op)
+    {
+    }
 }

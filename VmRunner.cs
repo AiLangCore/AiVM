@@ -43,6 +43,7 @@ public static class VmRunner
         while (pc < function.Instructions.Count)
         {
             var inst = function.Instructions[pc];
+            adapter.TraceInstruction(function.Name, pc, inst.Op);
             switch (inst.Op)
             {
                 case "CONST":
