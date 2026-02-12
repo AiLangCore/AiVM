@@ -2,6 +2,45 @@ namespace AiVM.Core;
 
 public static class VmSyscallDispatcher
 {
+    public static bool SupportsTarget(string target)
+    {
+        return target switch
+        {
+            "sys.net_listen" or
+            "sys.net_listen_tls" or
+            "sys.net_accept" or
+            "sys.net_readHeaders" or
+            "sys.net_write" or
+            "sys.net_close" or
+            "sys.stdout_writeLine" or
+            "sys.proc_exit" or
+            "sys.fs_readFile" or
+            "sys.fs_fileExists" or
+            "sys.str_utf8ByteCount" => true,
+            _ => false
+        };
+    }
+
+    public static bool TryGetExpectedArity(string target, out int arity)
+    {
+        arity = target switch
+        {
+            "sys.net_listen" => 1,
+            "sys.net_listen_tls" => 3,
+            "sys.net_accept" => 1,
+            "sys.net_readHeaders" => 1,
+            "sys.net_write" => 2,
+            "sys.net_close" => 1,
+            "sys.stdout_writeLine" => 1,
+            "sys.proc_exit" => 1,
+            "sys.fs_readFile" => 1,
+            "sys.fs_fileExists" => 1,
+            "sys.str_utf8ByteCount" => 1,
+            _ => -1
+        };
+        return arity >= 0;
+    }
+
     public static bool TryInvoke(string target, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
     {
         result = SysValue.Unknown();

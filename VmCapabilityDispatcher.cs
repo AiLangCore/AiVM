@@ -2,6 +2,43 @@ namespace AiVM.Core;
 
 public static class VmCapabilityDispatcher
 {
+    public static bool SupportsTarget(string target)
+    {
+        return target switch
+        {
+            "console.print" or
+            "io.print" or
+            "io.write" or
+            "io.readLine" or
+            "io.readAllStdin" or
+            "io.readFile" or
+            "io.fileExists" or
+            "io.pathExists" or
+            "io.makeDir" or
+            "io.writeFile" => true,
+            _ => false
+        };
+    }
+
+    public static bool TryGetExpectedArity(string target, out int arity)
+    {
+        arity = target switch
+        {
+            "console.print" => 1,
+            "io.print" => 1,
+            "io.write" => 1,
+            "io.readLine" => 0,
+            "io.readAllStdin" => 0,
+            "io.readFile" => 1,
+            "io.fileExists" => 1,
+            "io.pathExists" => 1,
+            "io.makeDir" => 1,
+            "io.writeFile" => 2,
+            _ => -1
+        };
+        return arity >= 0;
+    }
+
     public static bool TryInvoke(string target, IReadOnlyList<SysValue> args, out SysValue result)
     {
         result = SysValue.Unknown();
