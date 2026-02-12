@@ -365,11 +365,7 @@ public static class VmRunner
                     var children = new List<TNode>(argsForNode.Count);
                     foreach (var arg in argsForNode)
                     {
-                        if (!adapter.TryGetNode(arg, out var childNode) || childNode is null)
-                        {
-                            throw new VmRuntimeException("VM001", "MAKE_NODE child must be node.", function.Name);
-                        }
-                        children.Add(childNode);
+                        children.Add(adapter.ValueToNode(arg));
                     }
                     stack.Add(adapter.FromNode(adapter.CreateNode(
                         adapter.NodeKind(templateNode),

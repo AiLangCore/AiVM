@@ -25,6 +25,7 @@ public interface IVmExecutionAdapter<TValue, TNode>
     IReadOnlyList<KeyValuePair<string, VmAttr>> OrderedAttrs(TNode node);
     IReadOnlyList<TNode> NodeChildren(TNode node);
     TNode CreateNode(string kind, string id, IReadOnlyDictionary<string, VmAttr> attrs, IReadOnlyList<TNode> children);
+    TNode ValueToNode(TValue value);
 
     TValue ExecuteCall(string target, IReadOnlyList<TValue> args);
 }
