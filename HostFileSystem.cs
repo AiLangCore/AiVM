@@ -19,4 +19,6 @@ public static class HostFileSystem
     public static void WriteAllText(string path, string text) => File.WriteAllText(path, text);
 
     public static string? GetDirectoryName(string path) => Path.GetDirectoryName(path);
+
+    public static string GetCurrentDirectory() => Directory.GetCurrentDirectory();
 }
