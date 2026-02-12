@@ -52,6 +52,21 @@ public static class VmSyscalls
         File.WriteAllText(path, text);
     }
 
+    public static string FsReadFile(string path)
+    {
+        return File.ReadAllText(path);
+    }
+
+    public static bool FsFileExists(string path)
+    {
+        return File.Exists(path);
+    }
+
+    public static int StrUtf8ByteCount(string text)
+    {
+        return System.Text.Encoding.UTF8.GetByteCount(text);
+    }
+
     public static int NetListen(VmNetworkState state, int port)
     {
         var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
