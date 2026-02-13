@@ -68,6 +68,10 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL132", "sys.net_close expects 1 argument.", "VAL133", "sys.net_close arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.process_envGet":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL191", "sys.process_envGet expects 1 argument.", "VAL192", "sys.process_envGet arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.stdout_writeLine":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL134", "sys.stdout_writeLine expects 1 argument.", "VAL135", "sys.stdout_writeLine arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;
