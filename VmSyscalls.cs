@@ -64,6 +64,11 @@ public static class VmSyscalls
         return Host.FsFileExists(path);
     }
 
+    public static void FsMakeDir(string path)
+    {
+        Host.FsMakeDir(path);
+    }
+
     public static int StrUtf8ByteCount(string text)
     {
         return Host.StrUtf8ByteCount(text);
