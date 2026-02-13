@@ -37,6 +37,8 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual bool FsFileExists(string path) => File.Exists(path);
 
+    public virtual void FsWriteFile(string path, string text) => File.WriteAllText(path, text);
+
     public virtual int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
 
     public virtual string HttpGet(string url)
