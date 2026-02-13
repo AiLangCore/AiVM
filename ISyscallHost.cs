@@ -17,6 +17,10 @@ public interface ISyscallHost
     bool FsFileExists(string path);
     int StrUtf8ByteCount(string text);
     string HttpGet(string url);
+    string Platform();
+    string Architecture();
+    string OsVersion();
+    string Runtime();
 
     int NetListen(VmNetworkState state, int port);
     int NetListenTls(VmNetworkState state, int port, string certPath, string keyPath);

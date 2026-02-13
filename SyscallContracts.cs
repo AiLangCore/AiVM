@@ -92,6 +92,22 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL148", "sys.http_get expects 1 argument.", "VAL149", "sys.http_get arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;
                 return true;
+            case "sys.platform":
+                ValidateArity(argKinds, 0, "VAL150", "sys.platform expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.arch":
+                ValidateArity(argKinds, 0, "VAL151", "sys.arch expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.os_version":
+                ValidateArity(argKinds, 0, "VAL152", "sys.os_version expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.runtime":
+                ValidateArity(argKinds, 0, "VAL153", "sys.runtime expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.vm_run":
                 ValidateArityAndTypes(
                     argKinds,
@@ -114,6 +130,19 @@ public static class SyscallContracts
 
     private static bool IsCompatible(VmValueKind actual, VmValueKind expected)
         => actual == expected || actual == VmValueKind.Unknown;
+
+    private static void ValidateArity(
+        IReadOnlyList<VmValueKind> argKinds,
+        int expectedArity,
+        string arityCode,
+        string arityMessage,
+        Action<string, string> addDiagnostic)
+    {
+        if (argKinds.Count != expectedArity)
+        {
+            addDiagnostic(arityCode, arityMessage);
+        }
+    }
 
     private static void ValidateArityAndType(
         IReadOnlyList<VmValueKind> argKinds,

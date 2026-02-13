@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Runtime.InteropServices;
 
 namespace AiVM.Core;
 
@@ -49,6 +50,41 @@ public class DefaultSyscallHost : ISyscallHost
         {
             return string.Empty;
         }
+    }
+
+    public virtual string Platform()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return "macos";
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return "windows";
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return "linux";
+        }
+
+        return "unknown";
+    }
+
+    public virtual string Architecture()
+    {
+        return RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+    }
+
+    public virtual string OsVersion()
+    {
+        return RuntimeInformation.OSDescription;
+    }
+
+    public virtual string Runtime()
+    {
+        return "airun-dotnet";
     }
 
     public virtual int NetListen(VmNetworkState state, int port)

@@ -17,7 +17,11 @@ public static class VmSyscallDispatcher
             "sys.fs_readFile" or
             "sys.fs_fileExists" or
             "sys.str_utf8ByteCount" or
-            "sys.http_get" => true,
+            "sys.http_get" or
+            "sys.platform" or
+            "sys.arch" or
+            "sys.os_version" or
+            "sys.runtime" => true,
             _ => false
         };
     }
@@ -38,6 +42,10 @@ public static class VmSyscallDispatcher
             "sys.fs_fileExists" => 1,
             "sys.str_utf8ByteCount" => 1,
             "sys.http_get" => 1,
+            "sys.platform" => 0,
+            "sys.arch" => 0,
+            "sys.os_version" => 0,
+            "sys.runtime" => 0,
             _ => -1
         };
         return arity >= 0;
@@ -148,6 +156,38 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.HttpGet(url));
+                return true;
+
+            case "sys.platform":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.Platform());
+                return true;
+
+            case "sys.arch":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.Architecture());
+                return true;
+
+            case "sys.os_version":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.OsVersion());
+                return true;
+
+            case "sys.runtime":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.Runtime());
                 return true;
 
             default:
