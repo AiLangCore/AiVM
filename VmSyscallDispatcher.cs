@@ -16,6 +16,7 @@ public static class VmSyscallDispatcher
             "sys.proc_exit" or
             "sys.fs_readFile" or
             "sys.fs_fileExists" or
+            "sys.fs_pathExists" or
             "sys.str_utf8ByteCount" or
             "sys.http_get" or
             "sys.platform" or
@@ -40,6 +41,7 @@ public static class VmSyscallDispatcher
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
             "sys.fs_fileExists" => 1,
+            "sys.fs_pathExists" => 1,
             "sys.str_utf8ByteCount" => 1,
             "sys.http_get" => 1,
             "sys.platform" => 0,
@@ -140,6 +142,14 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.Bool(VmSyscalls.FsFileExists(existsPath));
+                return true;
+
+            case "sys.fs_pathExists":
+                if (!TryGetString(args, 0, 1, out var pathExistsPath))
+                {
+                    return true;
+                }
+                result = SysValue.Bool(VmSyscalls.FsPathExists(pathExistsPath));
                 return true;
 
             case "sys.str_utf8ByteCount":

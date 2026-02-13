@@ -64,6 +64,11 @@ public static class VmSyscalls
         return Host.FsFileExists(path);
     }
 
+    public static bool FsPathExists(string path)
+    {
+        return Host.FsPathExists(path);
+    }
+
     public static int StrUtf8ByteCount(string text)
     {
         return Host.StrUtf8ByteCount(text);
