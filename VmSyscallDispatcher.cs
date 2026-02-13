@@ -12,6 +12,7 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" or
             "sys.net_write" or
             "sys.net_close" or
+            "sys.process_cwd" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
             "sys.fs_readFile" or
@@ -36,6 +37,7 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" => 1,
             "sys.net_write" => 2,
             "sys.net_close" => 1,
+            "sys.process_cwd" => 0,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
@@ -106,6 +108,14 @@ public static class VmSyscallDispatcher
                 }
                 VmSyscalls.NetClose(network, closeHandle);
                 result = SysValue.Void();
+                return true;
+
+            case "sys.process_cwd":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.ProcessCwd());
                 return true;
 
             case "sys.stdout_writeLine":
