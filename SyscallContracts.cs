@@ -88,6 +88,10 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL142", "sys.str_utf8ByteCount expects 1 argument.", "VAL143", "sys.str_utf8ByteCount arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Int;
                 return true;
+            case "sys.http_get":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL148", "sys.http_get expects 1 argument.", "VAL149", "sys.http_get arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.vm_run":
                 ValidateArityAndTypes(
                     argKinds,

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -9,6 +10,8 @@ namespace AiVM.Core;
 
 public class DefaultSyscallHost : ISyscallHost
 {
+    private static readonly HttpClient HttpClient = new();
+
     public virtual void ConsolePrintLine(string text) => Console.WriteLine(text);
 
     public virtual void IoPrint(string text) => Console.WriteLine(text);
@@ -34,6 +37,18 @@ public class DefaultSyscallHost : ISyscallHost
     public virtual bool FsFileExists(string path) => File.Exists(path);
 
     public virtual int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
+
+    public virtual string HttpGet(string url)
+    {
+        try
+        {
+            return HttpClient.GetStringAsync(url).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
 
     public virtual int NetListen(VmNetworkState state, int port)
     {
