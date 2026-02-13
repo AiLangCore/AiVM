@@ -416,16 +416,26 @@ public static class VmRunner
                 {
                     var callArgs = PopArgs(stack, inst.B, function.Name);
                     var result = ExecuteFunction(vm, inst.A, callArgs, adapter, asyncState);
-                    var handle = asyncState.NextTaskHandle++;
-                    asyncState.CompletedTasks[handle] = result;
-                    stack.Add(adapter.FromInt(handle));
+                    stack.Add(CreateCompletedTaskValue(result, adapter, asyncState));
+                    pc++;
+                    break;
+                }
+                case "ASYNC_CALL_SYS":
+                {
+                    var callArgs = PopArgs(stack, inst.A, function.Name);
+                    var result = adapter.ExecuteCall(inst.S, callArgs);
+                    if (adapter.IsUnknown(result))
+                    {
+                        throw new VmRuntimeException("VM001", $"Unsupported call target in bytecode mode: {inst.S}.", inst.S);
+                    }
+                    stack.Add(CreateCompletedTaskValue(result, adapter, asyncState));
                     pc++;
                     break;
                 }
                 case "AWAIT":
                 {
                     var handleValue = Pop(stack, function.Name);
-                    if (!adapter.TryGetInt(handleValue, out var handle) ||
+                    if (!TryReadTaskHandle(handleValue, adapter, out var handle) ||
                         !asyncState.CompletedTasks.TryGetValue(handle, out var result))
                     {
                         throw new VmRuntimeException("VM001", "AWAIT requires valid task handle.", function.Name);
@@ -473,6 +483,12 @@ public static class VmRunner
                     var children = new List<TNode>(par.Values.Count);
                     foreach (var value in par.Values)
                     {
+                        if (TryReadTaskHandle(value, adapter, out var handle) &&
+                            asyncState.CompletedTasks.TryGetValue(handle, out var taskResult))
+                        {
+                            children.Add(adapter.ValueToNode(taskResult));
+                            continue;
+                        }
                         children.Add(adapter.ValueToNode(value));
                     }
                     var id = $"par_{asyncState.NextParNodeId++}";
@@ -548,5 +564,46 @@ public static class VmRunner
         }
         args.Reverse();
         return args;
+    }
+
+    private static TValue CreateCompletedTaskValue<TValue, TNode>(
+        TValue result,
+        IVmExecutionAdapter<TValue, TNode> adapter,
+        VmAsyncState<TValue> asyncState)
+    {
+        var handle = asyncState.NextTaskHandle++;
+        asyncState.CompletedTasks[handle] = result;
+        return adapter.FromNode(adapter.CreateNode(
+            "Task",
+            $"task_{handle}",
+            new Dictionary<string, VmAttr>(StringComparer.Ordinal)
+            {
+                ["handle"] = VmAttr.Int(handle)
+            },
+            new List<TNode>()));
+    }
+
+    private static bool TryReadTaskHandle<TValue, TNode>(TValue value, IVmExecutionAdapter<TValue, TNode> adapter, out int handle)
+    {
+        handle = 0;
+        if (!adapter.TryGetNode(value, out var node) || node is null || adapter.NodeKind(node) != "Task")
+        {
+            return false;
+        }
+
+        var attrs = adapter.OrderedAttrs(node);
+        for (var i = 0; i < attrs.Count; i++)
+        {
+            var kv = attrs[i];
+            if (!string.Equals(kv.Key, "handle", StringComparison.Ordinal) || kv.Value.Kind != VmAttrKind.Int)
+            {
+                continue;
+            }
+
+            handle = kv.Value.IntValue;
+            return true;
+        }
+
+        return false;
     }
 }
