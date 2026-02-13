@@ -42,7 +42,8 @@ public class DefaultSyscallHost : ISyscallHost
     {
         try
         {
-            return HttpClient.GetStringAsync(url).GetAwaiter().GetResult();
+            var normalizedUrl = url.Replace(" ", "%20", StringComparison.Ordinal);
+            return HttpClient.GetStringAsync(normalizedUrl).GetAwaiter().GetResult();
         }
         catch
         {
