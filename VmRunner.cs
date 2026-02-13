@@ -2,20 +2,34 @@ namespace AiVM.Core;
 
 public static class VmRunner
 {
+    private sealed class VmAsyncState<TValue>
+    {
+        public int NextTaskHandle { get; set; } = 1;
+        public Dictionary<int, TValue> CompletedTasks { get; } = new();
+        public int NextParNodeId { get; set; } = 1;
+    }
+
+    private sealed class ParContext<TValue>
+    {
+        public required int ExpectedCount { get; init; }
+        public required List<TValue> Values { get; init; }
+    }
+
     public static TValue Run<TValue, TNode>(
         VmProgram<TValue> vm,
         int entryFunctionIndex,
         List<TValue> args,
         IVmExecutionAdapter<TValue, TNode> adapter)
     {
-        return ExecuteFunction(vm, entryFunctionIndex, args, adapter);
+        return ExecuteFunction(vm, entryFunctionIndex, args, adapter, new VmAsyncState<TValue>());
     }
 
     private static TValue ExecuteFunction<TValue, TNode>(
         VmProgram<TValue> vm,
         int functionIndex,
         List<TValue> args,
-        IVmExecutionAdapter<TValue, TNode> adapter)
+        IVmExecutionAdapter<TValue, TNode> adapter,
+        VmAsyncState<TValue> asyncState)
     {
         if (functionIndex < 0 || functionIndex >= vm.Functions.Count)
         {
@@ -39,6 +53,7 @@ public static class VmRunner
         }
 
         var stack = new List<TValue>();
+        var parStack = new Stack<ParContext<TValue>>();
         var pc = 0;
         while (pc < function.Instructions.Count)
         {
@@ -392,11 +407,87 @@ public static class VmRunner
                 case "CALL":
                 {
                     var callArgs = PopArgs(stack, inst.B, function.Name);
-                    var result = ExecuteFunction(vm, inst.A, callArgs, adapter);
+                    var result = ExecuteFunction(vm, inst.A, callArgs, adapter, asyncState);
                     stack.Add(result);
                     pc++;
                     break;
                 }
+                case "ASYNC_CALL":
+                {
+                    var callArgs = PopArgs(stack, inst.B, function.Name);
+                    var result = ExecuteFunction(vm, inst.A, callArgs, adapter, asyncState);
+                    var handle = asyncState.NextTaskHandle++;
+                    asyncState.CompletedTasks[handle] = result;
+                    stack.Add(adapter.FromInt(handle));
+                    pc++;
+                    break;
+                }
+                case "AWAIT":
+                {
+                    var handleValue = Pop(stack, function.Name);
+                    if (!adapter.TryGetInt(handleValue, out var handle) ||
+                        !asyncState.CompletedTasks.TryGetValue(handle, out var result))
+                    {
+                        throw new VmRuntimeException("VM001", "AWAIT requires valid task handle.", function.Name);
+                    }
+                    stack.Add(result);
+                    pc++;
+                    break;
+                }
+                case "PAR_BEGIN":
+                {
+                    if (inst.A < 0)
+                    {
+                        throw new VmRuntimeException("VM001", "PAR_BEGIN requires non-negative branch count.", function.Name);
+                    }
+                    parStack.Push(new ParContext<TValue>
+                    {
+                        ExpectedCount = inst.A,
+                        Values = new List<TValue>(inst.A)
+                    });
+                    pc++;
+                    break;
+                }
+                case "PAR_FORK":
+                {
+                    if (parStack.Count == 0)
+                    {
+                        throw new VmRuntimeException("VM001", "PAR_FORK requires active Par context.", function.Name);
+                    }
+                    var value = Pop(stack, function.Name);
+                    parStack.Peek().Values.Add(value);
+                    pc++;
+                    break;
+                }
+                case "PAR_JOIN":
+                {
+                    if (parStack.Count == 0)
+                    {
+                        throw new VmRuntimeException("VM001", "PAR_JOIN requires active Par context.", function.Name);
+                    }
+                    var par = parStack.Pop();
+                    if (par.ExpectedCount != inst.A || par.Values.Count != inst.A)
+                    {
+                        throw new VmRuntimeException("VM001", "PAR_JOIN branch count mismatch.", function.Name);
+                    }
+                    var children = new List<TNode>(par.Values.Count);
+                    foreach (var value in par.Values)
+                    {
+                        children.Add(adapter.ValueToNode(value));
+                    }
+                    var id = $"par_{asyncState.NextParNodeId++}";
+                    stack.Add(adapter.FromNode(adapter.CreateNode(
+                        "Block",
+                        id,
+                        new Dictionary<string, VmAttr>(StringComparer.Ordinal),
+                        children)));
+                    pc++;
+                    break;
+                }
+                case "PAR_CANCEL":
+                    // Deterministic no-op for current structured async model.
+                    pc++;
+                    break;
                 case "CALL_SYS":
                 {
                     var callArgs = PopArgs(stack, inst.A, function.Name);
