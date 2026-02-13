@@ -12,6 +12,9 @@ namespace AiVM.Core;
 public class DefaultSyscallHost : ISyscallHost
 {
     private static readonly HttpClient HttpClient = new();
+    private static readonly string[] EmptyArgv = Array.Empty<string>();
+
+    public virtual string[] ProcessArgv() => EmptyArgv;
 
     public virtual void ConsolePrintLine(string text) => Console.WriteLine(text);
 

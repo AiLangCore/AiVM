@@ -2,6 +2,8 @@ namespace AiVM.Core;
 
 public interface ISyscallHost
 {
+    string[] ProcessArgv();
+
     void ConsolePrintLine(string text);
     void IoPrint(string text);
     void IoWrite(string text);

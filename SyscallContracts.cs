@@ -76,6 +76,10 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL136", "sys.proc_exit expects 1 argument.", "VAL137", "sys.proc_exit arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.process_argv":
+                ValidateArity(argKinds, 0, "VAL170", "sys.process_argv expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
             case "sys.fs_readFile":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL138", "sys.fs_readFile expects 1 argument.", "VAL139", "sys.fs_readFile arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;

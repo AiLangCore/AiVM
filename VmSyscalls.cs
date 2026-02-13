@@ -4,6 +4,11 @@ public static class VmSyscalls
 {
     public static ISyscallHost Host { get; set; } = new DefaultSyscallHost();
 
+    public static string[] ProcessArgv()
+    {
+        return Host.ProcessArgv();
+    }
+
     public static void ConsolePrintLine(string text)
     {
         Host.ConsolePrintLine(text);
