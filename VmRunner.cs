@@ -430,15 +430,10 @@ public static class VmRunner
                     }
                     var callArgStart = stack.Count - inst.A;
                     var callArgs = CollectionsMarshal.AsSpan(stack).Slice(callArgStart, inst.A);
-                    TValue result;
-                    if (inst.B > 0 &&
-                        adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var syscallResult))
+                    if (inst.B <= 0 ||
+                        !adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var result))
                     {
-                        result = syscallResult;
-                    }
-                    else
-                    {
-                        result = adapter.ExecuteCall(inst.S, callArgs);
+                        throw new VmRuntimeException("VM001", $"Unsupported call target in bytecode mode: {inst.S}.", inst.S);
                     }
                     if (adapter.IsUnknown(result))
                     {
@@ -529,15 +524,10 @@ public static class VmRunner
                     }
                     var callArgStart = stack.Count - inst.A;
                     var callArgs = CollectionsMarshal.AsSpan(stack).Slice(callArgStart, inst.A);
-                    TValue result;
-                    if (inst.B > 0 &&
-                        adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var syscallResult))
+                    if (inst.B <= 0 ||
+                        !adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var result))
                     {
-                        result = syscallResult;
-                    }
-                    else
-                    {
-                        result = adapter.ExecuteCall(inst.S, callArgs);
+                        throw new VmRuntimeException("VM001", $"Unsupported call target in bytecode mode: {inst.S}.", inst.S);
                     }
                     if (adapter.IsUnknown(result))
                     {

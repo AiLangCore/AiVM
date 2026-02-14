@@ -9,16 +9,6 @@ public static class VmSyscallDispatcher
         return SyscallRegistry.TryResolve(target, out _);
     }
 
-    public static bool TryGetExpectedArity(string target, out int arity)
-    {
-        if (!SyscallRegistry.TryResolve(target, out var id))
-        {
-            arity = -1;
-            return false;
-        }
-        return TryGetExpectedArity(id, out arity);
-    }
-
     public static bool TryGetExpectedArity(SyscallId id, out int arity)
     {
         arity = id switch
@@ -59,16 +49,6 @@ public static class VmSyscallDispatcher
         };
 
         return arity >= 0;
-    }
-
-    public static bool TryInvoke(string target, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
-    {
-        if (SyscallRegistry.TryResolve(target, out var id))
-        {
-            return TryInvoke(id, AsSpan(args), network, out result);
-        }
-        result = SysValue.Unknown();
-        return false;
     }
 
     public static bool TryInvoke(SyscallId id, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
