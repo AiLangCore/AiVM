@@ -1,14 +1,7 @@
-using System.Runtime.InteropServices;
-
 namespace AiVM.Core;
 
 public static class VmSyscallDispatcher
 {
-    public static bool SupportsTarget(string target)
-    {
-        return SyscallRegistry.TryResolve(target, out _);
-    }
-
     public static bool TryGetExpectedArity(SyscallId id, out int arity)
     {
         arity = id switch
@@ -49,11 +42,6 @@ public static class VmSyscallDispatcher
         };
 
         return arity >= 0;
-    }
-
-    public static bool TryInvoke(SyscallId id, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
-    {
-        return TryInvoke(id, AsSpan(args), network, out result);
     }
 
     public static bool TryInvoke(SyscallId id, ReadOnlySpan<SysValue> args, VmNetworkState network, out SysValue result)
@@ -346,18 +334,4 @@ public static class VmSyscallDispatcher
         return true;
     }
 
-    private static ReadOnlySpan<SysValue> AsSpan(IReadOnlyList<SysValue> args)
-    {
-        if (args.Count == 0)
-        {
-            return ReadOnlySpan<SysValue>.Empty;
-        }
-
-        if (args is List<SysValue> list)
-        {
-            return CollectionsMarshal.AsSpan(list);
-        }
-
-        return args.ToArray();
-    }
 }
