@@ -68,9 +68,25 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL132", "sys.net_close expects 1 argument.", "VAL133", "sys.net_close arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.console_write":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL183", "sys.console_write expects 1 argument.", "VAL184", "sys.console_write arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.console_writeLine":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL185", "sys.console_writeLine expects 1 argument.", "VAL186", "sys.console_writeLine arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.console_readLine":
+                ValidateArity(argKinds, 0, "VAL187", "sys.console_readLine expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.console_writeErrLine":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL189", "sys.console_writeErrLine expects 1 argument.", "VAL190", "sys.console_writeErrLine arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;
+                return true;
+            case "sys.process_cwd":
+                ValidateArity(argKinds, 0, "VAL193", "sys.process_cwd expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
                 return true;
             case "sys.stdout_writeLine":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL134", "sys.stdout_writeLine expects 1 argument.", "VAL135", "sys.stdout_writeLine arg must be string.", addDiagnostic);
