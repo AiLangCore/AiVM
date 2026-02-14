@@ -130,6 +130,50 @@ public static class SyscallContracts
                     addDiagnostic);
                 returnKind = VmValueKind.Int;
                 return true;
+            case "sys.net_udpBind":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL237", "sys.net_udpBind arg 1 must be string."),
+                        (VmValueKind.Int, "VAL238", "sys.net_udpBind arg 2 must be int.")
+                    },
+                    "VAL239",
+                    "sys.net_udpBind expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
+            case "sys.net_udpRecv":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL240", "sys.net_udpRecv arg 1 must be int."),
+                        (VmValueKind.Int, "VAL241", "sys.net_udpRecv arg 2 must be int.")
+                    },
+                    "VAL242",
+                    "sys.net_udpRecv expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
+            case "sys.net_udpSend":
+                ValidateArityAndTypes(
+                    argKinds,
+                    4,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL243", "sys.net_udpSend arg 1 must be int."),
+                        (VmValueKind.String, "VAL244", "sys.net_udpSend arg 2 must be string."),
+                        (VmValueKind.Int, "VAL245", "sys.net_udpSend arg 3 must be int."),
+                        (VmValueKind.String, "VAL246", "sys.net_udpSend arg 4 must be string.")
+                    },
+                    "VAL247",
+                    "sys.net_udpSend expects 4 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
             case "sys.crypto_base64Encode":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL224", "sys.crypto_base64Encode expects 1 argument.", "VAL225", "sys.crypto_base64Encode arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;

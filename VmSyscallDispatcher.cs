@@ -17,6 +17,9 @@ public static class VmSyscallDispatcher
             SyscallId.NetTcpAccept => 1,
             SyscallId.NetTcpRead => 2,
             SyscallId.NetTcpWrite => 2,
+            SyscallId.NetUdpBind => 2,
+            SyscallId.NetUdpRecv => 2,
+            SyscallId.NetUdpSend => 4,
             SyscallId.CryptoBase64Encode => 1,
             SyscallId.CryptoBase64Decode => 1,
             SyscallId.CryptoSha1 => 1,
@@ -156,6 +159,26 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.Int(VmSyscalls.NetTcpWrite(network, tcpWriteConnectionHandle, tcpWriteData));
+                return true;
+
+            case SyscallId.NetUdpBind:
+                if (!TryGetString(args, 0, 2, out var udpBindHost) ||
+                    !TryGetInt(args, 1, 2, out var udpBindPort))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetUdpBind(network, udpBindHost, udpBindPort));
+                return true;
+
+            case SyscallId.NetUdpSend:
+                if (!TryGetInt(args, 0, 4, out var udpSendHandle) ||
+                    !TryGetString(args, 1, 4, out var udpSendHost) ||
+                    !TryGetInt(args, 2, 4, out var udpSendPort) ||
+                    !TryGetString(args, 3, 4, out var udpSendData))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetUdpSend(network, udpSendHandle, udpSendHost, udpSendPort, udpSendData));
                 return true;
 
             case SyscallId.CryptoBase64Encode:

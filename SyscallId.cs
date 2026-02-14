@@ -44,5 +44,8 @@ public enum SyscallId : ushort
     CryptoSha1 = 39,
     CryptoSha256 = 40,
     CryptoHmacSha256 = 41,
-    CryptoRandomBytes = 42
+    CryptoRandomBytes = 42,
+    NetUdpBind = 43,
+    NetUdpRecv = 44,
+    NetUdpSend = 45
 }

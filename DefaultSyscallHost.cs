@@ -327,6 +327,44 @@ public class DefaultSyscallHost : ISyscallHost
         return payload.Length;
     }
 
+    public virtual int NetUdpBind(VmNetworkState state, string host, int port)
+    {
+        var endpoint = new IPEndPoint(ResolveListenAddress(host), port);
+        var socket = new UdpClient(endpoint);
+        var handle = state.NextNetHandle++;
+        state.NetUdpSockets[handle] = socket;
+        return handle;
+    }
+
+    public virtual VmUdpPacket NetUdpRecv(VmNetworkState state, int handle, int maxBytes)
+    {
+        if (maxBytes <= 0 || !state.NetUdpSockets.TryGetValue(handle, out var socket))
+        {
+            return new VmUdpPacket(string.Empty, 0, string.Empty);
+        }
+
+        var remote = new IPEndPoint(IPAddress.Any, 0);
+        var payload = socket.Receive(ref remote);
+        if (payload.Length > maxBytes)
+        {
+            Array.Resize(ref payload, maxBytes);
+        }
+
+        return new VmUdpPacket(remote.Address.ToString(), remote.Port, Encoding.UTF8.GetString(payload));
+    }
+
+    public virtual int NetUdpSend(VmNetworkState state, int handle, string host, int port, string data)
+    {
+        if (!state.NetUdpSockets.TryGetValue(handle, out var socket))
+        {
+            return -1;
+        }
+
+        var payload = Encoding.UTF8.GetBytes(data);
+        var sent = socket.Send(payload, payload.Length, host, port);
+        return sent;
+    }
+
     public virtual string NetReadHeaders(VmNetworkState state, int connectionHandle)
     {
         if (!state.NetConnections.TryGetValue(connectionHandle, out var client))
@@ -421,6 +459,13 @@ public class DefaultSyscallHost : ISyscallHost
             try { listener.Stop(); } catch { }
             state.NetListeners.Remove(handle);
             state.NetTlsCertificates.Remove(handle);
+            return;
+        }
+
+        if (state.NetUdpSockets.TryGetValue(handle, out var socket))
+        {
+            try { socket.Close(); } catch { }
+            state.NetUdpSockets.Remove(handle);
         }
     }
 

@@ -216,6 +216,21 @@ public static class VmSyscalls
         return Host.NetTcpWrite(state, connectionHandle, data);
     }
 
+    public static int NetUdpBind(VmNetworkState state, string host, int port)
+    {
+        return Host.NetUdpBind(state, host, port);
+    }
+
+    public static VmUdpPacket NetUdpRecv(VmNetworkState state, int handle, int maxBytes)
+    {
+        return Host.NetUdpRecv(state, handle, maxBytes);
+    }
+
+    public static int NetUdpSend(VmNetworkState state, int handle, string host, int port, string data)
+    {
+        return Host.NetUdpSend(state, handle, host, port, data);
+    }
+
     public static string CryptoBase64Encode(string text)
     {
         return Host.CryptoBase64Encode(text);
