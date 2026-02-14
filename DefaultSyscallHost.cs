@@ -16,6 +16,8 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual string[] ProcessArgv() => EmptyArgv;
 
+    public virtual int TimeNowUnixMs() => unchecked((int)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
     public virtual void TimeSleepMs(int ms) => Thread.Sleep(ms);
 
     public virtual void ConsoleWriteErrLine(string text) => Console.Error.WriteLine(text);
