@@ -25,6 +25,7 @@ public static class VmSyscallDispatcher
             "sys.proc_exit" or
             "sys.fs_readFile" or
             "sys.fs_fileExists" or
+            "sys.fs_readDir" or
             "sys.fs_pathExists" or
             "sys.fs_writeFile" or
             "sys.fs_makeDir" or
@@ -61,6 +62,7 @@ public static class VmSyscallDispatcher
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
             "sys.fs_fileExists" => 1,
+            "sys.fs_readDir" => 1,
             "sys.fs_pathExists" => 1,
             "sys.fs_writeFile" => 2,
             "sys.fs_makeDir" => 1,
@@ -231,6 +233,14 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.Bool(VmSyscalls.FsFileExists(existsPath));
+                return true;
+            case "sys.fs_readDir":
+                if (!TryGetString(args, 0, 1, out var readDirPath))
+                {
+                    return true;
+                }
+                _ = VmSyscalls.FsReadDir(readDirPath);
+                result = SysValue.Unknown();
                 return true;
             case "sys.fs_pathExists":
                 if (!TryGetString(args, 0, 1, out var pathExistsPath))
