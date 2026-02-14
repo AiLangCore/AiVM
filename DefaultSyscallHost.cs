@@ -12,6 +12,15 @@ namespace AiVM.Core;
 public class DefaultSyscallHost : ISyscallHost
 {
     private static readonly HttpClient HttpClient = new();
+    private static readonly string[] EmptyArgv = Array.Empty<string>();
+
+    public virtual string[] ProcessArgv() => EmptyArgv;
+
+    public virtual void ConsoleWriteErrLine(string text) => Console.Error.WriteLine(text);
+
+    public virtual void ConsoleWrite(string text) => Console.Write(text);
+
+    public virtual string ProcessCwd() => Directory.GetCurrentDirectory();
 
     public virtual string ProcessEnvGet(string name) => Environment.GetEnvironmentVariable(name) ?? string.Empty;
 
@@ -38,6 +47,12 @@ public class DefaultSyscallHost : ISyscallHost
     public virtual string FsReadFile(string path) => File.ReadAllText(path);
 
     public virtual bool FsFileExists(string path) => File.Exists(path);
+
+    public virtual bool FsPathExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    public virtual void FsWriteFile(string path, string text) => File.WriteAllText(path, text);
+
+    public virtual void FsMakeDir(string path) => Directory.CreateDirectory(path);
 
     public virtual int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
 

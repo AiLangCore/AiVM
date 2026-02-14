@@ -12,11 +12,20 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" or
             "sys.net_write" or
             "sys.net_close" or
+            "sys.console_write" or
+            "sys.console_writeLine" or
+            "sys.console_readLine" or
+            "sys.console_readAllStdin" or
+            "sys.console_writeErrLine" or
+            "sys.process_cwd" or
             "sys.process_envGet" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
             "sys.fs_readFile" or
             "sys.fs_fileExists" or
+            "sys.fs_pathExists" or
+            "sys.fs_writeFile" or
+            "sys.fs_makeDir" or
             "sys.str_utf8ByteCount" or
             "sys.http_get" or
             "sys.platform" or
@@ -37,11 +46,20 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" => 1,
             "sys.net_write" => 2,
             "sys.net_close" => 1,
+            "sys.console_write" => 1,
+            "sys.console_writeLine" => 1,
+            "sys.console_readLine" => 0,
+            "sys.console_readAllStdin" => 0,
+            "sys.console_writeErrLine" => 1,
+            "sys.process_cwd" => 0,
             "sys.process_envGet" => 1,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
             "sys.fs_fileExists" => 1,
+            "sys.fs_pathExists" => 1,
+            "sys.fs_writeFile" => 2,
+            "sys.fs_makeDir" => 1,
             "sys.str_utf8ByteCount" => 1,
             "sys.http_get" => 1,
             "sys.platform" => 0,
@@ -110,6 +128,22 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
+            case "sys.console_write":
+                if (!TryGetString(args, 0, 1, out var writeOutText))
+                {
+                    return true;
+                }
+                VmSyscalls.ConsoleWrite(writeOutText);
+                result = SysValue.Void();
+                return true;
+
+            case "sys.process_cwd":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.ProcessCwd());
+                return true;
             case "sys.process_envGet":
                 if (!TryGetString(args, 0, 1, out var envName))
                 {
@@ -117,7 +151,36 @@ public static class VmSyscallDispatcher
                 }
                 result = SysValue.String(VmSyscalls.ProcessEnvGet(envName));
                 return true;
-
+            case "sys.console_writeLine":
+                if (!TryGetString(args, 0, 1, out var consoleLineText))
+                {
+                    return true;
+                }
+                VmSyscalls.ConsolePrintLine(consoleLineText);
+                result = SysValue.Void();
+                return true;
+            case "sys.console_readLine":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.IoReadLine());
+                return true;
+            case "sys.console_readAllStdin":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.IoReadAllStdin());
+                return true;
+            case "sys.console_writeErrLine":
+                if (!TryGetString(args, 0, 1, out var errText))
+                {
+                    return true;
+                }
+                VmSyscalls.ConsoleWriteErrLine(errText);
+                result = SysValue.Void();
+                return true;
             case "sys.stdout_writeLine":
                 if (!TryGetString(args, 0, 1, out var outText))
                 {
@@ -150,6 +213,31 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.Bool(VmSyscalls.FsFileExists(existsPath));
+                return true;
+            case "sys.fs_pathExists":
+                if (!TryGetString(args, 0, 1, out var pathExistsPath))
+                {
+                    return true;
+                }
+                result = SysValue.Bool(VmSyscalls.FsPathExists(pathExistsPath));
+                return true;
+            case "sys.fs_writeFile":
+                if (!TryGetString(args, 0, 2, out var writeFilePath) ||
+                    !TryGetString(args, 1, 2, out var writeFileText))
+                {
+                    return true;
+                }
+                VmSyscalls.FsWriteFile(writeFilePath, writeFileText);
+                result = SysValue.Void();
+                return true;
+
+            case "sys.fs_makeDir":
+                if (!TryGetString(args, 0, 1, out var makeDirPath))
+                {
+                    return true;
+                }
+                VmSyscalls.FsMakeDir(makeDirPath);
+                result = SysValue.Void();
                 return true;
 
             case "sys.str_utf8ByteCount":

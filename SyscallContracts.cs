@@ -68,6 +68,30 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL132", "sys.net_close expects 1 argument.", "VAL133", "sys.net_close arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.console_write":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL183", "sys.console_write expects 1 argument.", "VAL184", "sys.console_write arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.console_writeLine":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL185", "sys.console_writeLine expects 1 argument.", "VAL186", "sys.console_writeLine arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.console_readLine":
+                ValidateArity(argKinds, 0, "VAL187", "sys.console_readLine expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.console_readAllStdin":
+                ValidateArity(argKinds, 0, "VAL188", "sys.console_readAllStdin expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.console_writeErrLine":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL189", "sys.console_writeErrLine expects 1 argument.", "VAL190", "sys.console_writeErrLine arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.process_cwd":
+                ValidateArity(argKinds, 0, "VAL193", "sys.process_cwd expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.process_envGet":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL191", "sys.process_envGet expects 1 argument.", "VAL192", "sys.process_envGet arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;
@@ -80,6 +104,10 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL136", "sys.proc_exit expects 1 argument.", "VAL137", "sys.proc_exit arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.process_argv":
+                ValidateArity(argKinds, 0, "VAL170", "sys.process_argv expects 0 arguments.", addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
             case "sys.fs_readFile":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL138", "sys.fs_readFile expects 1 argument.", "VAL139", "sys.fs_readFile arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;
@@ -87,6 +115,28 @@ public static class SyscallContracts
             case "sys.fs_fileExists":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL140", "sys.fs_fileExists expects 1 argument.", "VAL141", "sys.fs_fileExists arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Bool;
+                return true;
+            case "sys.fs_pathExists":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL197", "sys.fs_pathExists expects 1 argument.", "VAL198", "sys.fs_pathExists arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Bool;
+                return true;
+            case "sys.fs_writeFile":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL195", "sys.fs_writeFile arg 1 must be string."),
+                        (VmValueKind.String, "VAL196", "sys.fs_writeFile arg 2 must be string.")
+                    },
+                    "VAL194",
+                    "sys.fs_writeFile expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.fs_makeDir":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL199", "sys.fs_makeDir expects 1 argument.", "VAL200", "sys.fs_makeDir arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Void;
                 return true;
             case "sys.str_utf8ByteCount":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL142", "sys.str_utf8ByteCount expects 1 argument.", "VAL143", "sys.str_utf8ByteCount arg must be string.", addDiagnostic);

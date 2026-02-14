@@ -4,9 +4,29 @@ public static class VmSyscalls
 {
     public static ISyscallHost Host { get; set; } = new DefaultSyscallHost();
 
+    public static string[] ProcessArgv()
+    {
+        return Host.ProcessArgv();
+    }
+
     public static string ProcessEnvGet(string name)
     {
         return Host.ProcessEnvGet(name);
+    }
+
+    public static void ConsoleWriteErrLine(string text)
+    {
+        Host.ConsoleWriteErrLine(text);
+    }
+
+    public static void ConsoleWrite(string text)
+    {
+        Host.ConsoleWrite(text);
+    }
+
+    public static string ProcessCwd()
+    {
+        return Host.ProcessCwd();
     }
 
     public static void ConsolePrintLine(string text)
@@ -67,6 +87,21 @@ public static class VmSyscalls
     public static bool FsFileExists(string path)
     {
         return Host.FsFileExists(path);
+    }
+
+    public static bool FsPathExists(string path)
+    {
+        return Host.FsPathExists(path);
+    }
+
+    public static void FsWriteFile(string path, string text)
+    {
+        Host.FsWriteFile(path, text);
+    }
+
+    public static void FsMakeDir(string path)
+    {
+        Host.FsMakeDir(path);
     }
 
     public static int StrUtf8ByteCount(string text)
