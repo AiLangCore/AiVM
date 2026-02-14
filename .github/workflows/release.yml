@@ -1,0 +1,82 @@
+name: AiVM Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: package-${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            id: linux
+            archive: tar.gz
+          - os: macos-latest
+            id: macos
+            archive: tar.gz
+          - os: windows-latest
+            id: windows
+            archive: zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore ./AiVM.Core.csproj
+
+      - name: Build
+        run: dotnet build ./AiVM.Core.csproj -c Release --no-restore
+
+      - name: Stage artifact (non-Windows)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp -R ./bin/Release/net10.0 ./artifacts/AiVM.Core-${{ matrix.id }}
+          tar -czf ./AiVM.Core-${{ matrix.id }}.${{ matrix.archive }} -C artifacts AiVM.Core-${{ matrix.id }}
+
+      - name: Stage artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Copy-Item -Path .\bin\Release\net10.0 -Destination .\artifacts\AiVM.Core-${{ matrix.id }} -Recurse
+          Compress-Archive -Path .\artifacts\AiVM.Core-${{ matrix.id }} -DestinationPath .\AiVM.Core-${{ matrix.id }}.${{ matrix.archive }}
+
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AiVM.Core-${{ matrix.id }}
+          path: ./AiVM.Core-${{ matrix.id }}.${{ matrix.archive }}
+
+  release:
+    name: github-release
+    runs-on: ubuntu-latest
+    needs: package
+
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./release-assets/*
