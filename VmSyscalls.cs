@@ -89,6 +89,11 @@ public static class VmSyscalls
         return Host.FsFileExists(path);
     }
 
+    public static VmFsStat FsStat(string path)
+    {
+        return Host.FsStat(path);
+    }
+
     public static bool FsPathExists(string path)
     {
         return Host.FsPathExists(path);
