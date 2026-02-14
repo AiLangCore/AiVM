@@ -216,6 +216,11 @@ public static class VmSyscalls
         return Host.NetTcpWrite(state, connectionHandle, data);
     }
 
+    public static string CryptoBase64Encode(string text)
+    {
+        return Host.CryptoBase64Encode(text);
+    }
+
     public static void StdoutWriteLine(string text)
     {
         Host.StdoutWriteLine(text);

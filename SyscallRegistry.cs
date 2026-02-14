@@ -17,6 +17,7 @@ public static class SyscallRegistry
         ["sys.net_tcpAccept"] = SyscallId.NetTcpAccept,
         ["sys.net_tcpRead"] = SyscallId.NetTcpRead,
         ["sys.net_tcpWrite"] = SyscallId.NetTcpWrite,
+        ["sys.crypto_base64Encode"] = SyscallId.CryptoBase64Encode,
         ["sys.console_write"] = SyscallId.ConsoleWrite,
         ["sys.console_writeLine"] = SyscallId.ConsoleWriteLine,
         ["sys.console_readLine"] = SyscallId.ConsoleReadLine,
