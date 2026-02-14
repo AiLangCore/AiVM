@@ -12,7 +12,9 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" or
             "sys.net_write" or
             "sys.net_close" or
+            "sys.console_write" or
             "sys.console_writeLine" or
+            "sys.process_cwd" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
             "sys.fs_readFile" or
@@ -37,7 +39,9 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" => 1,
             "sys.net_write" => 2,
             "sys.net_close" => 1,
+            "sys.console_write" => 1,
             "sys.console_writeLine" => 1,
+            "sys.process_cwd" => 0,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
@@ -110,6 +114,22 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
+            case "sys.console_write":
+                if (!TryGetString(args, 0, 1, out var writeOutText))
+                {
+                    return true;
+                }
+                VmSyscalls.ConsoleWrite(writeOutText);
+                result = SysValue.Void();
+                return true;
+
+            case "sys.process_cwd":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.ProcessCwd());
+                return true;
             case "sys.console_writeLine":
                 if (!TryGetString(args, 0, 1, out var consoleLineText))
                 {
@@ -118,7 +138,6 @@ public static class VmSyscallDispatcher
                 VmSyscalls.ConsolePrintLine(consoleLineText);
                 result = SysValue.Void();
                 return true;
-
             case "sys.stdout_writeLine":
                 if (!TryGetString(args, 0, 1, out var outText))
                 {
