@@ -55,7 +55,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts | Out-Null
-          Copy-Item -Path .\bin\Release\net10.0 -Destination .\artifacts\AiVM.Core-${{ matrix.id }} -Recurse
+          Copy-Item -Path ./src/AiVM/bin/Release/net10.0 -Destination .\artifacts\AiVM.Core-${{ matrix.id }} -Recurse
           Compress-Archive -Path .\artifacts\AiVM.Core-${{ matrix.id }} -DestinationPath .\AiVM.Core-${{ matrix.id }}.${{ matrix.archive }}
 
       - name: Upload packaged artifact
