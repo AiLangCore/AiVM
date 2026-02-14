@@ -146,6 +146,20 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL230", "sys.crypto_sha256 expects 1 argument.", "VAL231", "sys.crypto_sha256 arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;
                 return true;
+            case "sys.crypto_hmacSha256":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL232", "sys.crypto_hmacSha256 arg 1 must be string."),
+                        (VmValueKind.String, "VAL233", "sys.crypto_hmacSha256 arg 2 must be string.")
+                    },
+                    "VAL234",
+                    "sys.crypto_hmacSha256 expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.console_write":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL183", "sys.console_write expects 1 argument.", "VAL184", "sys.console_write arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;

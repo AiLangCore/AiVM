@@ -21,6 +21,7 @@ public static class SyscallRegistry
         ["sys.crypto_base64Decode"] = SyscallId.CryptoBase64Decode,
         ["sys.crypto_sha1"] = SyscallId.CryptoSha1,
         ["sys.crypto_sha256"] = SyscallId.CryptoSha256,
+        ["sys.crypto_hmacSha256"] = SyscallId.CryptoHmacSha256,
         ["sys.console_write"] = SyscallId.ConsoleWrite,
         ["sys.console_writeLine"] = SyscallId.ConsoleWriteLine,
         ["sys.console_readLine"] = SyscallId.ConsoleReadLine,

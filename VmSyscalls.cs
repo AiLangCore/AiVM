@@ -236,6 +236,11 @@ public static class VmSyscalls
         return Host.CryptoSha256(text);
     }
 
+    public static string CryptoHmacSha256(string key, string text)
+    {
+        return Host.CryptoHmacSha256(key, text);
+    }
+
     public static void StdoutWriteLine(string text)
     {
         Host.StdoutWriteLine(text);

@@ -129,6 +129,13 @@ public class DefaultSyscallHost : ISyscallHost
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    public virtual string CryptoHmacSha256(string key, string text)
+    {
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(text));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     public virtual string HttpGet(string url)
     {
         try
