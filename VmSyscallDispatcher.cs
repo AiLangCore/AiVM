@@ -12,6 +12,11 @@ public static class VmSyscallDispatcher
             SyscallId.NetReadHeaders => 1,
             SyscallId.NetWrite => 2,
             SyscallId.NetClose => 1,
+            SyscallId.NetTcpListen => 2,
+            SyscallId.NetTcpListenTls => 4,
+            SyscallId.NetTcpAccept => 1,
+            SyscallId.NetTcpRead => 2,
+            SyscallId.NetTcpWrite => 2,
             SyscallId.ConsoleWrite => 1,
             SyscallId.ConsoleWriteLine => 1,
             SyscallId.ConsoleReadLine => 0,
@@ -99,6 +104,52 @@ public static class VmSyscallDispatcher
                 }
                 VmSyscalls.NetClose(network, closeHandle);
                 result = SysValue.Void();
+                return true;
+
+            case SyscallId.NetTcpListen:
+                if (!TryGetString(args, 0, 2, out var tcpListenHost) ||
+                    !TryGetInt(args, 1, 2, out var tcpListenPort))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetTcpListen(network, tcpListenHost, tcpListenPort));
+                return true;
+
+            case SyscallId.NetTcpListenTls:
+                if (!TryGetString(args, 0, 4, out var tcpTlsHost) ||
+                    !TryGetInt(args, 1, 4, out var tcpTlsPort) ||
+                    !TryGetString(args, 2, 4, out var tcpCertPath) ||
+                    !TryGetString(args, 3, 4, out var tcpKeyPath))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetTcpListenTls(network, tcpTlsHost, tcpTlsPort, tcpCertPath, tcpKeyPath));
+                return true;
+
+            case SyscallId.NetTcpAccept:
+                if (!TryGetInt(args, 0, 1, out var tcpAcceptListenerHandle))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetTcpAccept(network, tcpAcceptListenerHandle));
+                return true;
+
+            case SyscallId.NetTcpRead:
+                if (!TryGetInt(args, 0, 2, out var tcpReadConnectionHandle) ||
+                    !TryGetInt(args, 1, 2, out var tcpReadMaxBytes))
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.NetTcpRead(network, tcpReadConnectionHandle, tcpReadMaxBytes));
+                return true;
+
+            case SyscallId.NetTcpWrite:
+                if (!TryGetInt(args, 0, 2, out var tcpWriteConnectionHandle) ||
+                    !TryGetString(args, 1, 2, out var tcpWriteData))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.NetTcpWrite(network, tcpWriteConnectionHandle, tcpWriteData));
                 return true;
 
             case SyscallId.ConsoleWrite:

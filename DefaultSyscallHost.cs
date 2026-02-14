@@ -214,6 +214,73 @@ public class DefaultSyscallHost : ISyscallHost
         return connHandle;
     }
 
+    public virtual int NetTcpListen(VmNetworkState state, string host, int port)
+    {
+        var listener = new TcpListener(ResolveListenAddress(host), port);
+        listener.Start();
+        var handle = state.NextNetHandle++;
+        state.NetListeners[handle] = listener;
+        return handle;
+    }
+
+    public virtual int NetTcpListenTls(VmNetworkState state, string host, int port, string certPath, string keyPath)
+    {
+        X509Certificate2 certificate;
+        try
+        {
+            certificate = X509Certificate2.CreateFromPemFile(certPath, keyPath);
+        }
+        catch
+        {
+            return -1;
+        }
+
+        var listener = new TcpListener(ResolveListenAddress(host), port);
+        listener.Start();
+        var handle = state.NextNetHandle++;
+        state.NetListeners[handle] = listener;
+        state.NetTlsCertificates[handle] = certificate;
+        return handle;
+    }
+
+    public virtual int NetTcpAccept(VmNetworkState state, int listenerHandle)
+    {
+        return NetAccept(state, listenerHandle);
+    }
+
+    public virtual string NetTcpRead(VmNetworkState state, int connectionHandle, int maxBytes)
+    {
+        if (maxBytes <= 0 ||
+            !state.NetConnections.TryGetValue(connectionHandle, out var client))
+        {
+            return string.Empty;
+        }
+
+        var stream = GetConnectionStream(state, client, connectionHandle);
+        var buffer = new byte[maxBytes];
+        var read = stream.Read(buffer, 0, buffer.Length);
+        if (read <= 0)
+        {
+            return string.Empty;
+        }
+
+        return Encoding.UTF8.GetString(buffer, 0, read);
+    }
+
+    public virtual int NetTcpWrite(VmNetworkState state, int connectionHandle, string data)
+    {
+        if (!state.NetConnections.TryGetValue(connectionHandle, out var client))
+        {
+            return -1;
+        }
+
+        var stream = GetConnectionStream(state, client, connectionHandle);
+        var payload = Encoding.UTF8.GetBytes(data);
+        stream.Write(payload, 0, payload.Length);
+        stream.Flush();
+        return payload.Length;
+    }
+
     public virtual string NetReadHeaders(VmNetworkState state, int connectionHandle)
     {
         if (!state.NetConnections.TryGetValue(connectionHandle, out var client))
@@ -221,9 +288,7 @@ public class DefaultSyscallHost : ISyscallHost
             return string.Empty;
         }
 
-        Stream stream = state.NetTlsStreams.TryGetValue(connectionHandle, out var tlsStream)
-            ? tlsStream
-            : client.GetStream();
+        var stream = GetConnectionStream(state, client, connectionHandle);
         var bytes = new List<byte>(1024);
         var endSeen = 0;
         var pattern = new byte[] { 13, 10, 13, 10 };
@@ -284,9 +349,7 @@ public class DefaultSyscallHost : ISyscallHost
         }
 
         var bytes = Encoding.UTF8.GetBytes(text);
-        Stream stream = state.NetTlsStreams.TryGetValue(connectionHandle, out var tlsStream)
-            ? tlsStream
-            : client.GetStream();
+        var stream = GetConnectionStream(state, client, connectionHandle);
         stream.Write(bytes, 0, bytes.Length);
         stream.Flush();
         return true;
@@ -336,5 +399,32 @@ public class DefaultSyscallHost : ISyscallHost
         }
 
         return 0;
+    }
+
+    private static Stream GetConnectionStream(VmNetworkState state, TcpClient client, int connectionHandle)
+    {
+        return state.NetTlsStreams.TryGetValue(connectionHandle, out var tlsStream)
+            ? tlsStream
+            : client.GetStream();
+    }
+
+    private static IPAddress ResolveListenAddress(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host) || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return IPAddress.Loopback;
+        }
+
+        if (string.Equals(host, "0.0.0.0", StringComparison.Ordinal) || string.Equals(host, "*", StringComparison.Ordinal))
+        {
+            return IPAddress.Any;
+        }
+
+        if (IPAddress.TryParse(host, out var address))
+        {
+            return address;
+        }
+
+        return IPAddress.Loopback;
     }
 }

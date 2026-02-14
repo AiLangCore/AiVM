@@ -41,6 +41,11 @@ public interface ISyscallHost
     string NetReadHeaders(VmNetworkState state, int connectionHandle);
     bool NetWrite(VmNetworkState state, int connectionHandle, string text);
     void NetClose(VmNetworkState state, int handle);
+    int NetTcpListen(VmNetworkState state, string host, int port);
+    int NetTcpListenTls(VmNetworkState state, string host, int port, string certPath, string keyPath);
+    int NetTcpAccept(VmNetworkState state, int listenerHandle);
+    string NetTcpRead(VmNetworkState state, int connectionHandle, int maxBytes);
+    int NetTcpWrite(VmNetworkState state, int connectionHandle, string data);
 
     void StdoutWriteLine(string text);
     void ProcessExit(int code);

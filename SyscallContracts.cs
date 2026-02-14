@@ -68,6 +68,68 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL132", "sys.net_close expects 1 argument.", "VAL133", "sys.net_close arg must be int.", addDiagnostic);
                 returnKind = VmValueKind.Void;
                 return true;
+            case "sys.net_tcpListen":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL208", "sys.net_tcpListen arg 1 must be string."),
+                        (VmValueKind.Int, "VAL209", "sys.net_tcpListen arg 2 must be int.")
+                    },
+                    "VAL210",
+                    "sys.net_tcpListen expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
+            case "sys.net_tcpListenTls":
+                ValidateArityAndTypes(
+                    argKinds,
+                    4,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL211", "sys.net_tcpListenTls arg 1 must be string."),
+                        (VmValueKind.Int, "VAL212", "sys.net_tcpListenTls arg 2 must be int."),
+                        (VmValueKind.String, "VAL213", "sys.net_tcpListenTls arg 3 must be string."),
+                        (VmValueKind.String, "VAL214", "sys.net_tcpListenTls arg 4 must be string.")
+                    },
+                    "VAL215",
+                    "sys.net_tcpListenTls expects 4 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
+            case "sys.net_tcpAccept":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL216", "sys.net_tcpAccept expects 1 argument.", "VAL217", "sys.net_tcpAccept arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
+            case "sys.net_tcpRead":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL218", "sys.net_tcpRead arg 1 must be int."),
+                        (VmValueKind.Int, "VAL219", "sys.net_tcpRead arg 2 must be int.")
+                    },
+                    "VAL220",
+                    "sys.net_tcpRead expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
+            case "sys.net_tcpWrite":
+                ValidateArityAndTypes(
+                    argKinds,
+                    2,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL221", "sys.net_tcpWrite arg 1 must be int."),
+                        (VmValueKind.String, "VAL222", "sys.net_tcpWrite arg 2 must be string.")
+                    },
+                    "VAL223",
+                    "sys.net_tcpWrite expects 2 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
             case "sys.console_write":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL183", "sys.console_write expects 1 argument.", "VAL184", "sys.console_write arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;

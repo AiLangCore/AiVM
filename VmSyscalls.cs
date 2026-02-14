@@ -191,6 +191,31 @@ public static class VmSyscalls
         Host.NetClose(state, handle);
     }
 
+    public static int NetTcpListen(VmNetworkState state, string host, int port)
+    {
+        return Host.NetTcpListen(state, host, port);
+    }
+
+    public static int NetTcpListenTls(VmNetworkState state, string host, int port, string certPath, string keyPath)
+    {
+        return Host.NetTcpListenTls(state, host, port, certPath, keyPath);
+    }
+
+    public static int NetTcpAccept(VmNetworkState state, int listenerHandle)
+    {
+        return Host.NetTcpAccept(state, listenerHandle);
+    }
+
+    public static string NetTcpRead(VmNetworkState state, int connectionHandle, int maxBytes)
+    {
+        return Host.NetTcpRead(state, connectionHandle, maxBytes);
+    }
+
+    public static int NetTcpWrite(VmNetworkState state, int connectionHandle, string data)
+    {
+        return Host.NetTcpWrite(state, connectionHandle, data);
+    }
+
     public static void StdoutWriteLine(string text)
     {
         Host.StdoutWriteLine(text);

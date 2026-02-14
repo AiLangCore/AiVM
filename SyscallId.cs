@@ -33,5 +33,10 @@ public enum SyscallId : ushort
     Platform = 28,
     Arch = 29,
     OsVersion = 30,
-    Runtime = 31
+    Runtime = 31,
+    NetTcpListen = 32,
+    NetTcpListenTls = 33,
+    NetTcpAccept = 34,
+    NetTcpRead = 35,
+    NetTcpWrite = 36
 }
