@@ -14,6 +14,11 @@ public static class VmSyscalls
         return Host.ProcessEnvGet(name);
     }
 
+    public static int TimeMonotonicMs()
+    {
+        return Host.TimeMonotonicMs();
+    }
+
     public static void ConsoleWriteErrLine(string text)
     {
         Host.ConsoleWriteErrLine(text);
