@@ -14,6 +14,11 @@ public static class VmSyscalls
         return Host.ProcessEnvGet(name);
     }
 
+    public static int TimeNowUnixMs()
+    {
+        return Host.TimeNowUnixMs();
+    }
+
     public static void ConsoleWriteErrLine(string text)
     {
         Host.ConsoleWriteErrLine(text);
