@@ -4,6 +4,21 @@ public static class VmSyscalls
 {
     public static ISyscallHost Host { get; set; } = new DefaultSyscallHost();
 
+    public static void ConsoleWriteErrLine(string text)
+    {
+        Host.ConsoleWriteErrLine(text);
+    }
+
+    public static void ConsoleWrite(string text)
+    {
+        Host.ConsoleWrite(text);
+    }
+
+    public static string ProcessCwd()
+    {
+        return Host.ProcessCwd();
+    }
+
     public static void ConsolePrintLine(string text)
     {
         Host.ConsolePrintLine(text);
