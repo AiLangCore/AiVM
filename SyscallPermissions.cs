@@ -41,6 +41,7 @@ public static class SyscallPermissions
             SyscallId.CryptoBase64Encode => "crypto",
             SyscallId.CryptoBase64Decode => "crypto",
             SyscallId.CryptoSha1 => "crypto",
+            SyscallId.CryptoSha256 => "crypto",
             SyscallId.Platform => "process",
             SyscallId.Arch => "process",
             SyscallId.OsVersion => "process",

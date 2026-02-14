@@ -49,6 +49,7 @@ public interface ISyscallHost
     string CryptoBase64Encode(string text);
     string CryptoBase64Decode(string text);
     string CryptoSha1(string text);
+    string CryptoSha256(string text);
 
     void StdoutWriteLine(string text);
     void ProcessExit(int code);

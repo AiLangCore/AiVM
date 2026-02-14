@@ -123,6 +123,12 @@ public class DefaultSyscallHost : ISyscallHost
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    public virtual string CryptoSha256(string text)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(text));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
     public virtual string HttpGet(string url)
     {
         try
