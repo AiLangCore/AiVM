@@ -19,6 +19,11 @@ public static class VmSyscalls
         return Host.TimeNowUnixMs();
     }
 
+    public static int TimeMonotonicMs()
+    {
+        return Host.TimeMonotonicMs();
+    }
+
     public static void TimeSleepMs(int ms)
     {
         Host.TimeSleepMs(ms);

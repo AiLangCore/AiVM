@@ -4,6 +4,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Diagnostics;
 using System.Text;
 using System.Runtime.InteropServices;
 
@@ -13,10 +14,13 @@ public class DefaultSyscallHost : ISyscallHost
 {
     private static readonly HttpClient HttpClient = new();
     private static readonly string[] EmptyArgv = Array.Empty<string>();
+    private static readonly Stopwatch MonotonicStopwatch = Stopwatch.StartNew();
 
     public virtual string[] ProcessArgv() => EmptyArgv;
 
     public virtual int TimeNowUnixMs() => unchecked((int)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
+    public virtual int TimeMonotonicMs() => unchecked((int)MonotonicStopwatch.ElapsedMilliseconds);
 
     public virtual void TimeSleepMs(int ms) => Thread.Sleep(ms);
 
