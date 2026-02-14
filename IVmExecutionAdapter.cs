@@ -27,8 +27,8 @@ public interface IVmExecutionAdapter<TValue, TNode>
     TNode CreateNode(string kind, string id, IReadOnlyDictionary<string, VmAttr> attrs, IReadOnlyList<TNode> children);
     TNode ValueToNode(TValue value);
 
-    TValue ExecuteCall(string target, IReadOnlyList<TValue> args);
-    bool TryExecuteSyscall(SyscallId id, IReadOnlyList<TValue> args, out TValue result);
+    TValue ExecuteCall(string target, ReadOnlySpan<TValue> args);
+    bool TryExecuteSyscall(SyscallId id, ReadOnlySpan<TValue> args, out TValue result);
 
     void TraceInstruction(string functionName, int pc, string op)
     {

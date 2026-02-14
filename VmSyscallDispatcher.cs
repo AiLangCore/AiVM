@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace AiVM.Core;
 
 public static class VmSyscallDispatcher
@@ -63,13 +65,18 @@ public static class VmSyscallDispatcher
     {
         if (SyscallRegistry.TryResolve(target, out var id))
         {
-            return TryInvoke(id, args, network, out result);
+            return TryInvoke(id, AsSpan(args), network, out result);
         }
         result = SysValue.Unknown();
         return false;
     }
 
     public static bool TryInvoke(SyscallId id, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
+    {
+        return TryInvoke(id, AsSpan(args), network, out result);
+    }
+
+    public static bool TryInvoke(SyscallId id, ReadOnlySpan<SysValue> args, VmNetworkState network, out SysValue result)
     {
         result = SysValue.Unknown();
         var target = GetTargetName(id);
@@ -142,7 +149,7 @@ public static class VmSyscallDispatcher
                 return true;
 
             case "sys.process_cwd":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -156,14 +163,14 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.ProcessEnvGet(envName));
                 return true;
             case "sys.time_nowUnixMs":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.Int(VmSyscalls.TimeNowUnixMs());
                 return true;
             case "sys.time_monotonicMs":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -186,14 +193,14 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
             case "sys.console_readLine":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.IoReadLine());
                 return true;
             case "sys.console_readAllStdin":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -299,7 +306,7 @@ public static class VmSyscallDispatcher
                 return true;
 
             case "sys.platform":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -307,7 +314,7 @@ public static class VmSyscallDispatcher
                 return true;
 
             case "sys.arch":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -315,7 +322,7 @@ public static class VmSyscallDispatcher
                 return true;
 
             case "sys.os_version":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -323,7 +330,7 @@ public static class VmSyscallDispatcher
                 return true;
 
             case "sys.runtime":
-                if (args.Count != 0)
+                if (args.Length != 0)
                 {
                     return true;
                 }
@@ -375,10 +382,10 @@ public static class VmSyscallDispatcher
         };
     }
 
-    private static bool TryGetInt(IReadOnlyList<SysValue> args, int index, int expectedCount, out int value)
+    private static bool TryGetInt(ReadOnlySpan<SysValue> args, int index, int expectedCount, out int value)
     {
         value = 0;
-        if (args.Count != expectedCount)
+        if (args.Length != expectedCount)
         {
             return false;
         }
@@ -390,10 +397,10 @@ public static class VmSyscallDispatcher
         return true;
     }
 
-    private static bool TryGetString(IReadOnlyList<SysValue> args, int index, int expectedCount, out string value)
+    private static bool TryGetString(ReadOnlySpan<SysValue> args, int index, int expectedCount, out string value)
     {
         value = string.Empty;
-        if (args.Count != expectedCount)
+        if (args.Length != expectedCount)
         {
             return false;
         }
@@ -403,5 +410,20 @@ public static class VmSyscallDispatcher
         }
         value = args[index].StringValue;
         return true;
+    }
+
+    private static ReadOnlySpan<SysValue> AsSpan(IReadOnlyList<SysValue> args)
+    {
+        if (args.Count == 0)
+        {
+            return ReadOnlySpan<SysValue>.Empty;
+        }
+
+        if (args is List<SysValue> list)
+        {
+            return CollectionsMarshal.AsSpan(list);
+        }
+
+        return args.ToArray();
     }
 }
