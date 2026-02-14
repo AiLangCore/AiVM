@@ -56,6 +56,29 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual bool FsFileExists(string path) => File.Exists(path);
 
+    public virtual VmFsStat FsStat(string path)
+    {
+        if (File.Exists(path))
+        {
+            var fileInfo = new FileInfo(path);
+            return new VmFsStat(
+                "file",
+                unchecked((int)fileInfo.Length),
+                unchecked((int)new DateTimeOffset(fileInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds()));
+        }
+
+        if (Directory.Exists(path))
+        {
+            var directoryInfo = new DirectoryInfo(path);
+            return new VmFsStat(
+                "dir",
+                0,
+                unchecked((int)new DateTimeOffset(directoryInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds()));
+        }
+
+        return new VmFsStat("missing", 0, 0);
+    }
+
     public virtual bool FsPathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
     public virtual void FsWriteFile(string path, string text) => File.WriteAllText(path, text);

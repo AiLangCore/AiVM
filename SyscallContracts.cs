@@ -128,6 +128,10 @@ public static class SyscallContracts
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL140", "sys.fs_fileExists expects 1 argument.", "VAL141", "sys.fs_fileExists arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Bool;
                 return true;
+            case "sys.fs_stat":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL206", "sys.fs_stat expects 1 argument.", "VAL207", "sys.fs_stat arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
             case "sys.fs_pathExists":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL197", "sys.fs_pathExists expects 1 argument.", "VAL198", "sys.fs_pathExists arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Bool;
