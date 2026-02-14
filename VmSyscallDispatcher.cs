@@ -22,6 +22,7 @@ public static class VmSyscallDispatcher
             SyscallId.CryptoSha1 => 1,
             SyscallId.CryptoSha256 => 1,
             SyscallId.CryptoHmacSha256 => 2,
+            SyscallId.CryptoRandomBytes => 1,
             SyscallId.ConsoleWrite => 1,
             SyscallId.ConsoleWriteLine => 1,
             SyscallId.ConsoleReadLine => 0,
@@ -196,6 +197,14 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.CryptoHmacSha256(hmacKey, hmacText));
+                return true;
+
+            case SyscallId.CryptoRandomBytes:
+                if (!TryGetInt(args, 0, 1, out var randomCount))
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.CryptoRandomBytes(randomCount));
                 return true;
 
             case SyscallId.ConsoleWrite:

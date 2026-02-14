@@ -43,5 +43,6 @@ public enum SyscallId : ushort
     CryptoBase64Decode = 38,
     CryptoSha1 = 39,
     CryptoSha256 = 40,
-    CryptoHmacSha256 = 41
+    CryptoHmacSha256 = 41,
+    CryptoRandomBytes = 42
 }

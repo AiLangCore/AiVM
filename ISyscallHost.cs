@@ -51,6 +51,7 @@ public interface ISyscallHost
     string CryptoSha1(string text);
     string CryptoSha256(string text);
     string CryptoHmacSha256(string key, string text);
+    string CryptoRandomBytes(int count);
 
     void StdoutWriteLine(string text);
     void ProcessExit(int code);

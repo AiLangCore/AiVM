@@ -241,6 +241,11 @@ public static class VmSyscalls
         return Host.CryptoHmacSha256(key, text);
     }
 
+    public static string CryptoRandomBytes(int count)
+    {
+        return Host.CryptoRandomBytes(count);
+    }
+
     public static void StdoutWriteLine(string text)
     {
         Host.StdoutWriteLine(text);

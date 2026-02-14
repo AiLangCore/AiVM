@@ -160,6 +160,10 @@ public static class SyscallContracts
                     addDiagnostic);
                 returnKind = VmValueKind.String;
                 return true;
+            case "sys.crypto_randomBytes":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL235", "sys.crypto_randomBytes expects 1 argument.", "VAL236", "sys.crypto_randomBytes arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.String;
+                return true;
             case "sys.console_write":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL183", "sys.console_write expects 1 argument.", "VAL184", "sys.console_write arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;

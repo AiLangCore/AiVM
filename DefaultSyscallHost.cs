@@ -136,6 +136,18 @@ public class DefaultSyscallHost : ISyscallHost
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    public virtual string CryptoRandomBytes(int count)
+    {
+        if (count <= 0)
+        {
+            return string.Empty;
+        }
+
+        var bytes = new byte[count];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToBase64String(bytes);
+    }
+
     public virtual string HttpGet(string url)
     {
         try
