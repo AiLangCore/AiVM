@@ -189,6 +189,17 @@ public static class VmSyscallDispatcher
                 result = SysValue.Int(VmSyscalls.NetUdpSend(network, udpSendHandle, udpSendHost, udpSendPort, udpSendData));
                 return true;
 
+            case SyscallId.NetUdpRecv:
+                if (!TryGetInt(args, 0, 2, out var udpRecvHandle) ||
+                    !TryGetInt(args, 1, 2, out var udpRecvMaxBytes))
+                {
+                    return true;
+                }
+                // Node-returning syscalls are materialized by interpreter adapters.
+                _ = VmSyscalls.NetUdpRecv(network, udpRecvHandle, udpRecvMaxBytes);
+                result = SysValue.Unknown();
+                return true;
+
             case SyscallId.UiCreateWindow:
                 if (!TryGetString(args, 0, 3, out var uiTitle) ||
                     !TryGetInt(args, 1, 3, out var uiWidth) ||
@@ -261,6 +272,16 @@ public static class VmSyscallDispatcher
                 }
                 VmSyscalls.UiCloseWindow(uiCloseHandle);
                 result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiPollEvent:
+                if (!TryGetInt(args, 0, 1, out var uiPollHandle))
+                {
+                    return true;
+                }
+                // Node-returning syscalls are materialized by interpreter adapters.
+                _ = VmSyscalls.UiPollEvent(uiPollHandle);
+                result = SysValue.Unknown();
                 return true;
 
             case SyscallId.CryptoBase64Encode:
