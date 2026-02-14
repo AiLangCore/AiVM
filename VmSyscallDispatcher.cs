@@ -12,6 +12,7 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" or
             "sys.net_write" or
             "sys.net_close" or
+            "sys.console_write" or
             "sys.process_cwd" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
@@ -37,6 +38,7 @@ public static class VmSyscallDispatcher
             "sys.net_readHeaders" => 1,
             "sys.net_write" => 2,
             "sys.net_close" => 1,
+            "sys.console_write" => 1,
             "sys.process_cwd" => 0,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
@@ -107,6 +109,15 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 VmSyscalls.NetClose(network, closeHandle);
+                result = SysValue.Void();
+                return true;
+
+            case "sys.console_write":
+                if (!TryGetString(args, 0, 1, out var writeOutText))
+                {
+                    return true;
+                }
+                VmSyscalls.ConsoleWrite(writeOutText);
                 result = SysValue.Void();
                 return true;
 
