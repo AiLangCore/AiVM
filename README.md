@@ -1,22 +1,13 @@
-# AiVM.Core
+# AiVM
 
-Execution-host layer for AiLang VM mode.
+Standalone repository for the AiVM runtime layer.
 
-## Responsibilities
+## Layout
 
-- AiBC1 VM model/load/run (`VmProgram*`, `VmEngine`, `VmRunner`).
-- Host syscall adapters (`VmSyscalls`, dispatchers, host wrappers).
-- Bundle publish/load helpers.
-- Deterministic runtime error surfaces (`VmRuntimeException`).
+- `src/AiVM` - VM runtime project (`AiVM.Core.csproj`).
+- `.github/workflows` - CI and release workflows.
 
-## Public Contracts Used by Other Layers
+## CI
 
-- `SyscallContracts`
-- `VmRunner` / `VmEngine`
-- `VmProgramLoader`
-- `VmPublishArtifacts`
-
-## Design Rule
-
-`AiVM.Core` should expose execution primitives and syscall boundaries.
-Language semantics remain in `AiLang.Core` and AiLang `.aos` sources.
+- Pull requests and pushes build on Linux, macOS, and Windows.
+- Tag pushes matching `v*` publish GitHub releases with per-platform artifacts.

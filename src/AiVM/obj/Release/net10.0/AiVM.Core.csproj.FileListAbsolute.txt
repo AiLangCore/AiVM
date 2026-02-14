@@ -1,0 +1,12 @@
+/private/tmp/AiVM-standalone-work/src/AiVM/bin/Release/net10.0/AiVM.Core.deps.json
+/private/tmp/AiVM-standalone-work/src/AiVM/bin/Release/net10.0/AiVM.Core.dll
+/private/tmp/AiVM-standalone-work/src/AiVM/bin/Release/net10.0/AiVM.Core.pdb
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.GeneratedMSBuildEditorConfig.editorconfig
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.AssemblyInfoInputs.cache
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.AssemblyInfo.cs
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.csproj.CoreCompileInputs.cache
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.sourcelink.json
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.dll
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/refint/AiVM.Core.dll
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/AiVM.Core.pdb
+/private/tmp/AiVM-standalone-work/src/AiVM/obj/Release/net10.0/ref/AiVM.Core.dll
