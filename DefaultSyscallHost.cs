@@ -22,6 +22,8 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual int TimeMonotonicMs() => unchecked((int)MonotonicStopwatch.ElapsedMilliseconds);
 
+    public virtual void TimeSleepMs(int ms) => Thread.Sleep(ms);
+
     public virtual void ConsoleWriteErrLine(string text) => Console.Error.WriteLine(text);
 
     public virtual void ConsoleWrite(string text) => Console.Write(text);
@@ -67,6 +69,29 @@ public class DefaultSyscallHost : ISyscallHost
             .Where(name => !string.IsNullOrEmpty(name))
             .Cast<string>()
             .ToArray();
+    }
+
+    public virtual VmFsStat FsStat(string path)
+    {
+        if (File.Exists(path))
+        {
+            var fileInfo = new FileInfo(path);
+            return new VmFsStat(
+                "file",
+                unchecked((int)fileInfo.Length),
+                unchecked((int)new DateTimeOffset(fileInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds()));
+        }
+
+        if (Directory.Exists(path))
+        {
+            var directoryInfo = new DirectoryInfo(path);
+            return new VmFsStat(
+                "dir",
+                0,
+                unchecked((int)new DateTimeOffset(directoryInfo.LastWriteTimeUtc).ToUnixTimeMilliseconds()));
+        }
+
+        return new VmFsStat("missing", 0, 0);
     }
 
     public virtual bool FsPathExists(string path) => File.Exists(path) || Directory.Exists(path);

@@ -21,11 +21,13 @@ public static class VmSyscallDispatcher
             "sys.process_envGet" or
             "sys.time_nowUnixMs" or
             "sys.time_monotonicMs" or
+            "sys.time_sleepMs" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
             "sys.fs_readFile" or
             "sys.fs_fileExists" or
             "sys.fs_readDir" or
+            "sys.fs_stat" or
             "sys.fs_pathExists" or
             "sys.fs_writeFile" or
             "sys.fs_makeDir" or
@@ -58,11 +60,13 @@ public static class VmSyscallDispatcher
             "sys.process_envGet" => 1,
             "sys.time_nowUnixMs" => 0,
             "sys.time_monotonicMs" => 0,
+            "sys.time_sleepMs" => 1,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
             "sys.fs_readFile" => 1,
             "sys.fs_fileExists" => 1,
             "sys.fs_readDir" => 1,
+            "sys.fs_stat" => 1,
             "sys.fs_pathExists" => 1,
             "sys.fs_writeFile" => 2,
             "sys.fs_makeDir" => 1,
@@ -171,6 +175,14 @@ public static class VmSyscallDispatcher
                 }
                 result = SysValue.Int(VmSyscalls.TimeMonotonicMs());
                 return true;
+            case "sys.time_sleepMs":
+                if (!TryGetInt(args, 0, 1, out var sleepMs))
+                {
+                    return true;
+                }
+                VmSyscalls.TimeSleepMs(sleepMs);
+                result = SysValue.Void();
+                return true;
             case "sys.console_writeLine":
                 if (!TryGetString(args, 0, 1, out var consoleLineText))
                 {
@@ -240,6 +252,12 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 _ = VmSyscalls.FsReadDir(readDirPath);
+            case "sys.fs_stat":
+                if (!TryGetString(args, 0, 1, out var statPath))
+                {
+                    return true;
+                }
+                _ = VmSyscalls.FsStat(statPath);
                 result = SysValue.Unknown();
                 return true;
             case "sys.fs_pathExists":

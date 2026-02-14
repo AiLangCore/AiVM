@@ -104,6 +104,10 @@ public static class SyscallContracts
                 ValidateArity(argKinds, 0, "VAL201", "sys.time_monotonicMs expects 0 arguments.", addDiagnostic);
                 returnKind = VmValueKind.Int;
                 return true;
+            case "sys.time_sleepMs":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL202", "sys.time_sleepMs expects 1 argument.", "VAL203", "sys.time_sleepMs arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
             case "sys.stdout_writeLine":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL134", "sys.stdout_writeLine expects 1 argument.", "VAL135", "sys.stdout_writeLine arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Void;
@@ -126,6 +130,10 @@ public static class SyscallContracts
                 return true;
             case "sys.fs_readDir":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL204", "sys.fs_readDir expects 1 argument.", "VAL205", "sys.fs_readDir arg must be string.", addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
+            case "sys.fs_stat":
+                ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL206", "sys.fs_stat expects 1 argument.", "VAL207", "sys.fs_stat arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.Node;
                 return true;
             case "sys.fs_pathExists":

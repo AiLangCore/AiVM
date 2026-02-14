@@ -6,6 +6,7 @@ public interface ISyscallHost
     string ProcessEnvGet(string name);
     int TimeNowUnixMs();
     int TimeMonotonicMs();
+    void TimeSleepMs(int ms);
     void ConsoleWriteErrLine(string text);
     void ConsoleWrite(string text);
     string ProcessCwd();
@@ -23,6 +24,7 @@ public interface ISyscallHost
     string FsReadFile(string path);
     bool FsFileExists(string path);
     string[] FsReadDir(string path);
+    VmFsStat FsStat(string path);
     bool FsPathExists(string path);
     void FsWriteFile(string path, string text);
     void FsMakeDir(string path);

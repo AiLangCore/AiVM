@@ -24,6 +24,11 @@ public static class VmSyscalls
         return Host.TimeMonotonicMs();
     }
 
+    public static void TimeSleepMs(int ms)
+    {
+        Host.TimeSleepMs(ms);
+    }
+
     public static void ConsoleWriteErrLine(string text)
     {
         Host.ConsoleWriteErrLine(text);
@@ -104,6 +109,11 @@ public static class VmSyscalls
         var entries = Host.FsReadDir(path);
         Array.Sort(entries, StringComparer.Ordinal);
         return entries;
+    }
+
+    public static VmFsStat FsStat(string path)
+    {
+        return Host.FsStat(path);
     }
 
     public static bool FsPathExists(string path)
