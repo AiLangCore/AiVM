@@ -4,6 +4,8 @@ public interface ISyscallHost
 {
     string[] ProcessArgv();
     string ProcessEnvGet(string name);
+    int TimeNowUnixMs();
+    int TimeMonotonicMs();
     void ConsoleWriteErrLine(string text);
     void ConsoleWrite(string text);
     string ProcessCwd();
