@@ -79,15 +79,9 @@ public static class VmSyscallDispatcher
     public static bool TryInvoke(SyscallId id, ReadOnlySpan<SysValue> args, VmNetworkState network, out SysValue result)
     {
         result = SysValue.Unknown();
-        var target = GetTargetName(id);
-        if (target is null)
+        switch (id)
         {
-            return false;
-        }
-
-        switch (target)
-        {
-            case "sys.net_listen":
+            case SyscallId.NetListen:
                 if (!TryGetInt(args, 0, 1, out var listenPort))
                 {
                     return true;
@@ -95,7 +89,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Int(VmSyscalls.NetListen(network, listenPort));
                 return true;
 
-            case "sys.net_listen_tls":
+            case SyscallId.NetListenTls:
                 if (!TryGetInt(args, 0, 3, out var tlsPort) ||
                     !TryGetString(args, 1, 3, out var certPath) ||
                     !TryGetString(args, 2, 3, out var keyPath))
@@ -105,7 +99,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Int(VmSyscalls.NetListenTls(network, tlsPort, certPath, keyPath));
                 return true;
 
-            case "sys.net_accept":
+            case SyscallId.NetAccept:
                 if (!TryGetInt(args, 0, 1, out var acceptHandle))
                 {
                     return true;
@@ -113,7 +107,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Int(VmSyscalls.NetAccept(network, acceptHandle));
                 return true;
 
-            case "sys.net_readHeaders":
+            case SyscallId.NetReadHeaders:
                 if (!TryGetInt(args, 0, 1, out var readHandle))
                 {
                     return true;
@@ -121,7 +115,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.NetReadHeaders(network, readHandle));
                 return true;
 
-            case "sys.net_write":
+            case SyscallId.NetWrite:
                 if (!TryGetInt(args, 0, 2, out var writeHandle) ||
                     !TryGetString(args, 1, 2, out var writeText))
                 {
@@ -130,7 +124,7 @@ public static class VmSyscallDispatcher
                 result = VmSyscalls.NetWrite(network, writeHandle, writeText) ? SysValue.Void() : SysValue.Unknown();
                 return true;
 
-            case "sys.net_close":
+            case SyscallId.NetClose:
                 if (!TryGetInt(args, 0, 1, out var closeHandle))
                 {
                     return true;
@@ -139,7 +133,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.console_write":
+            case SyscallId.ConsoleWrite:
                 if (!TryGetString(args, 0, 1, out var writeOutText))
                 {
                     return true;
@@ -148,35 +142,35 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.process_cwd":
+            case SyscallId.ProcessCwd:
                 if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.ProcessCwd());
                 return true;
-            case "sys.process_envGet":
+            case SyscallId.ProcessEnvGet:
                 if (!TryGetString(args, 0, 1, out var envName))
                 {
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.ProcessEnvGet(envName));
                 return true;
-            case "sys.time_nowUnixMs":
+            case SyscallId.TimeNowUnixMs:
                 if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.Int(VmSyscalls.TimeNowUnixMs());
                 return true;
-            case "sys.time_monotonicMs":
+            case SyscallId.TimeMonotonicMs:
                 if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.Int(VmSyscalls.TimeMonotonicMs());
                 return true;
-            case "sys.time_sleepMs":
+            case SyscallId.TimeSleepMs:
                 if (!TryGetInt(args, 0, 1, out var sleepMs))
                 {
                     return true;
@@ -184,7 +178,7 @@ public static class VmSyscallDispatcher
                 VmSyscalls.TimeSleepMs(sleepMs);
                 result = SysValue.Void();
                 return true;
-            case "sys.console_writeLine":
+            case SyscallId.ConsoleWriteLine:
                 if (!TryGetString(args, 0, 1, out var consoleLineText))
                 {
                     return true;
@@ -192,21 +186,21 @@ public static class VmSyscallDispatcher
                 VmSyscalls.ConsolePrintLine(consoleLineText);
                 result = SysValue.Void();
                 return true;
-            case "sys.console_readLine":
+            case SyscallId.ConsoleReadLine:
                 if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.IoReadLine());
                 return true;
-            case "sys.console_readAllStdin":
+            case SyscallId.ConsoleReadAllStdin:
                 if (args.Length != 0)
                 {
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.IoReadAllStdin());
                 return true;
-            case "sys.console_writeErrLine":
+            case SyscallId.ConsoleWriteErrLine:
                 if (!TryGetString(args, 0, 1, out var errText))
                 {
                     return true;
@@ -214,7 +208,7 @@ public static class VmSyscallDispatcher
                 VmSyscalls.ConsoleWriteErrLine(errText);
                 result = SysValue.Void();
                 return true;
-            case "sys.stdout_writeLine":
+            case SyscallId.StdoutWriteLine:
                 if (!TryGetString(args, 0, 1, out var outText))
                 {
                     return true;
@@ -223,7 +217,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.proc_exit":
+            case SyscallId.ProcExit:
                 if (!TryGetInt(args, 0, 1, out var exitCode))
                 {
                     return true;
@@ -232,7 +226,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.fs_readFile":
+            case SyscallId.FsReadFile:
                 if (!TryGetString(args, 0, 1, out var fsPath))
                 {
                     return true;
@@ -240,14 +234,14 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.FsReadFile(fsPath));
                 return true;
 
-            case "sys.fs_fileExists":
+            case SyscallId.FsFileExists:
                 if (!TryGetString(args, 0, 1, out var existsPath))
                 {
                     return true;
                 }
                 result = SysValue.Bool(VmSyscalls.FsFileExists(existsPath));
                 return true;
-            case "sys.fs_readDir":
+            case SyscallId.FsReadDir:
                 if (!TryGetString(args, 0, 1, out var readDirPath))
                 {
                     return true;
@@ -255,7 +249,7 @@ public static class VmSyscallDispatcher
                 _ = VmSyscalls.FsReadDir(readDirPath);
                 result = SysValue.Unknown();
                 return true;
-            case "sys.fs_stat":
+            case SyscallId.FsStat:
                 if (!TryGetString(args, 0, 1, out var statPath))
                 {
                     return true;
@@ -263,14 +257,14 @@ public static class VmSyscallDispatcher
                 _ = VmSyscalls.FsStat(statPath);
                 result = SysValue.Unknown();
                 return true;
-            case "sys.fs_pathExists":
+            case SyscallId.FsPathExists:
                 if (!TryGetString(args, 0, 1, out var pathExistsPath))
                 {
                     return true;
                 }
                 result = SysValue.Bool(VmSyscalls.FsPathExists(pathExistsPath));
                 return true;
-            case "sys.fs_writeFile":
+            case SyscallId.FsWriteFile:
                 if (!TryGetString(args, 0, 2, out var writeFilePath) ||
                     !TryGetString(args, 1, 2, out var writeFileText))
                 {
@@ -280,7 +274,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.fs_makeDir":
+            case SyscallId.FsMakeDir:
                 if (!TryGetString(args, 0, 1, out var makeDirPath))
                 {
                     return true;
@@ -289,7 +283,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Void();
                 return true;
 
-            case "sys.str_utf8ByteCount":
+            case SyscallId.StrUtf8ByteCount:
                 if (!TryGetString(args, 0, 1, out var utf8Text))
                 {
                     return true;
@@ -297,7 +291,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.Int(VmSyscalls.StrUtf8ByteCount(utf8Text));
                 return true;
 
-            case "sys.http_get":
+            case SyscallId.HttpGet:
                 if (!TryGetString(args, 0, 1, out var url))
                 {
                     return true;
@@ -305,7 +299,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.HttpGet(url));
                 return true;
 
-            case "sys.platform":
+            case SyscallId.Platform:
                 if (args.Length != 0)
                 {
                     return true;
@@ -313,7 +307,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.Platform());
                 return true;
 
-            case "sys.arch":
+            case SyscallId.Arch:
                 if (args.Length != 0)
                 {
                     return true;
@@ -321,7 +315,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.Architecture());
                 return true;
 
-            case "sys.os_version":
+            case SyscallId.OsVersion:
                 if (args.Length != 0)
                 {
                     return true;
@@ -329,7 +323,7 @@ public static class VmSyscallDispatcher
                 result = SysValue.String(VmSyscalls.OsVersion());
                 return true;
 
-            case "sys.runtime":
+            case SyscallId.Runtime:
                 if (args.Length != 0)
                 {
                     return true;
@@ -340,46 +334,6 @@ public static class VmSyscallDispatcher
             default:
                 return false;
         }
-    }
-
-    private static string? GetTargetName(SyscallId id)
-    {
-        return id switch
-        {
-            SyscallId.NetListen => "sys.net_listen",
-            SyscallId.NetListenTls => "sys.net_listen_tls",
-            SyscallId.NetAccept => "sys.net_accept",
-            SyscallId.NetReadHeaders => "sys.net_readHeaders",
-            SyscallId.NetWrite => "sys.net_write",
-            SyscallId.NetClose => "sys.net_close",
-            SyscallId.ConsoleWrite => "sys.console_write",
-            SyscallId.ConsoleWriteLine => "sys.console_writeLine",
-            SyscallId.ConsoleReadLine => "sys.console_readLine",
-            SyscallId.ConsoleReadAllStdin => "sys.console_readAllStdin",
-            SyscallId.ConsoleWriteErrLine => "sys.console_writeErrLine",
-            SyscallId.ProcessCwd => "sys.process_cwd",
-            SyscallId.ProcessEnvGet => "sys.process_envGet",
-            SyscallId.TimeNowUnixMs => "sys.time_nowUnixMs",
-            SyscallId.TimeMonotonicMs => "sys.time_monotonicMs",
-            SyscallId.TimeSleepMs => "sys.time_sleepMs",
-            SyscallId.StdoutWriteLine => "sys.stdout_writeLine",
-            SyscallId.ProcExit => "sys.proc_exit",
-            SyscallId.ProcessArgv => "sys.process_argv",
-            SyscallId.FsReadFile => "sys.fs_readFile",
-            SyscallId.FsFileExists => "sys.fs_fileExists",
-            SyscallId.FsReadDir => "sys.fs_readDir",
-            SyscallId.FsStat => "sys.fs_stat",
-            SyscallId.FsPathExists => "sys.fs_pathExists",
-            SyscallId.FsWriteFile => "sys.fs_writeFile",
-            SyscallId.FsMakeDir => "sys.fs_makeDir",
-            SyscallId.StrUtf8ByteCount => "sys.str_utf8ByteCount",
-            SyscallId.HttpGet => "sys.http_get",
-            SyscallId.Platform => "sys.platform",
-            SyscallId.Arch => "sys.arch",
-            SyscallId.OsVersion => "sys.os_version",
-            SyscallId.Runtime => "sys.runtime",
-            _ => null
-        };
     }
 
     private static bool TryGetInt(ReadOnlySpan<SysValue> args, int index, int expectedCount, out int value)
