@@ -20,6 +20,7 @@ public interface ISyscallHost
 
     string FsReadFile(string path);
     bool FsFileExists(string path);
+    string[] FsReadDir(string path);
     bool FsPathExists(string path);
     void FsWriteFile(string path, string text);
     void FsMakeDir(string path);

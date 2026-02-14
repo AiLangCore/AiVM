@@ -48,6 +48,21 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual bool FsFileExists(string path) => File.Exists(path);
 
+    public virtual string[] FsReadDir(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory
+            .GetFileSystemEntries(path)
+            .Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Cast<string>()
+            .ToArray();
+    }
+
     public virtual bool FsPathExists(string path) => File.Exists(path) || Directory.Exists(path);
 
     public virtual void FsWriteFile(string path, string text) => File.WriteAllText(path, text);
