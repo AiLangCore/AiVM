@@ -19,6 +19,7 @@ public static class VmSyscallDispatcher
             "sys.console_writeErrLine" or
             "sys.process_cwd" or
             "sys.process_envGet" or
+            "sys.time_nowUnixMs" or
             "sys.time_monotonicMs" or
             "sys.stdout_writeLine" or
             "sys.proc_exit" or
@@ -54,6 +55,7 @@ public static class VmSyscallDispatcher
             "sys.console_writeErrLine" => 1,
             "sys.process_cwd" => 0,
             "sys.process_envGet" => 1,
+            "sys.time_nowUnixMs" => 0,
             "sys.time_monotonicMs" => 0,
             "sys.stdout_writeLine" => 1,
             "sys.proc_exit" => 1,
@@ -152,6 +154,13 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.ProcessEnvGet(envName));
+                return true;
+            case "sys.time_nowUnixMs":
+                if (args.Count != 0)
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.TimeNowUnixMs());
                 return true;
             case "sys.time_monotonicMs":
                 if (args.Count != 0)

@@ -18,6 +18,8 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual string[] ProcessArgv() => EmptyArgv;
 
+    public virtual int TimeNowUnixMs() => unchecked((int)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+
     public virtual int TimeMonotonicMs() => unchecked((int)MonotonicStopwatch.ElapsedMilliseconds);
 
     public virtual void ConsoleWriteErrLine(string text) => Console.Error.WriteLine(text);
