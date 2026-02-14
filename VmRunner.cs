@@ -423,7 +423,16 @@ public static class VmRunner
                 case "ASYNC_CALL_SYS":
                 {
                     var callArgs = PopArgs(stack, inst.A, function.Name);
-                    var result = adapter.ExecuteCall(inst.S, callArgs);
+                    TValue result;
+                    if (inst.B > 0 &&
+                        adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var syscallResult))
+                    {
+                        result = syscallResult;
+                    }
+                    else
+                    {
+                        result = adapter.ExecuteCall(inst.S, callArgs);
+                    }
                     if (adapter.IsUnknown(result))
                     {
                         throw new VmRuntimeException("VM001", $"Unsupported call target in bytecode mode: {inst.S}.", inst.S);
@@ -507,7 +516,16 @@ public static class VmRunner
                 case "CALL_SYS":
                 {
                     var callArgs = PopArgs(stack, inst.A, function.Name);
-                    var result = adapter.ExecuteCall(inst.S, callArgs);
+                    TValue result;
+                    if (inst.B > 0 &&
+                        adapter.TryExecuteSyscall((SyscallId)(inst.B - 1), callArgs, out var syscallResult))
+                    {
+                        result = syscallResult;
+                    }
+                    else
+                    {
+                        result = adapter.ExecuteCall(inst.S, callArgs);
+                    }
                     if (adapter.IsUnknown(result))
                     {
                         throw new VmRuntimeException("VM001", $"Unsupported call target in bytecode mode: {inst.S}.", inst.S);

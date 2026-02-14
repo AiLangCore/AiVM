@@ -1,0 +1,37 @@
+namespace AiVM.Core;
+
+public enum SyscallId : ushort
+{
+    NetListen = 0,
+    NetListenTls = 1,
+    NetAccept = 2,
+    NetReadHeaders = 3,
+    NetWrite = 4,
+    NetClose = 5,
+    ConsoleWrite = 6,
+    ConsoleWriteLine = 7,
+    ConsoleReadLine = 8,
+    ConsoleReadAllStdin = 9,
+    ConsoleWriteErrLine = 10,
+    ProcessCwd = 11,
+    ProcessEnvGet = 12,
+    TimeNowUnixMs = 13,
+    TimeMonotonicMs = 14,
+    TimeSleepMs = 15,
+    StdoutWriteLine = 16,
+    ProcExit = 17,
+    ProcessArgv = 18,
+    FsReadFile = 19,
+    FsFileExists = 20,
+    FsReadDir = 21,
+    FsStat = 22,
+    FsPathExists = 23,
+    FsWriteFile = 24,
+    FsMakeDir = 25,
+    StrUtf8ByteCount = 26,
+    HttpGet = 27,
+    Platform = 28,
+    Arch = 29,
+    OsVersion = 30,
+    Runtime = 31
+}

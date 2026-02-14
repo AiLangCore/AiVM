@@ -4,86 +4,80 @@ public static class VmSyscallDispatcher
 {
     public static bool SupportsTarget(string target)
     {
-        return target switch
-        {
-            "sys.net_listen" or
-            "sys.net_listen_tls" or
-            "sys.net_accept" or
-            "sys.net_readHeaders" or
-            "sys.net_write" or
-            "sys.net_close" or
-            "sys.console_write" or
-            "sys.console_writeLine" or
-            "sys.console_readLine" or
-            "sys.console_readAllStdin" or
-            "sys.console_writeErrLine" or
-            "sys.process_cwd" or
-            "sys.process_envGet" or
-            "sys.time_nowUnixMs" or
-            "sys.time_monotonicMs" or
-            "sys.time_sleepMs" or
-            "sys.stdout_writeLine" or
-            "sys.proc_exit" or
-            "sys.fs_readFile" or
-            "sys.fs_fileExists" or
-            "sys.fs_readDir" or
-            "sys.fs_stat" or
-            "sys.fs_pathExists" or
-            "sys.fs_writeFile" or
-            "sys.fs_makeDir" or
-            "sys.str_utf8ByteCount" or
-            "sys.http_get" or
-            "sys.platform" or
-            "sys.arch" or
-            "sys.os_version" or
-            "sys.runtime" => true,
-            _ => false
-        };
+        return SyscallRegistry.TryResolve(target, out _);
     }
 
     public static bool TryGetExpectedArity(string target, out int arity)
     {
-        arity = target switch
+        if (!SyscallRegistry.TryResolve(target, out var id))
         {
-            "sys.net_listen" => 1,
-            "sys.net_listen_tls" => 3,
-            "sys.net_accept" => 1,
-            "sys.net_readHeaders" => 1,
-            "sys.net_write" => 2,
-            "sys.net_close" => 1,
-            "sys.console_write" => 1,
-            "sys.console_writeLine" => 1,
-            "sys.console_readLine" => 0,
-            "sys.console_readAllStdin" => 0,
-            "sys.console_writeErrLine" => 1,
-            "sys.process_cwd" => 0,
-            "sys.process_envGet" => 1,
-            "sys.time_nowUnixMs" => 0,
-            "sys.time_monotonicMs" => 0,
-            "sys.time_sleepMs" => 1,
-            "sys.stdout_writeLine" => 1,
-            "sys.proc_exit" => 1,
-            "sys.fs_readFile" => 1,
-            "sys.fs_fileExists" => 1,
-            "sys.fs_readDir" => 1,
-            "sys.fs_stat" => 1,
-            "sys.fs_pathExists" => 1,
-            "sys.fs_writeFile" => 2,
-            "sys.fs_makeDir" => 1,
-            "sys.str_utf8ByteCount" => 1,
-            "sys.http_get" => 1,
-            "sys.platform" => 0,
-            "sys.arch" => 0,
-            "sys.os_version" => 0,
-            "sys.runtime" => 0,
+            arity = -1;
+            return false;
+        }
+        return TryGetExpectedArity(id, out arity);
+    }
+
+    public static bool TryGetExpectedArity(SyscallId id, out int arity)
+    {
+        arity = id switch
+        {
+            SyscallId.NetListen => 1,
+            SyscallId.NetListenTls => 3,
+            SyscallId.NetAccept => 1,
+            SyscallId.NetReadHeaders => 1,
+            SyscallId.NetWrite => 2,
+            SyscallId.NetClose => 1,
+            SyscallId.ConsoleWrite => 1,
+            SyscallId.ConsoleWriteLine => 1,
+            SyscallId.ConsoleReadLine => 0,
+            SyscallId.ConsoleReadAllStdin => 0,
+            SyscallId.ConsoleWriteErrLine => 1,
+            SyscallId.ProcessCwd => 0,
+            SyscallId.ProcessEnvGet => 1,
+            SyscallId.TimeNowUnixMs => 0,
+            SyscallId.TimeMonotonicMs => 0,
+            SyscallId.TimeSleepMs => 1,
+            SyscallId.StdoutWriteLine => 1,
+            SyscallId.ProcExit => 1,
+            SyscallId.ProcessArgv => 0,
+            SyscallId.FsReadFile => 1,
+            SyscallId.FsFileExists => 1,
+            SyscallId.FsReadDir => 1,
+            SyscallId.FsStat => 1,
+            SyscallId.FsPathExists => 1,
+            SyscallId.FsWriteFile => 2,
+            SyscallId.FsMakeDir => 1,
+            SyscallId.StrUtf8ByteCount => 1,
+            SyscallId.HttpGet => 1,
+            SyscallId.Platform => 0,
+            SyscallId.Arch => 0,
+            SyscallId.OsVersion => 0,
+            SyscallId.Runtime => 0,
             _ => -1
         };
+
         return arity >= 0;
     }
 
     public static bool TryInvoke(string target, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
     {
+        if (SyscallRegistry.TryResolve(target, out var id))
+        {
+            return TryInvoke(id, args, network, out result);
+        }
         result = SysValue.Unknown();
+        return false;
+    }
+
+    public static bool TryInvoke(SyscallId id, IReadOnlyList<SysValue> args, VmNetworkState network, out SysValue result)
+    {
+        result = SysValue.Unknown();
+        var target = GetTargetName(id);
+        if (target is null)
+        {
+            return false;
+        }
+
         switch (target)
         {
             case "sys.net_listen":
@@ -252,6 +246,8 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 _ = VmSyscalls.FsReadDir(readDirPath);
+                result = SysValue.Unknown();
+                return true;
             case "sys.fs_stat":
                 if (!TryGetString(args, 0, 1, out var statPath))
                 {
@@ -337,6 +333,46 @@ public static class VmSyscallDispatcher
             default:
                 return false;
         }
+    }
+
+    private static string? GetTargetName(SyscallId id)
+    {
+        return id switch
+        {
+            SyscallId.NetListen => "sys.net_listen",
+            SyscallId.NetListenTls => "sys.net_listen_tls",
+            SyscallId.NetAccept => "sys.net_accept",
+            SyscallId.NetReadHeaders => "sys.net_readHeaders",
+            SyscallId.NetWrite => "sys.net_write",
+            SyscallId.NetClose => "sys.net_close",
+            SyscallId.ConsoleWrite => "sys.console_write",
+            SyscallId.ConsoleWriteLine => "sys.console_writeLine",
+            SyscallId.ConsoleReadLine => "sys.console_readLine",
+            SyscallId.ConsoleReadAllStdin => "sys.console_readAllStdin",
+            SyscallId.ConsoleWriteErrLine => "sys.console_writeErrLine",
+            SyscallId.ProcessCwd => "sys.process_cwd",
+            SyscallId.ProcessEnvGet => "sys.process_envGet",
+            SyscallId.TimeNowUnixMs => "sys.time_nowUnixMs",
+            SyscallId.TimeMonotonicMs => "sys.time_monotonicMs",
+            SyscallId.TimeSleepMs => "sys.time_sleepMs",
+            SyscallId.StdoutWriteLine => "sys.stdout_writeLine",
+            SyscallId.ProcExit => "sys.proc_exit",
+            SyscallId.ProcessArgv => "sys.process_argv",
+            SyscallId.FsReadFile => "sys.fs_readFile",
+            SyscallId.FsFileExists => "sys.fs_fileExists",
+            SyscallId.FsReadDir => "sys.fs_readDir",
+            SyscallId.FsStat => "sys.fs_stat",
+            SyscallId.FsPathExists => "sys.fs_pathExists",
+            SyscallId.FsWriteFile => "sys.fs_writeFile",
+            SyscallId.FsMakeDir => "sys.fs_makeDir",
+            SyscallId.StrUtf8ByteCount => "sys.str_utf8ByteCount",
+            SyscallId.HttpGet => "sys.http_get",
+            SyscallId.Platform => "sys.platform",
+            SyscallId.Arch => "sys.arch",
+            SyscallId.OsVersion => "sys.os_version",
+            SyscallId.Runtime => "sys.runtime",
+            _ => null
+        };
     }
 
     private static bool TryGetInt(IReadOnlyList<SysValue> args, int index, int expectedCount, out int value)
