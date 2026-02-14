@@ -16,6 +16,8 @@ public class DefaultSyscallHost : ISyscallHost
     private static readonly HttpClient HttpClient = new();
     private static readonly string[] EmptyArgv = Array.Empty<string>();
     private static readonly Stopwatch MonotonicStopwatch = Stopwatch.StartNew();
+    private int _nextUiHandle = 1;
+    private readonly HashSet<int> _openWindows = new();
 
     public virtual string[] ProcessArgv() => EmptyArgv;
 
@@ -363,6 +365,55 @@ public class DefaultSyscallHost : ISyscallHost
         var payload = Encoding.UTF8.GetBytes(data);
         var sent = socket.Send(payload, payload.Length, host, port);
         return sent;
+    }
+
+    public virtual int UiCreateWindow(string title, int width, int height)
+    {
+        if (string.IsNullOrWhiteSpace(title) || width <= 0 || height <= 0)
+        {
+            return -1;
+        }
+
+        var handle = _nextUiHandle++;
+        _openWindows.Add(handle);
+        return handle;
+    }
+
+    public virtual void UiBeginFrame(int windowHandle)
+    {
+        _ = _openWindows.Contains(windowHandle);
+    }
+
+    public virtual void UiDrawRect(int windowHandle, int x, int y, int width, int height, string color)
+    {
+        _ = _openWindows.Contains(windowHandle);
+    }
+
+    public virtual void UiDrawText(int windowHandle, int x, int y, string text, string color, int size)
+    {
+        _ = _openWindows.Contains(windowHandle);
+    }
+
+    public virtual void UiEndFrame(int windowHandle)
+    {
+        _ = _openWindows.Contains(windowHandle);
+    }
+
+    public virtual VmUiEvent UiPollEvent(int windowHandle)
+    {
+        return _openWindows.Contains(windowHandle)
+            ? new VmUiEvent("none", string.Empty, 0, 0)
+            : new VmUiEvent("closed", string.Empty, 0, 0);
+    }
+
+    public virtual void UiPresent(int windowHandle)
+    {
+        _ = _openWindows.Contains(windowHandle);
+    }
+
+    public virtual void UiCloseWindow(int windowHandle)
+    {
+        _openWindows.Remove(windowHandle);
     }
 
     public virtual string NetReadHeaders(VmNetworkState state, int connectionHandle)

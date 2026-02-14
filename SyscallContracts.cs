@@ -174,6 +174,77 @@ public static class SyscallContracts
                     addDiagnostic);
                 returnKind = VmValueKind.Int;
                 return true;
+            case "sys.ui_createWindow":
+                ValidateArityAndTypes(
+                    argKinds,
+                    3,
+                    new[]
+                    {
+                        (VmValueKind.String, "VAL248", "sys.ui_createWindow arg 1 must be string."),
+                        (VmValueKind.Int, "VAL249", "sys.ui_createWindow arg 2 must be int."),
+                        (VmValueKind.Int, "VAL250", "sys.ui_createWindow arg 3 must be int.")
+                    },
+                    "VAL251",
+                    "sys.ui_createWindow expects 3 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Int;
+                return true;
+            case "sys.ui_beginFrame":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL252", "sys.ui_beginFrame expects 1 argument.", "VAL253", "sys.ui_beginFrame arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.ui_drawRect":
+                ValidateArityAndTypes(
+                    argKinds,
+                    6,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL254", "sys.ui_drawRect arg 1 must be int."),
+                        (VmValueKind.Int, "VAL255", "sys.ui_drawRect arg 2 must be int."),
+                        (VmValueKind.Int, "VAL256", "sys.ui_drawRect arg 3 must be int."),
+                        (VmValueKind.Int, "VAL257", "sys.ui_drawRect arg 4 must be int."),
+                        (VmValueKind.Int, "VAL258", "sys.ui_drawRect arg 5 must be int."),
+                        (VmValueKind.String, "VAL259", "sys.ui_drawRect arg 6 must be string.")
+                    },
+                    "VAL260",
+                    "sys.ui_drawRect expects 6 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.ui_drawText":
+                ValidateArityAndTypes(
+                    argKinds,
+                    6,
+                    new[]
+                    {
+                        (VmValueKind.Int, "VAL261", "sys.ui_drawText arg 1 must be int."),
+                        (VmValueKind.Int, "VAL262", "sys.ui_drawText arg 2 must be int."),
+                        (VmValueKind.Int, "VAL263", "sys.ui_drawText arg 3 must be int."),
+                        (VmValueKind.String, "VAL264", "sys.ui_drawText arg 4 must be string."),
+                        (VmValueKind.String, "VAL265", "sys.ui_drawText arg 5 must be string."),
+                        (VmValueKind.Int, "VAL266", "sys.ui_drawText arg 6 must be int.")
+                    },
+                    "VAL267",
+                    "sys.ui_drawText expects 6 arguments.",
+                    addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.ui_endFrame":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL268", "sys.ui_endFrame expects 1 argument.", "VAL269", "sys.ui_endFrame arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.ui_pollEvent":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL270", "sys.ui_pollEvent expects 1 argument.", "VAL271", "sys.ui_pollEvent arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Node;
+                return true;
+            case "sys.ui_present":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL272", "sys.ui_present expects 1 argument.", "VAL273", "sys.ui_present arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
+            case "sys.ui_closeWindow":
+                ValidateArityAndType(argKinds, 1, VmValueKind.Int, "VAL274", "sys.ui_closeWindow expects 1 argument.", "VAL275", "sys.ui_closeWindow arg must be int.", addDiagnostic);
+                returnKind = VmValueKind.Void;
+                return true;
             case "sys.crypto_base64Encode":
                 ValidateArityAndType(argKinds, 1, VmValueKind.String, "VAL224", "sys.crypto_base64Encode expects 1 argument.", "VAL225", "sys.crypto_base64Encode arg must be string.", addDiagnostic);
                 returnKind = VmValueKind.String;

@@ -20,6 +20,14 @@ public static class VmSyscallDispatcher
             SyscallId.NetUdpBind => 2,
             SyscallId.NetUdpRecv => 2,
             SyscallId.NetUdpSend => 4,
+            SyscallId.UiCreateWindow => 3,
+            SyscallId.UiBeginFrame => 1,
+            SyscallId.UiDrawRect => 6,
+            SyscallId.UiDrawText => 6,
+            SyscallId.UiEndFrame => 1,
+            SyscallId.UiPollEvent => 1,
+            SyscallId.UiPresent => 1,
+            SyscallId.UiCloseWindow => 1,
             SyscallId.CryptoBase64Encode => 1,
             SyscallId.CryptoBase64Decode => 1,
             SyscallId.CryptoSha1 => 1,
@@ -179,6 +187,80 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.Int(VmSyscalls.NetUdpSend(network, udpSendHandle, udpSendHost, udpSendPort, udpSendData));
+                return true;
+
+            case SyscallId.UiCreateWindow:
+                if (!TryGetString(args, 0, 3, out var uiTitle) ||
+                    !TryGetInt(args, 1, 3, out var uiWidth) ||
+                    !TryGetInt(args, 2, 3, out var uiHeight))
+                {
+                    return true;
+                }
+                result = SysValue.Int(VmSyscalls.UiCreateWindow(uiTitle, uiWidth, uiHeight));
+                return true;
+
+            case SyscallId.UiBeginFrame:
+                if (!TryGetInt(args, 0, 1, out var uiBeginHandle))
+                {
+                    return true;
+                }
+                VmSyscalls.UiBeginFrame(uiBeginHandle);
+                result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiDrawRect:
+                if (!TryGetInt(args, 0, 6, out var uiRectHandle) ||
+                    !TryGetInt(args, 1, 6, out var uiRectX) ||
+                    !TryGetInt(args, 2, 6, out var uiRectY) ||
+                    !TryGetInt(args, 3, 6, out var uiRectW) ||
+                    !TryGetInt(args, 4, 6, out var uiRectH) ||
+                    !TryGetString(args, 5, 6, out var uiRectColor))
+                {
+                    return true;
+                }
+                VmSyscalls.UiDrawRect(uiRectHandle, uiRectX, uiRectY, uiRectW, uiRectH, uiRectColor);
+                result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiDrawText:
+                if (!TryGetInt(args, 0, 6, out var uiTextHandle) ||
+                    !TryGetInt(args, 1, 6, out var uiTextX) ||
+                    !TryGetInt(args, 2, 6, out var uiTextY) ||
+                    !TryGetString(args, 3, 6, out var uiTextValue) ||
+                    !TryGetString(args, 4, 6, out var uiTextColor) ||
+                    !TryGetInt(args, 5, 6, out var uiTextSize))
+                {
+                    return true;
+                }
+                VmSyscalls.UiDrawText(uiTextHandle, uiTextX, uiTextY, uiTextValue, uiTextColor, uiTextSize);
+                result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiEndFrame:
+                if (!TryGetInt(args, 0, 1, out var uiEndHandle))
+                {
+                    return true;
+                }
+                VmSyscalls.UiEndFrame(uiEndHandle);
+                result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiPresent:
+                if (!TryGetInt(args, 0, 1, out var uiPresentHandle))
+                {
+                    return true;
+                }
+                VmSyscalls.UiPresent(uiPresentHandle);
+                result = SysValue.Void();
+                return true;
+
+            case SyscallId.UiCloseWindow:
+                if (!TryGetInt(args, 0, 1, out var uiCloseHandle))
+                {
+                    return true;
+                }
+                VmSyscalls.UiCloseWindow(uiCloseHandle);
+                result = SysValue.Void();
                 return true;
 
             case SyscallId.CryptoBase64Encode:

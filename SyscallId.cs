@@ -47,5 +47,13 @@ public enum SyscallId : ushort
     CryptoRandomBytes = 42,
     NetUdpBind = 43,
     NetUdpRecv = 44,
-    NetUdpSend = 45
+    NetUdpSend = 45,
+    UiCreateWindow = 46,
+    UiBeginFrame = 47,
+    UiDrawRect = 48,
+    UiDrawText = 49,
+    UiEndFrame = 50,
+    UiPollEvent = 51,
+    UiPresent = 52,
+    UiCloseWindow = 53
 }

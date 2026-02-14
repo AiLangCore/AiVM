@@ -231,6 +231,46 @@ public static class VmSyscalls
         return Host.NetUdpSend(state, handle, host, port, data);
     }
 
+    public static int UiCreateWindow(string title, int width, int height)
+    {
+        return Host.UiCreateWindow(title, width, height);
+    }
+
+    public static void UiBeginFrame(int windowHandle)
+    {
+        Host.UiBeginFrame(windowHandle);
+    }
+
+    public static void UiDrawRect(int windowHandle, int x, int y, int width, int height, string color)
+    {
+        Host.UiDrawRect(windowHandle, x, y, width, height, color);
+    }
+
+    public static void UiDrawText(int windowHandle, int x, int y, string text, string color, int size)
+    {
+        Host.UiDrawText(windowHandle, x, y, text, color, size);
+    }
+
+    public static void UiEndFrame(int windowHandle)
+    {
+        Host.UiEndFrame(windowHandle);
+    }
+
+    public static VmUiEvent UiPollEvent(int windowHandle)
+    {
+        return Host.UiPollEvent(windowHandle);
+    }
+
+    public static void UiPresent(int windowHandle)
+    {
+        Host.UiPresent(windowHandle);
+    }
+
+    public static void UiCloseWindow(int windowHandle)
+    {
+        Host.UiCloseWindow(windowHandle);
+    }
+
     public static string CryptoBase64Encode(string text)
     {
         return Host.CryptoBase64Encode(text);
