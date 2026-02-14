@@ -19,6 +19,7 @@ public static class VmSyscallDispatcher
             SyscallId.NetTcpWrite => 2,
             SyscallId.CryptoBase64Encode => 1,
             SyscallId.CryptoBase64Decode => 1,
+            SyscallId.CryptoSha1 => 1,
             SyscallId.ConsoleWrite => 1,
             SyscallId.ConsoleWriteLine => 1,
             SyscallId.ConsoleReadLine => 0,
@@ -168,6 +169,14 @@ public static class VmSyscallDispatcher
                     return true;
                 }
                 result = SysValue.String(VmSyscalls.CryptoBase64Decode(base64DecodeText));
+                return true;
+
+            case SyscallId.CryptoSha1:
+                if (!TryGetString(args, 0, 1, out var sha1Text))
+                {
+                    return true;
+                }
+                result = SysValue.String(VmSyscalls.CryptoSha1(sha1Text));
                 return true;
 
             case SyscallId.ConsoleWrite:

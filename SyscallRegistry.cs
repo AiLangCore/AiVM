@@ -19,6 +19,7 @@ public static class SyscallRegistry
         ["sys.net_tcpWrite"] = SyscallId.NetTcpWrite,
         ["sys.crypto_base64Encode"] = SyscallId.CryptoBase64Encode,
         ["sys.crypto_base64Decode"] = SyscallId.CryptoBase64Decode,
+        ["sys.crypto_sha1"] = SyscallId.CryptoSha1,
         ["sys.console_write"] = SyscallId.ConsoleWrite,
         ["sys.console_writeLine"] = SyscallId.ConsoleWriteLine,
         ["sys.console_readLine"] = SyscallId.ConsoleReadLine,

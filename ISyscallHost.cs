@@ -48,6 +48,7 @@ public interface ISyscallHost
     int NetTcpWrite(VmNetworkState state, int connectionHandle, string data);
     string CryptoBase64Encode(string text);
     string CryptoBase64Decode(string text);
+    string CryptoSha1(string text);
 
     void StdoutWriteLine(string text);
     void ProcessExit(int code);

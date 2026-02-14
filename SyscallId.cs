@@ -40,5 +40,6 @@ public enum SyscallId : ushort
     NetTcpRead = 35,
     NetTcpWrite = 36,
     CryptoBase64Encode = 37,
-    CryptoBase64Decode = 38
+    CryptoBase64Decode = 38,
+    CryptoSha1 = 39
 }

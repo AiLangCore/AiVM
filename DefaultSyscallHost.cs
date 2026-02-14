@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Diagnostics;
 using System.Text;
@@ -114,6 +115,12 @@ public class DefaultSyscallHost : ISyscallHost
         {
             return string.Empty;
         }
+    }
+
+    public virtual string CryptoSha1(string text)
+    {
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(text));
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     public virtual string HttpGet(string url)
