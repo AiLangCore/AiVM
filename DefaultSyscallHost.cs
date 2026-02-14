@@ -104,6 +104,18 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual string CryptoBase64Encode(string text) => Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
 
+    public virtual string CryptoBase64Decode(string text)
+    {
+        try
+        {
+            return Encoding.UTF8.GetString(Convert.FromBase64String(text));
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     public virtual string HttpGet(string url)
     {
         try

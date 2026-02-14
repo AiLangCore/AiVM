@@ -39,6 +39,7 @@ public static class SyscallPermissions
             SyscallId.FsMakeDir => "file",
             SyscallId.HttpGet => "net",
             SyscallId.CryptoBase64Encode => "crypto",
+            SyscallId.CryptoBase64Decode => "crypto",
             SyscallId.Platform => "process",
             SyscallId.Arch => "process",
             SyscallId.OsVersion => "process",
