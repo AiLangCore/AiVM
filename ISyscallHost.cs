@@ -2,6 +2,9 @@ namespace AiVM.Core;
 
 public interface ISyscallHost
 {
+    void ConsoleWriteErrLine(string text);
+    void ConsoleWrite(string text);
+    string ProcessCwd();
     void ConsolePrintLine(string text);
     void IoPrint(string text);
     void IoWrite(string text);
@@ -15,7 +18,9 @@ public interface ISyscallHost
 
     string FsReadFile(string path);
     bool FsFileExists(string path);
+    bool FsPathExists(string path);
     void FsWriteFile(string path, string text);
+    void FsMakeDir(string path);
     int StrUtf8ByteCount(string text);
     string HttpGet(string url);
     string Platform();

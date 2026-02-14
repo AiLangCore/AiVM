@@ -13,6 +13,12 @@ public class DefaultSyscallHost : ISyscallHost
 {
     private static readonly HttpClient HttpClient = new();
 
+    public virtual void ConsoleWriteErrLine(string text) => Console.Error.WriteLine(text);
+
+    public virtual void ConsoleWrite(string text) => Console.Write(text);
+
+    public virtual string ProcessCwd() => Directory.GetCurrentDirectory();
+
     public virtual void ConsolePrintLine(string text) => Console.WriteLine(text);
 
     public virtual void IoPrint(string text) => Console.WriteLine(text);
@@ -37,7 +43,11 @@ public class DefaultSyscallHost : ISyscallHost
 
     public virtual bool FsFileExists(string path) => File.Exists(path);
 
+    public virtual bool FsPathExists(string path) => File.Exists(path) || Directory.Exists(path);
+
     public virtual void FsWriteFile(string path, string text) => File.WriteAllText(path, text);
+
+    public virtual void FsMakeDir(string path) => Directory.CreateDirectory(path);
 
     public virtual int StrUtf8ByteCount(string text) => Encoding.UTF8.GetByteCount(text);
 
