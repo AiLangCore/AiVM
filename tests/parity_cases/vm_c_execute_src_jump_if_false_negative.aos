@@ -1,0 +1,6 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=1 flags=0) {
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=PUSH_BOOL a=0 b=0)
+    Inst#i2(op=JUMP_IF_FALSE a=-1 b=0)
+  }
+}

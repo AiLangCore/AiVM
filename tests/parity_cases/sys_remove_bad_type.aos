@@ -1,0 +1,3 @@
+Program#p1 {
+  Call#c1(target=sys.str_remove) { Lit#s1(value="abc") Lit#s2(value="x") Lit#i1(value=1) }
+}

@@ -1,0 +1,3 @@
+Cmd#c0(name=setPerms allow=sys)
+Cmd#c1(name=load) { Program#p1 { } }
+Cmd#c2(name=eval) { Call#c3(target=sys.ui_drawLine) { Lit#s1(value="bad") Lit#i1(value=0) Lit#i2(value=1) Lit#i3(value=2) Lit#i4(value=3) Lit#s2(value="#fff") Lit#i5(value=255) } }

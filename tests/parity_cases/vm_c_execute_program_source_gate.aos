@@ -1,0 +1,5 @@
+Program#p1 {
+  Let#l1(name=x) {
+    Lit#v1(value=1)
+  }
+}

@@ -1,0 +1,1 @@
+Err#err1(code=DEV008 message="C VM bridge execute path is unavailable: VM001: Opcode 'PAR_BEGIN' uses unsupported string operand s in C bridge execute path. (nodeId=main)" nodeId=vmMode)

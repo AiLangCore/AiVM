@@ -1,0 +1,1 @@
+Err#err1(code=DEV008 message="C VM bridge execute path is unavailable: VM001: Entry function 'main' with params is not yet supported by C bridge execute path (count=1). (nodeId=main)" nodeId=vmMode)

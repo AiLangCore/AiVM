@@ -1,0 +1,22 @@
+# name|left_command|right_command|expected_status(optional, default 0)|expected_left_status(optional)|expected_right_status(optional)
+parity_same_file|cat src/AiVM.Core/native/tests/parity_left.txt|cat src/AiVM.Core/native/tests/parity_left.txt
+parity_crlf_vs_lf|printf $'line1\r\nline2\r\n'|printf $'line1\nline2\n'
+parity_trailing_newline|printf $'alpha\nbeta\n'|printf $'alpha\nbeta'
+parity_nonzero_exit|printf 'fail-path\n'; exit 7|printf 'fail-path\n'; exit 7|7
+parity_asymmetric_status|printf 'same-status-text\n'; exit 1|printf 'same-status-text\n'; exit 2||1|2
+parity_sys_utf8_bad_type|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_utf8_bad_type.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_utf8_bad_type.out; exit 2|2
+parity_sys_substring_bad_arity|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_substring_bad_arity.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_substring_bad_arity.out; exit 2|2
+parity_sys_remove_bad_type|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_remove_bad_type.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_remove_bad_type.out; exit 2|2
+parity_repl_sys_success|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_sys_success.in|cat src/AiVM.Core/native/tests/parity_cases/repl_sys_success.out
+parity_repl_sys_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_sys_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_sys_error.out
+parity_repl_ui_drawline_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_ui_drawline_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_ui_drawline_error.out
+parity_repl_ui_drawpath_arity_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_ui_drawpath_arity_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_ui_drawpath_arity_error.out
+parity_repl_ui_getwindowsize_type_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_ui_getwindowsize_type_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_ui_getwindowsize_type_error.out
+parity_repl_ui_createwindow_arity_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_ui_createwindow_arity_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_ui_createwindow_arity_error.out
+parity_repl_net_tcpconnect_type_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_net_tcpconnect_type_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_net_tcpconnect_type_error.out
+parity_repl_crypto_hmac_arity_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_crypto_hmac_arity_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_crypto_hmac_arity_error.out
+parity_repl_worker_cancel_type_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_worker_cancel_type_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_worker_cancel_type_error.out
+parity_vm_c_unlinked_gate|./tools/airun run examples/hello.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_unlinked.out; exit 1|1
+parity_vm_c_unlinked_gate_bundle|./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_unlinked_bundle.out; exit 1|1
+parity_vm_default_is_canonical|./tools/airun run examples/golden/vm_default_is_canonical.in.aos|cat examples/golden/vm_default_is_canonical.out.aos; exit 3|3
+parity_vm_unsupported_construct|./tools/airun run examples/golden/vm_unsupported_construct.in.aos|cat examples/golden/vm_unsupported_construct.err; exit 3|3

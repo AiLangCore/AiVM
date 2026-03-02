@@ -1,0 +1,5 @@
+Cmd#c0(name=setPerms allow=sys)
+Cmd#c1(name=load) { Program#p1 { } }
+Cmd#c2(name=eval) { Call#c3(target=sys.str_substring) { Lit#s1(value="a😀bc") Lit#i1(value=1) Lit#i2(value=2) } }
+Cmd#c4(name=eval) { Call#c5(target=sys.str_remove) { Lit#s2(value="a😀bc") Lit#i3(value=1) Lit#i4(value=2) } }
+Cmd#c6(name=eval) { Call#c7(target=sys.str_utf8ByteCount) { Lit#s3(value="a😀bc") } }

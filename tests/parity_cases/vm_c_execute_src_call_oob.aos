@@ -1,0 +1,6 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=1 flags=0) {
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=CALL a=99 b=0)
+    Inst#i2(op=RET)
+  }
+}

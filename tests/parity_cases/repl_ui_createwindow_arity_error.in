@@ -1,0 +1,3 @@
+Cmd#c0(name=setPerms allow=sys)
+Cmd#c1(name=load) { Program#p1 { } }
+Cmd#c2(name=eval) { Call#c3(target=sys.ui_createWindow) { Lit#s1(value="Hello") Lit#i1(value=800) } }

@@ -1,0 +1,3 @@
+Cmd#c0(name=setPerms allow=sys)
+Cmd#c1(name=load) { Program#p1 { } }
+Cmd#c2(name=eval) { Call#c3(target=sys.net_tcpConnect) { Lit#i1(value=1) Lit#i2(value=443) } }

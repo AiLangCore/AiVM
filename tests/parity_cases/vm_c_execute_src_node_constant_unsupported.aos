@@ -1,0 +1,6 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=1 flags=0) {
+  Const#c1(kind=node value="Node#n1")
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=HALT a=0 b=0)
+  }
+}

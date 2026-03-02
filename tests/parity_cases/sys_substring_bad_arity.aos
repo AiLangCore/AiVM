@@ -1,0 +1,3 @@
+Program#p1 {
+  Call#c1(target=sys.str_substring) { Lit#s1(value="abc") Lit#i1(value=1) }
+}

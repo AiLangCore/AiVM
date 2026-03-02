@@ -1,0 +1,8 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=1 flags=0) {
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=HALT a=0 b=0)
+  }
+  Func#f2(name=helper params="x" locals="") {
+    Inst#i2(op=HALT a=0 b=0)
+  }
+}

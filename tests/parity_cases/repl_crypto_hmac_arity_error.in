@@ -1,0 +1,3 @@
+Cmd#c0(name=setPerms allow=sys)
+Cmd#c1(name=load) { Program#p1 { } }
+Cmd#c2(name=eval) { Call#c3(target=sys.crypto_hmacSha256) { Lit#s1(value="k") } }
