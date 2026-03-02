@@ -1,8 +1,8 @@
-# AiVM.C
+# AiVM Native Core
 
 ## Purpose
 
-`AiVM.C` initializes a clean C rewrite scaffold of the AiVM deterministic core. This branch is structural scaffolding only and is not a feature-complete VM port.
+`src/AiVM.Core/native` contains the clean C rewrite scaffold of the AiVM deterministic core. This is structural scaffolding and not yet a feature-complete VM host/runtime replacement.
 
 ## Deterministic VM Goal
 
@@ -53,12 +53,6 @@ Optional environment variables:
 - `AIVM_C_BUILD_DIR`: override CMake build directory (default `.tmp/aivm-c-build`)
 - `AIVM_PARITY_REPORT`: override parity manifest report path
 - `AIVM_BUILD_SHARED=1`: enable shared-library build in the test flow
-
-Bridge smoke (shared loader path):
-
-```bash
-./scripts/test-aivm-c-bridge.sh
-```
 
 For normalized output comparison in dual-run workflows:
 
