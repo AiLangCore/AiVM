@@ -1,6 +1,6 @@
 #include <string.h>
 
-#include "aivm_syscall.h"
+#include "sys/aivm_syscall.h"
 
 static const uint8_t k_test_bytes[] = { 'd', 'a', 't', 'a' };
 

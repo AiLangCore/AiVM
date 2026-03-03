@@ -1,4 +1,4 @@
-#include "aivm_syscall_contracts.h"
+#include "sys/aivm_syscall_contracts.h"
 
 static int expect(int condition)
 {

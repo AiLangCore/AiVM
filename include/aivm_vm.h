@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #include "aivm_program.h"
-#include "aivm_syscall.h"
+#include "sys/aivm_syscall.h"
 #include "aivm_types.h"
 
 typedef enum {

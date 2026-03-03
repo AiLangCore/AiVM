@@ -1,8 +1,8 @@
-#include "aivm_syscall.h"
+#include "sys/aivm_syscall.h"
 
 #include <string.h>
 
-#include "aivm_syscall_contracts.h"
+#include "sys/aivm_syscall_contracts.h"
 
 AivmSyscallStatus aivm_syscall_invoke(
     AivmSyscallHandler handler,

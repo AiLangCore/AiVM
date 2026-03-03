@@ -10,8 +10,8 @@ set(AIVM_CORE_SOURCES
     src/aivm_types.c
     src/aivm_vm.c
     src/aivm_program.c
-    src/aivm_syscall.c
-    src/aivm_syscall_contracts.c
+    src/sys/aivm_syscall.c
+    src/sys/aivm_syscall_contracts.c
     src/aivm_parity.c
     src/aivm_runtime.c
     src/aivm_c_api.c
