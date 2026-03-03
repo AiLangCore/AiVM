@@ -366,7 +366,7 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.net_asyncResultInt", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net_asyncResultString", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net_asyncResultBytes", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(return_type == AIVM_VAL_BYTES) != 0) {
