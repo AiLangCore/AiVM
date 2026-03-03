@@ -1,8 +1,9 @@
 # name	max_vm_ticks
-# Calibrated from local deterministic bench run on 2026-03-02.
+# Calibrated from native deterministic bench run on 2026-03-03 (`airun bench --iterations 10 --human`).
 # Format: benchmark_name<TAB>max_vm_ticks
-loop	150000
-str_concat	320000
-map_create	100000000
-http_handler	25000
-lifecycle	32000
+runtime_loop	20
+compiler_parse_program	90
+compiler_parse_bytecode	20
+app_run_hello	70
+app_run_echo	110
+app_run_bundle	30
