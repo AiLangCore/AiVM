@@ -992,7 +992,7 @@ void aivm_step(AivmVm* vm)
         case AIVM_OP_RET:
         case AIVM_OP_RETURN: {
             AivmCallFrame frame;
-            AivmValue return_value;
+            AivmValue return_value = aivm_value_void();
             int has_return_value = 0;
             if (vm->call_frame_count == 0U) {
                 aivm_halt(vm);
