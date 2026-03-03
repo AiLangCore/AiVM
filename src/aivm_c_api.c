@@ -96,6 +96,21 @@ AivmCResult aivm_c_execute_program_with_syscalls(
     const AivmSyscallBinding* bindings,
     size_t binding_count)
 {
+    return aivm_c_execute_program_with_syscalls_and_argv(
+        program,
+        bindings,
+        binding_count,
+        NULL,
+        0U);
+}
+
+AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count)
+{
     AivmVm vm;
     AivmCResult result = result_defaults();
 
@@ -110,7 +125,13 @@ AivmCResult aivm_c_execute_program_with_syscalls(
     result.loaded = 1;
     result.load_status = AIVM_PROGRAM_OK;
     result.load_error_offset = 0U;
-    result.ok = aivm_execute_program_with_syscalls(program, bindings, binding_count, &vm);
+    result.ok = aivm_execute_program_with_syscalls_and_argv(
+        program,
+        bindings,
+        binding_count,
+        process_argv,
+        process_argv_count,
+        &vm);
     result.status = vm.status;
     result.error = vm.error;
     capture_exit_code(&result, &vm);

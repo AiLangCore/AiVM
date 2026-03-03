@@ -50,6 +50,12 @@ AIVM_API AivmCResult aivm_c_execute_program_with_syscalls(
     const AivmProgram* program,
     const AivmSyscallBinding* bindings,
     size_t binding_count);
+AIVM_API AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count);
 AIVM_API AivmCResult aivm_c_execute_aibc1(const uint8_t* bytes, size_t byte_count);
 AIVM_API uint32_t aivm_c_abi_version(void);
 

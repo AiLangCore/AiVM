@@ -1,4 +1,5 @@
 #include "aivm_vm.h"
+#include <string.h>
 
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
@@ -460,23 +461,11 @@ static int find_completed_task(const AivmVm* vm, int64_t handle, AivmValue* out_
 
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node)
 {
-    static const AivmNodeRecord EmptyArgvNode = {
-        "Block",
-        "argv0",
-        0U,
-        0U,
-        0U,
-        0U
-    };
     size_t index;
     if (vm == NULL || out_node == NULL) {
         return 0;
     }
-    if (handle == 0) {
-        *out_node = &EmptyArgvNode;
-        return 1;
-    }
-    if (handle < 0) {
+    if (handle <= 0) {
         return 0;
     }
     index = (size_t)(handle - 1);
@@ -648,6 +637,68 @@ static int create_runtime_node_from_value(AivmVm* vm, AivmValue value, int64_t* 
     return 1;
 }
 
+static int initialize_process_argv_node(AivmVm* vm)
+{
+    int64_t child_handles[AIVM_VM_NODE_CAPACITY];
+    AivmNodeAttr value_attr;
+    size_t i;
+
+    if (vm == NULL) {
+        return 0;
+    }
+
+    vm->process_argv_node_handle = 0;
+    if (vm->process_argv_count > AIVM_VM_NODE_CAPACITY) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv exceeds node capacity.");
+        return 0;
+    }
+
+    for (i = 0U; i < vm->process_argv_count; i += 1U) {
+        child_handles[i] = (int64_t)(i + 2U);
+    }
+    if (!create_node_record(
+            vm,
+            "Block",
+            "argv0",
+            NULL,
+            0U,
+            child_handles,
+            vm->process_argv_count,
+            &vm->process_argv_node_handle)) {
+        return 0;
+    }
+    if (vm->process_argv_node_handle != 1) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv root handle invariant violated.");
+        return 0;
+    }
+
+    for (i = 0U; i < vm->process_argv_count; i += 1U) {
+        char node_id[40];
+        size_t suffix_len;
+        const char* arg = vm->process_argv[i];
+
+        memcpy(node_id, "argv_item_", 10U);
+        suffix_len = write_u64_decimal(node_id + 10U, sizeof(node_id) - 10U, (uint64_t)i);
+        if (suffix_len == 0U) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv node id overflow.");
+            return 0;
+        }
+
+        value_attr.key = "value";
+        value_attr.kind = AIVM_NODE_ATTR_STRING;
+        value_attr.string_value = (arg != NULL) ? arg : "";
+        if (!create_node_record(vm, "Lit", node_id, &value_attr, 1U, NULL, 0U, &child_handles[i])) {
+            return 0;
+        }
+        if (child_handles[i] != (int64_t)(i + 2U)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv child handle invariant violated.");
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 void aivm_reset_state(AivmVm* vm)
 {
     if (vm == NULL) {
@@ -671,6 +722,8 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_count = 0U;
     vm->node_attr_count = 0U;
     vm->node_child_count = 0U;
+    vm->process_argv_node_handle = 0;
+    (void)initialize_process_argv_node(vm);
 }
 
 void aivm_init(AivmVm* vm, const AivmProgram* program)
@@ -682,6 +735,8 @@ void aivm_init(AivmVm* vm, const AivmProgram* program)
     vm->program = program;
     vm->syscall_bindings = NULL;
     vm->syscall_binding_count = 0U;
+    vm->process_argv = NULL;
+    vm->process_argv_count = 0U;
     aivm_reset_state(vm);
 }
 
@@ -691,6 +746,17 @@ void aivm_init_with_syscalls(
     const AivmSyscallBinding* bindings,
     size_t binding_count)
 {
+    aivm_init_with_syscalls_and_argv(vm, program, bindings, binding_count, NULL, 0U);
+}
+
+void aivm_init_with_syscalls_and_argv(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count)
+{
     if (vm == NULL) {
         return;
     }
@@ -698,6 +764,8 @@ void aivm_init_with_syscalls(
     vm->program = program;
     vm->syscall_bindings = bindings;
     vm->syscall_binding_count = binding_count;
+    vm->process_argv = process_argv;
+    vm->process_argv_count = process_argv_count;
     aivm_reset_state(vm);
 }
 

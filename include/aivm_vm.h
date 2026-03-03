@@ -103,6 +103,9 @@ typedef struct {
     size_t string_arena_used;
     const AivmSyscallBinding* syscall_bindings;
     size_t syscall_binding_count;
+    const char* const* process_argv;
+    size_t process_argv_count;
+    int64_t process_argv_node_handle;
     AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
     size_t completed_task_count;
     int64_t next_task_handle;
@@ -125,6 +128,13 @@ void aivm_init_with_syscalls(
     const AivmProgram* program,
     const AivmSyscallBinding* bindings,
     size_t binding_count);
+void aivm_init_with_syscalls_and_argv(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count);
 void aivm_reset_state(AivmVm* vm);
 void aivm_halt(AivmVm* vm);
 int aivm_stack_push(AivmVm* vm, AivmValue value);

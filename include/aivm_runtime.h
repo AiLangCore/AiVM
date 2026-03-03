@@ -11,5 +11,12 @@ int aivm_execute_program_with_syscalls(
     const AivmSyscallBinding* bindings,
     size_t binding_count,
     AivmVm* vm_out);
+int aivm_execute_program_with_syscalls_and_argv(
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count,
+    AivmVm* vm_out);
 
 #endif

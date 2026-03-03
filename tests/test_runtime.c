@@ -20,6 +20,21 @@ static int host_ui_get_window_size(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_process_argv(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    (void)args;
+    if (arg_count != 0U) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_node(1);
+    return AIVM_SYSCALL_OK;
+}
+
 int main(void)
 {
     AivmVm vm;
@@ -66,6 +81,31 @@ int main(void)
         .format_flags = 0U,
         .section_count = 0U
     };
+    static const AivmInstruction instructions_argv[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_CHILD_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants_argv[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.process_argv" }
+    };
+    static const AivmSyscallBinding argv_bindings[] = {
+        { "sys.process_argv", host_process_argv }
+    };
+    static const AivmProgram program_argv = {
+        .instructions = instructions_argv,
+        .instruction_count = 4U,
+        .constants = constants_argv,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const char* process_argv_values[] = {
+        "one",
+        "two"
+    };
 
     if (expect(aivm_execute_program(&program_ok, &vm) == 1) != 0) {
         return 1;
@@ -89,6 +129,24 @@ int main(void)
         return 1;
     }
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_execute_program_with_syscalls_and_argv(
+            &program_argv,
+            argv_bindings,
+            1U,
+            process_argv_values,
+            2U,
+            &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack[0].type == AIVM_VAL_INT && vm.stack[0].int_value == 2) != 0) {
         return 1;
     }
 
