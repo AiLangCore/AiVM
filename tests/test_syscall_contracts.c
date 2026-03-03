@@ -183,6 +183,9 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(19U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.fs_fileExists", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
@@ -217,7 +220,7 @@ int main(void)
         return 1;
     }
     fs_write_args[0] = aivm_value_string("p");
-    fs_write_args[1] = aivm_value_string("v");
+    fs_write_args[1] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
     if (expect(aivm_syscall_contract_validate("sys.fs_writeFile", fs_write_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
@@ -268,13 +271,13 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(42U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
     net_string_int_args[0] = aivm_value_string("127.0.0.1");
     net_string_int_args[1] = aivm_value_int(8080);
     net_int_string_args[0] = aivm_value_int(1);
-    net_int_string_args[1] = aivm_value_string("data");
+    net_int_string_args[1] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
     net_int_int_args[0] = aivm_value_int(1);
     net_int_int_args[1] = aivm_value_int(1024);
     net_listen_tls_args[0] = aivm_value_int(443);
@@ -287,7 +290,7 @@ int main(void)
     net_udp_send_args[0] = aivm_value_int(1);
     net_udp_send_args[1] = aivm_value_string("127.0.0.1");
     net_udp_send_args[2] = aivm_value_int(8080);
-    net_udp_send_args[3] = aivm_value_string("msg");
+    net_udp_send_args[3] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
     if (expect(aivm_syscall_contract_validate("sys.net_listen", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
@@ -330,6 +333,9 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.net_tcpRead", net_int_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.net_tcpWrite", net_int_string_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
@@ -361,6 +367,9 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.net_asyncResultString", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.net_asyncError", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {

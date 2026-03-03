@@ -2,6 +2,8 @@
 
 #include "aivm_syscall.h"
 
+static const uint8_t k_test_bytes[] = { 'd', 'a', 't', 'a' };
+
 static int expect(int condition)
 {
     return condition ? 0 : 1;
@@ -182,7 +184,7 @@ static int handler_fs_read_file(
 {
     (void)target;
     if (args != NULL && arg_count == 1U && args[0].type == AIVM_VAL_STRING) {
-        *result = aivm_value_string("data");
+        *result = aivm_value_bytes(k_test_bytes, sizeof(k_test_bytes));
         return AIVM_SYSCALL_OK;
     }
     *result = aivm_value_void();
@@ -374,7 +376,7 @@ int main(void)
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
-    if (expect(result.type == AIVM_VAL_STRING) != 0) {
+    if (expect(result.type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
     status = aivm_syscall_dispatch_checked(crypto_bindings, 1U, "sys.crypto_base64Encode", &arg, 1U, &result);
