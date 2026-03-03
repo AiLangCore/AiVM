@@ -28,6 +28,26 @@ EM_JS(void, aivm_http_get_sync, (const char* url, char* out_ptr, int out_len), {
 
 static const char* g_wasm_syscall_error_message = NULL;
 
+static int wasm_host_supports_syscall(const char* target)
+{
+    if (target == NULL) {
+        return 0;
+    }
+    if (strcmp(target, "sys.stdout_writeLine") == 0 ||
+        strcmp(target, "io.print") == 0 ||
+        strcmp(target, "io.write") == 0 ||
+        strcmp(target, "sys.process_argv") == 0 ||
+        strcmp(target, "sys.capability_has") == 0) {
+        return 1;
+    }
+#ifdef AIVM_WASM_WEB
+    if (strcmp(target, "sys.http_get") == 0) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
 {
     FILE* f;
@@ -224,13 +244,31 @@ static int native_syscall_http_get(
 #endif
 }
 
+static int native_syscall_capability_has(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    *result = aivm_value_bool(wasm_host_supports_syscall(args[0].string_value) ? 1 : 0);
+    return AIVM_SYSCALL_OK;
+}
+
 int main(int argc, char** argv)
 {
     unsigned char* bytes = NULL;
     size_t byte_count = 0U;
     AivmProgram program;
     AivmProgramLoadResult load_result;
-    AivmSyscallBinding bindings[5];
+    AivmSyscallBinding bindings[6];
     static AivmVm vm;
     const char* const* app_argv = NULL;
     size_t app_argc = 0U;
@@ -268,11 +306,13 @@ int main(int argc, char** argv)
     bindings[3].handler = native_syscall_process_argv;
     bindings[4].target = "sys.http_get";
     bindings[4].handler = native_syscall_http_get;
+    bindings[5].target = "sys.capability_has";
+    bindings[5].handler = native_syscall_capability_has;
 
     if (!aivm_execute_program_with_syscalls_and_argv(
             &program,
             bindings,
-            5U,
+            6U,
             app_argv,
             app_argc,
             &vm) ||
