@@ -155,13 +155,32 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+static int native_syscall_http_get(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    (void)args;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    *result = aivm_value_string("ERR http_get unavailable in wasm runtime.");
+    return AIVM_SYSCALL_OK;
+}
+
 int main(int argc, char** argv)
 {
     unsigned char* bytes = NULL;
     size_t byte_count = 0U;
     AivmProgram program;
     AivmProgramLoadResult load_result;
-    AivmSyscallBinding bindings[4];
+    AivmSyscallBinding bindings[5];
     static AivmVm vm;
     const char* const* app_argv = NULL;
     size_t app_argc = 0U;
@@ -197,11 +216,13 @@ int main(int argc, char** argv)
     bindings[2].handler = native_syscall_stdout_write_line;
     bindings[3].target = "sys.process_argv";
     bindings[3].handler = native_syscall_process_argv;
+    bindings[4].target = "sys.http_get";
+    bindings[4].handler = native_syscall_http_get;
 
     if (!aivm_execute_program_with_syscalls_and_argv(
             &program,
             bindings,
-            4U,
+            5U,
             app_argv,
             app_argc,
             &vm) ||
