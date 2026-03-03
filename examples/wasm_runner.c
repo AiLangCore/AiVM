@@ -1,10 +1,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 #include "aivm_vm.h"
+
+#ifdef AIVM_WASM_WEB
+#include <emscripten/emscripten.h>
+EM_JS(void, aivm_http_get_sync, (const char* url, char* out_ptr, int out_len), {
+    var u = UTF8ToString(url);
+    try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", u, false);
+        xhr.send(null);
+        if (xhr.status >= 200 && xhr.status < 300) {
+            stringToUTF8(xhr.responseText || "", out_ptr, out_len);
+        } else {
+            stringToUTF8("ERR http_get failed.", out_ptr, out_len);
+        }
+    } catch (e) {
+        stringToUTF8("ERR http_get failed.", out_ptr, out_len);
+    }
+});
+#endif
+
+static const char* g_wasm_syscall_error_message = NULL;
 
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
 {
@@ -166,12 +188,40 @@ static int native_syscall_http_get(
     if (result == NULL) {
         return AIVM_SYSCALL_ERR_NULL_RESULT;
     }
-    if (arg_count != 1U) {
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
-    *result = aivm_value_string("ERR http_get unavailable in wasm runtime.");
-    return AIVM_SYSCALL_OK;
+#ifdef AIVM_WASM_WEB
+    {
+        static char response_buf[32768];
+        size_t i;
+        for (i = 0U; args[0].string_value[i] != '\0'; i += 1U) {
+            unsigned char c = (unsigned char)args[0].string_value[i];
+            if (isalnum(c) != 0) {
+                continue;
+            }
+            if (c == ':' || c == '/' || c == '?' || c == '&' || c == '=' || c == '%' ||
+                c == '.' || c == '_' || c == '-' || c == '+' || c == '~' || c == '#') {
+                continue;
+            }
+            *result = aivm_value_string("ERR http_get requires safe http/https URL.");
+            return AIVM_SYSCALL_OK;
+        }
+        if (!(strncmp(args[0].string_value, "http://", 7) == 0 || strncmp(args[0].string_value, "https://", 8) == 0)) {
+            *result = aivm_value_string("ERR http_get requires safe http/https URL.");
+            return AIVM_SYSCALL_OK;
+        }
+        response_buf[0] = '\0';
+        aivm_http_get_sync(args[0].string_value, response_buf, (int)sizeof(response_buf));
+        *result = aivm_value_string(response_buf);
+        return AIVM_SYSCALL_OK;
+    }
+#else
+    g_wasm_syscall_error_message = "sys.http_get is not available on this target.";
+    result->type = AIVM_VAL_VOID;
+    return AIVM_SYSCALL_ERR_NOT_FOUND;
+#endif
 }
 
 int main(int argc, char** argv)
@@ -227,6 +277,10 @@ int main(int argc, char** argv)
             app_argc,
             &vm) ||
         vm.status == AIVM_VM_STATUS_ERROR) {
+        if (g_wasm_syscall_error_message != NULL) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"%s\" nodeId=vm)\n", g_wasm_syscall_error_message);
+            return 3;
+        }
         fprintf(stderr, "Err#err1(code=RUN001 message=\"AiBC1 execution failed.\" nodeId=vm)\n");
         return 3;
     }
