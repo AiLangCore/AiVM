@@ -95,7 +95,10 @@ static const AivmSyscallContract Contracts[] = {
     { 60U, "sys.str_remove", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING },
     { 97U, "sys.bytes_length", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_INT },
     { 98U, "sys.bytes_fromBase64", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
-    { 99U, "sys.bytes_toBase64", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING }
+    { 99U, "sys.bytes_toBase64", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING },
+    { 100U, "sys.bytes_at", 2U, { AIVM_VAL_BYTES, AIVM_VAL_INT, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_INT },
+    { 101U, "sys.bytes_slice", 3U, { AIVM_VAL_BYTES, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
+    { 102U, "sys.bytes_concat", 2U, { AIVM_VAL_BYTES, AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_BYTES }
 };
 
 static AivmContractStatus validate_contract(

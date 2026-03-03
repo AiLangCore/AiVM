@@ -29,6 +29,9 @@ int main(void)
     AivmValue str_args[3];
     AivmValue utf8_count_args[1];
     AivmValue bytes_arg[1];
+    AivmValue bytes_int_args[2];
+    AivmValue bytes_range_args[3];
+    AivmValue two_bytes_args[2];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
 
     draw_rect_args[0] = aivm_value_int(0);
@@ -619,11 +622,48 @@ int main(void)
     if (expect(return_type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
+    bytes_int_args[0] = bytes_arg[0];
+    bytes_int_args[1] = aivm_value_int(1);
+    if (expect(aivm_syscall_contract_validate("sys.bytes_at", bytes_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(100U, bytes_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    bytes_range_args[0] = bytes_arg[0];
+    bytes_range_args[1] = aivm_value_int(0);
+    bytes_range_args[2] = aivm_value_int(2);
+    if (expect(aivm_syscall_contract_validate("sys.bytes_slice", bytes_range_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(101U, bytes_range_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    two_bytes_args[0] = bytes_arg[0];
+    two_bytes_args[1] = bytes_arg[0];
+    if (expect(aivm_syscall_contract_validate("sys.bytes_concat", two_bytes_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(102U, two_bytes_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
     str_args[1] = aivm_value_string("bad");
     if (expect(aivm_syscall_contract_validate("sys.str_remove", str_args, 3U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(99U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(100U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_COUNT) != 0) {
         return 1;
     }
 
