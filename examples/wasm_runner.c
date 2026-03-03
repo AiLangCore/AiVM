@@ -2,15 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "aivm_c_api.h"
 #include "aivm_program.h"
+#include "aivm_runtime.h"
+#include "aivm_vm.h"
 
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
 {
     FILE* f;
-    long length;
     unsigned char* bytes;
-    size_t read_count;
+    size_t capacity = 0U;
+    size_t used = 0U;
+    size_t nread;
+    unsigned char chunk[4096];
 
     if (path == NULL || out_bytes == NULL || out_size == NULL) {
         return 0;
@@ -20,35 +23,97 @@ static int read_binary_file(const char* path, unsigned char** out_bytes, size_t*
     if (f == NULL) {
         return 0;
     }
-    if (fseek(f, 0L, SEEK_END) != 0) {
-        fclose(f);
-        return 0;
+    bytes = NULL;
+    for (;;) {
+        nread = fread(chunk, 1U, sizeof(chunk), f);
+        if (nread > 0U) {
+            unsigned char* grown;
+            if (used + nread > capacity) {
+                size_t new_capacity = (capacity == 0U) ? 4096U : capacity;
+                while (new_capacity < used + nread) {
+                    if (new_capacity > ((size_t)-1) / 2U) {
+                        free(bytes);
+                        fclose(f);
+                        return 0;
+                    }
+                    new_capacity *= 2U;
+                }
+                grown = (unsigned char*)realloc(bytes, new_capacity);
+                if (grown == NULL) {
+                    free(bytes);
+                    fclose(f);
+                    return 0;
+                }
+                bytes = grown;
+                capacity = new_capacity;
+            }
+            memcpy(bytes + used, chunk, nread);
+            used += nread;
+        }
+        if (nread < sizeof(chunk)) {
+            if (ferror(f) != 0) {
+                free(bytes);
+                fclose(f);
+                return 0;
+            }
+            break;
+        }
     }
-    length = ftell(f);
-    if (length < 0) {
-        fclose(f);
-        return 0;
-    }
-    if (fseek(f, 0L, SEEK_SET) != 0) {
-        fclose(f);
-        return 0;
-    }
-
-    bytes = (unsigned char*)malloc((size_t)length);
-    if (bytes == NULL && length > 0L) {
-        fclose(f);
-        return 0;
-    }
-
-    read_count = fread(bytes, 1U, (size_t)length, f);
     fclose(f);
-    if (read_count != (size_t)length) {
-        free(bytes);
+
+    *out_bytes = bytes;
+    *out_size = used;
+    return 1;
+}
+
+static int read_binary_stdin(unsigned char** out_bytes, size_t* out_size)
+{
+    unsigned char* bytes;
+    size_t capacity = 0U;
+    size_t used = 0U;
+    size_t nread;
+    unsigned char chunk[4096];
+
+    if (out_bytes == NULL || out_size == NULL) {
         return 0;
+    }
+
+    bytes = NULL;
+    for (;;) {
+        nread = fread(chunk, 1U, sizeof(chunk), stdin);
+        if (nread > 0U) {
+            unsigned char* grown;
+            if (used + nread > capacity) {
+                size_t new_capacity = (capacity == 0U) ? 4096U : capacity;
+                while (new_capacity < used + nread) {
+                    if (new_capacity > ((size_t)-1) / 2U) {
+                        free(bytes);
+                        return 0;
+                    }
+                    new_capacity *= 2U;
+                }
+                grown = (unsigned char*)realloc(bytes, new_capacity);
+                if (grown == NULL) {
+                    free(bytes);
+                    return 0;
+                }
+                bytes = grown;
+                capacity = new_capacity;
+            }
+            memcpy(bytes + used, chunk, nread);
+            used += nread;
+        }
+        if (nread < sizeof(chunk)) {
+            if (ferror(stdin) != 0) {
+                free(bytes);
+                return 0;
+            }
+            break;
+        }
     }
 
     *out_bytes = bytes;
-    *out_size = (size_t)length;
+    *out_size = used;
     return 1;
 }
 
@@ -97,12 +162,12 @@ int main(int argc, char** argv)
     AivmProgram program;
     AivmProgramLoadResult load_result;
     AivmSyscallBinding bindings[4];
-    AivmCResult result;
+    static AivmVm vm;
     const char* const* app_argv = NULL;
     size_t app_argc = 0U;
 
     if (argc < 2 || argv == NULL) {
-        fprintf(stderr, "Usage: aivm-runtime-wasm32 <app.aibc1> [args...]\n");
+        fprintf(stderr, "Usage: aivm-runtime-wasm32 <app.aibc1|- for stdin> [args...]\n");
         return 2;
     }
 
@@ -111,7 +176,8 @@ int main(int argc, char** argv)
         app_argc = (size_t)(argc - 2);
     }
 
-    if (!read_binary_file(argv[1], &bytes, &byte_count)) {
+    if ((strcmp(argv[1], "-") == 0 && !read_binary_stdin(&bytes, &byte_count)) ||
+        (strcmp(argv[1], "-") != 0 && !read_binary_file(argv[1], &bytes, &byte_count))) {
         fprintf(stderr, "Err#err1(code=RUN001 message=\"Failed to read AiBC1 file.\" nodeId=program)\n");
         return 2;
     }
@@ -132,24 +198,23 @@ int main(int argc, char** argv)
     bindings[3].target = "sys.process_argv";
     bindings[3].handler = native_syscall_process_argv;
 
-    result = aivm_c_execute_program_with_syscalls_and_argv(
-        &program,
-        bindings,
-        4U,
-        app_argv,
-        app_argc);
-
-    if (!result.loaded || result.load_status != AIVM_PROGRAM_OK) {
-        fprintf(stderr, "Err#err1(code=RUN001 message=\"Failed to load native program.\" nodeId=program)\n");
-        return 2;
-    }
-    if (!result.ok || result.status == AIVM_VM_STATUS_ERROR) {
+    if (!aivm_execute_program_with_syscalls_and_argv(
+            &program,
+            bindings,
+            4U,
+            app_argv,
+            app_argc,
+            &vm) ||
+        vm.status == AIVM_VM_STATUS_ERROR) {
         fprintf(stderr, "Err#err1(code=RUN001 message=\"AiBC1 execution failed.\" nodeId=vm)\n");
         return 3;
     }
-    if (result.has_exit_code) {
-        printf("Ok#ok1(type=int value=%d)\n", result.exit_code);
-        return result.exit_code;
+    if (vm.status == AIVM_VM_STATUS_HALTED && vm.stack_count > 0U) {
+        const AivmValue* top = &vm.stack[vm.stack_count - 1U];
+        if (top->type == AIVM_VAL_INT) {
+            printf("Ok#ok1(type=int value=%d)\n", (int)top->int_value);
+            return (int)top->int_value;
+        }
     }
 
     return 0;
