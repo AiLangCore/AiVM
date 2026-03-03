@@ -75,6 +75,7 @@ enum {
     AIVM_VM_CALLFRAME_CAPACITY = 256,
     AIVM_VM_LOCALS_CAPACITY = 1024,
     AIVM_VM_STRING_ARENA_CAPACITY = 8192,
+    AIVM_VM_BYTES_ARENA_CAPACITY = 32768,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 256,
     AIVM_VM_NODE_ATTR_CAPACITY = 1024,
@@ -101,6 +102,8 @@ typedef struct {
     size_t locals_count;
     char string_arena[AIVM_VM_STRING_ARENA_CAPACITY];
     size_t string_arena_used;
+    uint8_t bytes_arena[AIVM_VM_BYTES_ARENA_CAPACITY];
+    size_t bytes_arena_used;
     const AivmSyscallBinding* syscall_bindings;
     size_t syscall_binding_count;
     const char* const* process_argv;

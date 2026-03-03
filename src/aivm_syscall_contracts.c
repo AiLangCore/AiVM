@@ -92,7 +92,10 @@ static const AivmSyscallContract Contracts[] = {
     { 89U, "sys.debug_traceAsync", 3U, { AIVM_VAL_INT, AIVM_VAL_STRING, AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_VOID },
     { 26U, "sys.str_utf8ByteCount", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_INT },
     { 59U, "sys.str_substring", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING },
-    { 60U, "sys.str_remove", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING }
+    { 60U, "sys.str_remove", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING },
+    { 97U, "sys.bytes_length", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_INT },
+    { 98U, "sys.bytes_fromBase64", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
+    { 99U, "sys.bytes_toBase64", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING }
 };
 
 static AivmContractStatus validate_contract(
