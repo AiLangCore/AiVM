@@ -460,11 +460,23 @@ static int find_completed_task(const AivmVm* vm, int64_t handle, AivmValue* out_
 
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node)
 {
+    static const AivmNodeRecord EmptyArgvNode = {
+        "Block",
+        "argv0",
+        0U,
+        0U,
+        0U,
+        0U
+    };
     size_t index;
     if (vm == NULL || out_node == NULL) {
         return 0;
     }
-    if (handle <= 0) {
+    if (handle == 0) {
+        *out_node = &EmptyArgvNode;
+        return 1;
+    }
+    if (handle < 0) {
         return 0;
     }
     index = (size_t)(handle - 1);
