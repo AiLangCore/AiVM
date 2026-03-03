@@ -28,6 +28,7 @@ EM_JS(void, aivm_http_get_sync, (const char* url, char* out_ptr, int out_len), {
 #endif
 
 static const char* g_wasm_syscall_error_message = NULL;
+static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
 
 static int wasm_host_supports_syscall(const char* target)
@@ -73,6 +74,7 @@ static int native_syscall_unavailable(
     } else {
         g_wasm_syscall_error_message = g_wasm_syscall_error_message_buf;
     }
+    g_wasm_syscall_error_code = "RUN101";
     result->type = AIVM_VAL_VOID;
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
@@ -268,6 +270,7 @@ static int native_syscall_http_get(
     }
 #else
     g_wasm_syscall_error_message = "sys.http_get is not available on this target.";
+    g_wasm_syscall_error_code = "RUN101";
     result->type = AIVM_VAL_VOID;
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 #endif
@@ -361,7 +364,11 @@ int main(int argc, char** argv)
             &vm) ||
         vm.status == AIVM_VM_STATUS_ERROR) {
         if (g_wasm_syscall_error_message != NULL) {
-            fprintf(stderr, "Err#err1(code=RUN001 message=\"%s\" nodeId=vm)\n", g_wasm_syscall_error_message);
+            fprintf(
+                stderr,
+                "Err#err1(code=%s message=\"%s\" nodeId=vm)\n",
+                (g_wasm_syscall_error_code != NULL) ? g_wasm_syscall_error_code : "RUN001",
+                g_wasm_syscall_error_message);
             return 3;
         }
         fprintf(stderr, "Err#err1(code=RUN001 message=\"AiBC1 execution failed.\" nodeId=vm)\n");
