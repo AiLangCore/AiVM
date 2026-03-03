@@ -5,6 +5,7 @@
 
 #include "aivm_program.h"
 #include "aivm_runtime.h"
+#include "aivm_syscall_contracts.h"
 #include "aivm_vm.h"
 
 #ifdef AIVM_WASM_WEB
@@ -27,6 +28,7 @@ EM_JS(void, aivm_http_get_sync, (const char* url, char* out_ptr, int out_len), {
 #endif
 
 static const char* g_wasm_syscall_error_message = NULL;
+static char g_wasm_syscall_error_message_buf[256];
 
 static int wasm_host_supports_syscall(const char* target)
 {
@@ -46,6 +48,33 @@ static int wasm_host_supports_syscall(const char* target)
     }
 #endif
     return 0;
+}
+
+static int native_syscall_unavailable(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)args;
+    (void)arg_count;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (target == NULL) {
+        target = "sys.unknown";
+    }
+    if (snprintf(
+            g_wasm_syscall_error_message_buf,
+            sizeof(g_wasm_syscall_error_message_buf),
+            "%s is not available on this target.",
+            target) <= 0) {
+        g_wasm_syscall_error_message = "syscall is not available on this target.";
+    } else {
+        g_wasm_syscall_error_message = g_wasm_syscall_error_message_buf;
+    }
+    result->type = AIVM_VAL_VOID;
+    return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
 
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
@@ -268,7 +297,9 @@ int main(int argc, char** argv)
     size_t byte_count = 0U;
     AivmProgram program;
     AivmProgramLoadResult load_result;
-    AivmSyscallBinding bindings[6];
+    AivmSyscallBinding bindings[128];
+    size_t binding_count = 0U;
+    uint32_t syscall_id;
     static AivmVm vm;
     const char* const* app_argv = NULL;
     size_t app_argc = 0U;
@@ -296,23 +327,35 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    bindings[0].target = "sys.stdout_writeLine";
-    bindings[0].handler = native_syscall_stdout_write_line;
-    bindings[1].target = "io.print";
-    bindings[1].handler = native_syscall_stdout_write_line;
-    bindings[2].target = "io.write";
-    bindings[2].handler = native_syscall_stdout_write_line;
-    bindings[3].target = "sys.process_argv";
-    bindings[3].handler = native_syscall_process_argv;
-    bindings[4].target = "sys.http_get";
-    bindings[4].handler = native_syscall_http_get;
-    bindings[5].target = "sys.capability_has";
-    bindings[5].handler = native_syscall_capability_has;
+    for (syscall_id = 0U; syscall_id <= 255U; syscall_id += 1U) {
+        const AivmSyscallContract* contract = aivm_syscall_contract_find_by_id(syscall_id);
+        if (contract == NULL) {
+            continue;
+        }
+        if (binding_count >= (sizeof(bindings) / sizeof(bindings[0]))) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm syscall binding overflow.\" nodeId=syscall)\n");
+            return 2;
+        }
+        bindings[binding_count].target = contract->target;
+        bindings[binding_count].handler = native_syscall_unavailable;
+        if (strcmp(contract->target, "sys.stdout_writeLine") == 0 ||
+            strcmp(contract->target, "io.print") == 0 ||
+            strcmp(contract->target, "io.write") == 0) {
+            bindings[binding_count].handler = native_syscall_stdout_write_line;
+        } else if (strcmp(contract->target, "sys.process_argv") == 0) {
+            bindings[binding_count].handler = native_syscall_process_argv;
+        } else if (strcmp(contract->target, "sys.http_get") == 0) {
+            bindings[binding_count].handler = native_syscall_http_get;
+        } else if (strcmp(contract->target, "sys.capability_has") == 0) {
+            bindings[binding_count].handler = native_syscall_capability_has;
+        }
+        binding_count += 1U;
+    }
 
     if (!aivm_execute_program_with_syscalls_and_argv(
             &program,
             bindings,
-            6U,
+            binding_count,
             app_argv,
             app_argc,
             &vm) ||
