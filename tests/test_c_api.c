@@ -39,18 +39,22 @@ int main(void)
         0, 0, 0, 0,
         0, 0, 0, 0
     };
-    static const uint8_t valid_aibc1_program[56] = {
+    static const uint8_t valid_aibc1_program[84] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
-        28, 0, 0, 0,  /* section size */
+        60, 0, 0, 0,  /* section size */
         2, 0, 0, 0,   /* instruction_count */
         3, 0, 0, 0,   /* PUSH_INT */
         5, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        255, 255, 255, 255, 255, 255, 255, 255,
         1, 0, 0, 0,   /* HALT */
-        0, 0, 0, 0, 0, 0, 0, 0
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        255, 255, 255, 255, 255, 255, 255, 255
     };
     static const AivmInstruction call_sys_instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -155,7 +159,7 @@ int main(void)
         return 1;
     }
 
-    result = aivm_c_execute_aibc1(valid_aibc1_program, 56U);
+    result = aivm_c_execute_aibc1(valid_aibc1_program, 84U);
     if (expect(result.loaded == 1) != 0) {
         return 1;
     }

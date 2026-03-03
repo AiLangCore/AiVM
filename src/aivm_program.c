@@ -52,6 +52,8 @@ void aivm_program_clear(AivmProgram* program)
     for (index = 0U; index < AIVM_PROGRAM_MAX_INSTRUCTIONS; index += 1U) {
         program->instruction_storage[index].opcode = AIVM_OP_NOP;
         program->instruction_storage[index].operand_int = 0;
+        program->instruction_storage[index].operand_secondary = 0;
+        program->instruction_storage[index].operand_string_constant_index = -1;
     }
     for (index = 0U; index < AIVM_PROGRAM_MAX_CONSTANTS; index += 1U) {
         program->constant_storage[index] = aivm_value_void();
@@ -114,7 +116,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
     out_program->format_flags = read_u32_le(bytes, 8U);
     out_program->section_count = read_u32_le(bytes, 12U);
 
-    if (out_program->format_version != 1U) {
+    if (out_program->format_version != 2U) {
         result.status = AIVM_PROGRAM_ERR_UNSUPPORTED;
         result.error_offset = 4U;
         return result;
@@ -178,7 +180,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                 return result;
             }
 
-            if ((size_t)section_size != (size_t)(4U + (instruction_count * 12U))) {
+            if ((size_t)section_size != (size_t)(4U + (instruction_count * 28U))) {
                 result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                 result.error_offset = section_payload_start;
                 return result;
@@ -188,6 +190,8 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             for (instruction_index = 0U; instruction_index < instruction_count; instruction_index += 1U) {
                 uint32_t raw_opcode = read_u32_le(bytes, instruction_cursor);
                 int64_t operand_int = read_i64_le(bytes, instruction_cursor + 4U);
+                int64_t operand_secondary = read_i64_le(bytes, instruction_cursor + 12U);
+                int64_t operand_string_constant_index = read_i64_le(bytes, instruction_cursor + 20U);
                 if (raw_opcode > (uint32_t)AIVM_OP_MAKE_NODE) {
                     result.status = AIVM_PROGRAM_ERR_INVALID_OPCODE;
                     result.error_offset = instruction_cursor;
@@ -196,7 +200,9 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
 
                 out_program->instruction_storage[instruction_index].opcode = (AivmOpcode)raw_opcode;
                 out_program->instruction_storage[instruction_index].operand_int = operand_int;
-                instruction_cursor += 12U;
+                out_program->instruction_storage[instruction_index].operand_secondary = operand_secondary;
+                out_program->instruction_storage[instruction_index].operand_string_constant_index = operand_string_constant_index;
+                instruction_cursor += 28U;
             }
 
             out_program->instructions = out_program->instruction_storage;
