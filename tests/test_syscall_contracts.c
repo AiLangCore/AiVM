@@ -641,16 +641,7 @@ int main(void)
         return 1;
     }
 
-    utf8_count_args[0] = aivm_value_string("https://wttr.in/?format=3");
-    if (expect(aivm_syscall_contract_validate("sys.http_get", utf8_count_args, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(90U, utf8_count_args, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
+    utf8_count_args[0] = aivm_value_string("sys.process_start");
     if (expect(aivm_syscall_contract_validate("sys.capability_has", utf8_count_args, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }

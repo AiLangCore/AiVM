@@ -8,25 +8,6 @@
 #include "aivm_syscall_contracts.h"
 #include "aivm_vm.h"
 
-#ifdef AIVM_WASM_WEB
-#include <emscripten/emscripten.h>
-EM_JS(void, aivm_http_get_sync, (const char* url, char* out_ptr, int out_len), {
-    var u = UTF8ToString(url);
-    try {
-        var xhr = new XMLHttpRequest();
-        xhr.open("GET", u, false);
-        xhr.send(null);
-        if (xhr.status >= 200 && xhr.status < 300) {
-            stringToUTF8(xhr.responseText || "", out_ptr, out_len);
-        } else {
-            stringToUTF8("ERR http_get failed.", out_ptr, out_len);
-        }
-    } catch (e) {
-        stringToUTF8("ERR http_get failed.", out_ptr, out_len);
-    }
-});
-#endif
-
 static const char* g_wasm_syscall_error_message = NULL;
 static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
@@ -43,11 +24,6 @@ static int wasm_host_supports_syscall(const char* target)
         strcmp(target, "sys.capability_has") == 0) {
         return 1;
     }
-#ifdef AIVM_WASM_WEB
-    if (strcmp(target, "sys.http_get") == 0) {
-        return 1;
-    }
-#endif
     return 0;
 }
 
@@ -228,54 +204,6 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
-static int native_syscall_http_get(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    (void)target;
-    (void)args;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
-        result->type = AIVM_VAL_VOID;
-        return AIVM_SYSCALL_ERR_CONTRACT;
-    }
-#ifdef AIVM_WASM_WEB
-    {
-        static char response_buf[32768];
-        size_t i;
-        for (i = 0U; args[0].string_value[i] != '\0'; i += 1U) {
-            unsigned char c = (unsigned char)args[0].string_value[i];
-            if (isalnum(c) != 0) {
-                continue;
-            }
-            if (c == ':' || c == '/' || c == '?' || c == '&' || c == '=' || c == '%' ||
-                c == '.' || c == '_' || c == '-' || c == '+' || c == '~' || c == '#') {
-                continue;
-            }
-            *result = aivm_value_string("ERR http_get requires safe http/https URL.");
-            return AIVM_SYSCALL_OK;
-        }
-        if (!(strncmp(args[0].string_value, "http://", 7) == 0 || strncmp(args[0].string_value, "https://", 8) == 0)) {
-            *result = aivm_value_string("ERR http_get requires safe http/https URL.");
-            return AIVM_SYSCALL_OK;
-        }
-        response_buf[0] = '\0';
-        aivm_http_get_sync(args[0].string_value, response_buf, (int)sizeof(response_buf));
-        *result = aivm_value_string(response_buf);
-        return AIVM_SYSCALL_OK;
-    }
-#else
-    g_wasm_syscall_error_message = "sys.http_get is not available on this target.";
-    g_wasm_syscall_error_code = "RUN101";
-    result->type = AIVM_VAL_VOID;
-    return AIVM_SYSCALL_ERR_NOT_FOUND;
-#endif
-}
-
 static int native_syscall_capability_has(
     const char* target,
     const AivmValue* args,
@@ -347,8 +275,6 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_stdout_write_line;
         } else if (strcmp(contract->target, "sys.process_argv") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
-        } else if (strcmp(contract->target, "sys.http_get") == 0) {
-            bindings[binding_count].handler = native_syscall_http_get;
         } else if (strcmp(contract->target, "sys.capability_has") == 0) {
             bindings[binding_count].handler = native_syscall_capability_has;
         }
