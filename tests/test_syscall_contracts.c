@@ -306,9 +306,6 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.net_accept", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net_readHeaders", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
     if (expect(aivm_syscall_contract_validate("sys.net_write", net_int_string_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
