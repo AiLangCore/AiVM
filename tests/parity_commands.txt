@@ -16,6 +16,7 @@ parity_repl_ui_createwindow_arity_error|./tools/airun repl < src/AiVM.Core/nativ
 parity_repl_net_tcpconnect_type_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_net_tcpconnect_type_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_net_tcpconnect_type_error.out
 parity_repl_crypto_hmac_arity_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_crypto_hmac_arity_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_crypto_hmac_arity_error.out
 parity_repl_worker_cancel_type_error|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_worker_cancel_type_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_worker_cancel_type_error.out
+parity_repl_process_syscalls|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.in|cat src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.out
 parity_vm_c_unlinked_gate|./tools/airun run examples/hello.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_run_hello_current.out; exit 3|3
 parity_vm_c_unlinked_gate_bundle|./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|printf ''
 parity_vm_c_execute_bundle_main_params|AIVM_C_BRIDGE_EXECUTE=1 AIVM_C_BRIDGE_LIB=does-not-matter ./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_bundle_main_params.out; exit 0|0

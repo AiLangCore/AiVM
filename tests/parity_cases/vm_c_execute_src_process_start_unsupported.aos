@@ -1,0 +1,16 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.process_start")
+  Const#k1(kind=string value="echo")
+  Const#k2(kind=string value="hello")
+  Const#k3(kind=string value="")
+  Const#k4(kind=string value="")
+  Func#f_main(name=main params="argv" locals="") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CONST a=1)
+    Inst#i2(op=CONST a=2)
+    Inst#i3(op=CONST a=3)
+    Inst#i4(op=CONST a=4)
+    Inst#i5(op=CALL_SYS a=4)
+    Inst#i6(op=HALT)
+  }
+}

@@ -28,6 +28,7 @@ int main(void)
     AivmValue int_string_string_args[3];
     AivmValue str_args[3];
     AivmValue utf8_count_args[1];
+    AivmValue process_start_args[4];
 
     draw_rect_args[0] = aivm_value_int(0);
     draw_rect_args[1] = aivm_value_int(0);
@@ -81,13 +82,13 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("io.print", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(92U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(97U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("io.write", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(93U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(98U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(return_type == AIVM_VAL_VOID) != 0) {
@@ -153,7 +154,66 @@ int main(void)
     if (expect(return_type == AIVM_VAL_NODE) != 0) {
         return 1;
     }
+    process_start_args[0] = aivm_value_string("echo");
+    process_start_args[1] = aivm_value_string("hello");
+    process_start_args[2] = aivm_value_string("");
+    process_start_args[3] = aivm_value_string("");
     int_arg[0] = aivm_value_int(1);
+    if (expect(aivm_syscall_contract_validate("sys.process_start", process_start_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(99U, process_start_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_poll", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(100U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_wait", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(101U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_exitCode", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(104U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_stdout", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(102U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_stderr", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(103U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process_kill", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(105U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+
     if (expect(aivm_syscall_contract_validate("sys.time_nowUnixMs", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
