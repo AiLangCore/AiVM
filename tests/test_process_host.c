@@ -24,7 +24,7 @@ int main(void)
 
     #ifdef _WIN32
     start_args[0] = aivm_value_string("ping");
-    start_args[1] = aivm_value_string("-n 2 127.0.0.1 >NUL");
+    start_args[1] = aivm_value_string("-n 2 127.0.0.1");
     #else
     start_args[0] = aivm_value_string("sleep");
     start_args[1] = aivm_value_string("1");
@@ -77,7 +77,7 @@ int main(void)
 
     #ifdef _WIN32
     start_args[0] = aivm_value_string("ping");
-    start_args[1] = aivm_value_string("-n 10 127.0.0.1 >NUL");
+    start_args[1] = aivm_value_string("-n 10 127.0.0.1");
     #else
     start_args[0] = aivm_value_string("sleep");
     start_args[1] = aivm_value_string("10");
