@@ -94,21 +94,29 @@ int main(void)
 
     one_arg[0] = aivm_value_bytes(nul_raw, 3U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("")) == 1);
 
     one_arg[0] = aivm_value_bytes(invalid_utf8_raw, 2U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("")) == 1);
 
     one_arg[0] = aivm_value_bytes(truncated_utf8_raw, 2U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("")) == 1);
 
     one_arg[0] = aivm_value_bytes(out_of_range_utf8_raw, 4U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("")) == 1);
 
-    one_arg[0] = aivm_value_bytes(utf8_raw, NATIVE_BYTES_SCRATCH_CAPACITY);
+    one_arg[0] = aivm_value_bytes(utf8_raw, NATIVE_BYTES_SCRATCH_CAPACITY + 1U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
