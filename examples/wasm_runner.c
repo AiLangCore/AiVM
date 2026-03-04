@@ -555,10 +555,12 @@ int main(int argc, char** argv)
         bindings[binding_count].target = contract->target;
         bindings[binding_count].handler = native_syscall_unavailable;
         if (strcmp(contract->target, "sys.stdout.writeLine") == 0 ||
+            strcmp(contract->target, "sys.stdout_writeLine") == 0 ||
             strcmp(contract->target, "io.print") == 0 ||
             strcmp(contract->target, "io.write") == 0) {
             bindings[binding_count].handler = native_syscall_stdout_write_line;
-        } else if (strcmp(contract->target, "sys.process.args") == 0) {
+        } else if (strcmp(contract->target, "sys.process.args") == 0 ||
+                   strcmp(contract->target, "sys.process_argv") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
         } else if (strcmp(contract->target, "sys.remote.call") == 0) {
             bindings[binding_count].handler = native_syscall_remote_call;
