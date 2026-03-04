@@ -2532,6 +2532,93 @@ static int test_make_err_requires_string_operands(void)
     return 0;
 }
 
+static int test_make_field_string_and_map_roundtrip(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },  /* lit id */
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },  /* lit value */
+        { .opcode = AIVM_OP_MAKE_LIT_STRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },  /* field key */
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_FIELD_STRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_MAP, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_CHILD_AT, .operand_int = 0 },   /* Field node */
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_ATTR_VALUE_STRING, .operand_int = 0 }, /* key */
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "id1" },
+        { .type = AIVM_VAL_STRING, .string_value = "v1" },
+        { .type = AIVM_VAL_STRING, .string_value = "name" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 16U,
+        .constants = constants,
+        .constant_count = 3U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(out, aivm_value_string("name")) == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_make_map_requires_int_count(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_MAP, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "not-int" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 2U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_TYPE_MISMATCH) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "MAKE_MAP requires int child count.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_push_store_load_pop() != 0) {
@@ -2718,6 +2805,12 @@ int main(void)
         return 1;
     }
     if (test_make_err_requires_string_operands() != 0) {
+        return 1;
+    }
+    if (test_make_field_string_and_map_roundtrip() != 0) {
+        return 1;
+    }
+    if (test_make_map_requires_int_count() != 0) {
         return 1;
     }
 
