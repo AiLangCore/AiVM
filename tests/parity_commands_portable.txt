@@ -4,6 +4,7 @@ parity_crlf_vs_lf|printf $'line1\r\nline2\r\n'|printf $'line1\nline2\n'
 parity_trailing_newline|printf $'alpha\nbeta\n'|printf $'alpha\nbeta'
 parity_nonzero_exit|printf 'fail-path\n'; exit 7|printf 'fail-path\n'; exit 7|7
 parity_asymmetric_status|printf 'same-status-text\n'; exit 1|printf 'same-status-text\n'; exit 2||1|2
+parity_repl_process_syscalls|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.in|cat src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.out
 parity_vm_c_unlinked_gate_bundle|./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|printf ''
 parity_vm_c_execute_bundle_main_params|AIVM_C_BRIDGE_EXECUTE=1 AIVM_C_BRIDGE_LIB=does-not-matter ./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_bundle_main_params.out; exit 0|0
 parity_vm_c_execute_program_source_gate|AIVM_C_BRIDGE_EXECUTE=1 AIVM_C_BRIDGE_LIB=does-not-matter ./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_program_source_gate.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_program_source_gate.out; exit 1|1
