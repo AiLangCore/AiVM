@@ -5,27 +5,12 @@
 
 #include "aivm_program.h"
 #include "aivm_runtime.h"
-#include "aivm_syscall_contracts.h"
+#include "sys/aivm_syscall_contracts.h"
 #include "aivm_vm.h"
 
 static const char* g_wasm_syscall_error_message = NULL;
 static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
-
-static int wasm_host_supports_syscall(const char* target)
-{
-    if (target == NULL) {
-        return 0;
-    }
-    if (strcmp(target, "sys.stdout_writeLine") == 0 ||
-        strcmp(target, "io.print") == 0 ||
-        strcmp(target, "io.write") == 0 ||
-        strcmp(target, "sys.process_argv") == 0 ||
-        strcmp(target, "sys.capability_has") == 0) {
-        return 1;
-    }
-    return 0;
-}
 
 static int native_syscall_unavailable(
     const char* target,
@@ -204,24 +189,6 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
-static int native_syscall_capability_has(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    (void)target;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
-        result->type = AIVM_VAL_VOID;
-        return AIVM_SYSCALL_ERR_CONTRACT;
-    }
-    *result = aivm_value_bool(wasm_host_supports_syscall(args[0].string_value) ? 1 : 0);
-    return AIVM_SYSCALL_OK;
-}
-
 int main(int argc, char** argv)
 {
     unsigned char* bytes = NULL;
@@ -269,14 +236,12 @@ int main(int argc, char** argv)
         }
         bindings[binding_count].target = contract->target;
         bindings[binding_count].handler = native_syscall_unavailable;
-        if (strcmp(contract->target, "sys.stdout_writeLine") == 0 ||
+        if (strcmp(contract->target, "sys.stdout.writeLine") == 0 ||
             strcmp(contract->target, "io.print") == 0 ||
             strcmp(contract->target, "io.write") == 0) {
             bindings[binding_count].handler = native_syscall_stdout_write_line;
-        } else if (strcmp(contract->target, "sys.process_argv") == 0) {
+        } else if (strcmp(contract->target, "sys.process.args") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
-        } else if (strcmp(contract->target, "sys.capability_has") == 0) {
-            bindings[binding_count].handler = native_syscall_capability_has;
         }
         binding_count += 1U;
     }

@@ -1,5 +1,5 @@
 Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
-  Const#k0(kind=string value="sys.process_start")
+  Const#k0(kind=string value="sys.process.spawn")
   Const#k1(kind=string value="echo")
   Const#k2(kind=string value="hello")
   Const#k3(kind=string value="")

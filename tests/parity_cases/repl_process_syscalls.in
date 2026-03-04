@@ -1,20 +1,20 @@
 Cmd#ps0(name=setPerms allow=sys)
 Cmd#ps1(name=load) { Program#ps2 { } }
 Cmd#ps3(name=eval) {
-  Call#ps4(target=sys.process_wait) {
-    Call#ps5(target=sys.process_start) { Lit#ps6(value="exit") Lit#ps7(value="0") Lit#ps8(value="") Lit#ps9(value="") }
+  Call#ps4(target=sys.process.wait) {
+    Call#ps5(target=sys.process.spawn) { Lit#ps6(value="exit") Call#ps7(target=sys.process.args) { } Lit#ps8(value="") Call#ps9(target=sys.process.args) { } }
   }
 }
 Cmd#ps10(name=eval) {
-  Call#ps11(target=sys.process_wait) {
-    Call#ps12(target=sys.process_start) { Lit#ps13(value="exit") Lit#ps14(value="7") Lit#ps15(value="") Lit#ps16(value="") }
+  Call#ps11(target=sys.process.wait) {
+    Call#ps12(target=sys.process.spawn) { Lit#ps13(value="exit") Call#ps14(target=sys.process.args) { } Lit#ps15(value="") Call#ps16(target=sys.process.args) { } }
   }
 }
-Cmd#ps17(name=eval) { Call#ps18(target=sys.process_poll) { Lit#ps19(value=999) } }
-Cmd#ps20(name=eval) { Call#ps21(target=sys.process_exitCode) { Lit#ps22(value=999) } }
-Cmd#ps23(name=eval) { Call#ps24(target=sys.process_stdout) { Lit#ps25(value=999) } }
-Cmd#ps26(name=eval) { Call#ps27(target=sys.process_stderr) { Lit#ps28(value=999) } }
-Cmd#ps29(name=eval) { Call#ps30(target=sys.process_kill) { Lit#ps31(value=999) } }
+Cmd#ps17(name=eval) { Call#ps18(target=sys.process.poll) { Lit#ps19(value=999) } }
+Cmd#ps20(name=eval) { Call#ps21(target=sys.process.wait) { Lit#ps22(value=999) } }
+Cmd#ps23(name=eval) { Call#ps24(target=sys.process.stdout.read) { Lit#ps25(value=999) } }
+Cmd#ps26(name=eval) { Call#ps27(target=sys.process.stderr.read) { Lit#ps28(value=999) } }
+Cmd#ps29(name=eval) { Call#ps30(target=sys.process.kill) { Lit#ps31(value=999) } }
 Cmd#ps32(name=eval) {
-  Call#ps33(target=sys.process_start) { Lit#ps34(value="exit") Lit#ps35(value="0") Lit#ps36(value="") Lit#ps37(value="KEY=VALUE") }
+  Call#ps33(target=sys.process.spawn) { Lit#ps34(value="exit") Call#ps35(target=sys.process.args) { } Lit#ps36(value="") Call#ps37(target=sys.process.args) { } }
 }
