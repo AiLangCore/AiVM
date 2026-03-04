@@ -16,6 +16,7 @@ int main(void)
     const uint8_t right_raw[2] = { 4U, 5U };
     const uint8_t utf8_raw[5] = { 'h', 'e', 'l', 'l', 'o' };
     const uint8_t nul_raw[3] = { 'a', 0U, 'b' };
+    const uint8_t invalid_utf8_raw[2] = { 0xC0U, 0xAFU };
     AivmValue one_arg[1];
     AivmValue two_args[2];
     AivmValue three_args[3];
@@ -83,6 +84,10 @@ int main(void)
     CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("hello")) == 1);
 
     one_arg[0] = aivm_value_bytes(nul_raw, 3U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    one_arg[0] = aivm_value_bytes(invalid_utf8_raw, 2U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
