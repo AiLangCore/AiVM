@@ -373,22 +373,22 @@ int main(void)
     net_udp_send_args[1] = aivm_value_string("127.0.0.1");
     net_udp_send_args[2] = aivm_value_int(8080);
     net_udp_send_args[3] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
-    if (expect(aivm_syscall_contract_validate("sys.net.listen", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net.listen", int_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(0U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(0U, int_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_ID) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net.listen.tls", net_listen_tls_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net.listen.tls", net_listen_tls_args, 3U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(1U, net_listen_tls_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(1U, net_listen_tls_args, 3U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_ID) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net.accept", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net.accept", int_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net.write", net_int_string_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net.write", net_int_string_args, 2U, &return_type) == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.net.tcp.close", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
