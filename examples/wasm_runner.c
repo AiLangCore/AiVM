@@ -195,6 +195,139 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+#ifdef AIVM_WASM_WEB
+EM_JS(int, aivm_web_stdin_fill, (char* out_ptr, int out_len), {
+    if (typeof globalThis.__aivmStdinRead !== 'function') {
+        return -2;
+    }
+    const value = globalThis.__aivmStdinRead();
+    if (value === null) {
+        if (out_len > 0) {
+            HEAP8[out_ptr] = 0;
+        }
+        return -1;
+    }
+    const text = String(value ?? "");
+    const maxChars = out_len > 0 ? out_len - 1 : 0;
+    if (maxChars <= 0) {
+        return 0;
+    }
+    const clipped = text.length > maxChars ? text.slice(0, maxChars) : text;
+    stringToUTF8(clipped, out_ptr, out_len);
+    return lengthBytesUTF8(clipped);
+});
+#endif
+
+static int native_syscall_console_read_line(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static char line[4096];
+    (void)target;
+    (void)args;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 0U) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    {
+        int n = aivm_web_stdin_fill(line, (int)sizeof(line));
+        if (n == -2) {
+            g_wasm_syscall_error_message = "stdin bridge is not available on this target.";
+            g_wasm_syscall_error_code = "RUN101";
+            result->type = AIVM_VAL_VOID;
+            return AIVM_SYSCALL_ERR_NOT_FOUND;
+        }
+        if (n < 0) {
+            line[0] = '\0';
+        }
+    }
+#else
+    if (fgets(line, sizeof(line), stdin) == NULL) {
+        line[0] = '\0';
+    } else {
+        size_t n = strlen(line);
+        while (n > 0U && (line[n - 1U] == '\n' || line[n - 1U] == '\r')) {
+            line[--n] = '\0';
+        }
+    }
+#endif
+    *result = aivm_value_string(line);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_console_read_all_stdin(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static char text[16384];
+    size_t used = 0U;
+    (void)target;
+    (void)args;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 0U) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    {
+        char line[4096];
+        int first = 1;
+        for (;;) {
+            int n = aivm_web_stdin_fill(line, (int)sizeof(line));
+            size_t line_len;
+            if (n == -2) {
+                g_wasm_syscall_error_message = "stdin bridge is not available on this target.";
+                g_wasm_syscall_error_code = "RUN101";
+                result->type = AIVM_VAL_VOID;
+                return AIVM_SYSCALL_ERR_NOT_FOUND;
+            }
+            if (n < 0 || n == 0) {
+                break;
+            }
+            line_len = strlen(line);
+            if (!first) {
+                if (used + 1U >= sizeof(text)) {
+                    break;
+                }
+                text[used++] = '\n';
+            }
+            if (used + line_len >= sizeof(text)) {
+                line_len = sizeof(text) - used - 1U;
+            }
+            if (line_len == 0U) {
+                break;
+            }
+            memcpy(text + used, line, line_len);
+            used += line_len;
+            first = 0;
+        }
+    }
+#else
+    {
+        int ch;
+        while ((ch = fgetc(stdin)) != EOF) {
+            if (used + 1U >= sizeof(text)) {
+                break;
+            }
+            text[used++] = (char)ch;
+        }
+    }
+#endif
+    text[used] = '\0';
+    *result = aivm_value_string(text);
+    return AIVM_SYSCALL_OK;
+}
+
 #ifndef AIVM_WASM_WEB
 static AivmRemoteServerConfig g_remote_server_config;
 static AivmRemoteServerSession g_remote_server_session;
@@ -562,6 +695,10 @@ int main(int argc, char** argv)
         } else if (strcmp(contract->target, "sys.process.args") == 0 ||
                    strcmp(contract->target, "sys.process_argv") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
+        } else if (strcmp(contract->target, "sys.console.readLine") == 0) {
+            bindings[binding_count].handler = native_syscall_console_read_line;
+        } else if (strcmp(contract->target, "sys.console.readAllStdin") == 0) {
+            bindings[binding_count].handler = native_syscall_console_read_all_stdin;
         } else if (strcmp(contract->target, "sys.remote.call") == 0) {
             bindings[binding_count].handler = native_syscall_remote_call;
         }
