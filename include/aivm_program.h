@@ -59,8 +59,6 @@ typedef enum {
 typedef struct {
     AivmOpcode opcode;
     int64_t operand_int;
-    int64_t operand_secondary;
-    int64_t operand_string_constant_index;
 } AivmInstruction;
 
 typedef struct {

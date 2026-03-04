@@ -13,46 +13,42 @@ int main(void)
     AivmProgramLoadResult result;
     static const uint8_t bad_magic[16] = { 'X', 'I', 'B', 'C', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     static const uint8_t truncated[3] = { 'A', 'I', 'B' };
-    static const uint8_t unsupported_version[16] = { 'A', 'I', 'B', 'C', 3, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0 };
-    static const uint8_t valid_header[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0 };
-    static const uint8_t section_table_truncated[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0 };
+    static const uint8_t unsupported_version[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t valid_header[16] = { 'A', 'I', 'B', 'C', 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t section_table_truncated[16] = { 'A', 'I', 'B', 'C', 1, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0 };
     static const uint8_t section_oob[24] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         9, 0, 0, 0,
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         3, 0, 0, 0, /* section type */
         4, 0, 0, 0  /* section size larger than remaining payload */
     };
     static const uint8_t one_section_valid[28] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         9, 0, 0, 0,
         1, 0, 0, 0,  /* section count */
         7, 0, 0, 0,  /* section type */
         4, 0, 0, 0,  /* section size */
         1, 2, 3, 4   /* payload */
     };
-    static const uint8_t instruction_section_valid[84] = {
+    static const uint8_t instruction_section_valid[56] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
-        60, 0, 0, 0,  /* section size */
+        28, 0, 0, 0,  /* section size */
         2, 0, 0, 0,   /* instruction_count */
         3, 0, 0, 0,   /* PUSH_INT */
         42, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        255, 255, 255, 255, 255, 255, 255, 255,
         1, 0, 0, 0,   /* HALT */
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        255, 255, 255, 255, 255, 255, 255, 255
+        0, 0, 0, 0, 0, 0, 0, 0
     };
     static const uint8_t instruction_section_bad_size[44] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
@@ -61,22 +57,20 @@ int main(void)
         3, 0, 0, 0,   /* PUSH_INT */
         1, 0, 0, 0
     };
-    static const uint8_t instruction_section_invalid_opcode[56] = {
+    static const uint8_t instruction_section_invalid_opcode[44] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
-        32, 0, 0, 0,  /* section size */
+        16, 0, 0, 0,  /* section size */
         1, 0, 0, 0,   /* instruction_count */
         99, 0, 0, 0,  /* invalid opcode */
-        0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-        255, 255, 255, 255, 255, 255, 255, 255
+        0, 0, 0, 0
     };
     static const uint8_t constants_section_valid[53] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,   /* section type: constants */
@@ -92,7 +86,7 @@ int main(void)
     };
     static const uint8_t constants_section_invalid_kind[29] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,
@@ -114,7 +108,7 @@ int main(void)
     };
     static const uint8_t section_limit_exceeded[16] = {
         'A', 'I', 'B', 'C',
-        2, 0, 0, 0,
+        1, 0, 0, 0,
         9, 0, 0, 0,
         33, 0, 0, 0  /* section count over max (32) */
     };
@@ -155,7 +149,7 @@ int main(void)
     if (expect(result.error_offset == 4U) != 0) {
         return 1;
     }
-    if (expect(program.format_version == 3U) != 0) {
+    if (expect(program.format_version == 2U) != 0) {
         return 1;
     }
     if (expect(program.format_flags == 7U) != 0) {
@@ -216,7 +210,7 @@ int main(void)
     if (expect(result.error_offset == 0U) != 0) {
         return 1;
     }
-    if (expect(program.format_version == 2U) != 0) {
+    if (expect(program.format_version == 1U) != 0) {
         return 1;
     }
     if (expect(program.format_flags == 9U) != 0) {
@@ -238,7 +232,7 @@ int main(void)
         return 1;
     }
 
-    result = aivm_program_load_aibc1(instruction_section_valid, 84U, &program);
+    result = aivm_program_load_aibc1(instruction_section_valid, 56U, &program);
     if (expect(result.status == AIVM_PROGRAM_OK) != 0) {
         return 1;
     }
@@ -263,7 +257,7 @@ int main(void)
         return 1;
     }
 
-    result = aivm_program_load_aibc1(instruction_section_invalid_opcode, 56U, &program);
+    result = aivm_program_load_aibc1(instruction_section_invalid_opcode, 44U, &program);
     if (expect(result.status == AIVM_PROGRAM_ERR_INVALID_OPCODE) != 0) {
         return 1;
     }
