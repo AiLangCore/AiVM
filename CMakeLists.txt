@@ -15,6 +15,7 @@ set(AIVM_CORE_SOURCES
     src/aivm_parity.c
     src/aivm_runtime.c
     src/aivm_c_api.c
+    src/remote/aivm_remote_channel.c
 )
 
 add_library(aivm_core STATIC ${AIVM_CORE_SOURCES})
@@ -148,6 +149,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core)
 
+    add_executable(aivm_test_remote_channel
+        tests/test_remote_channel.c
+    )
+    target_link_libraries(aivm_test_remote_channel PRIVATE aivm_core)
+
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
             tests/test_shared_bridge_loader.c
@@ -180,6 +186,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_bytes_host PRIVATE /W4)
+        target_compile_options(aivm_test_remote_channel PRIVATE /W4)
     else()
         target_compile_options(aivm_test_program_loader PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -197,6 +204,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_bytes_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_remote_channel PRIVATE -Wall -Wextra -Wpedantic -Werror)
     endif()
 
     add_test(NAME aivm_test_program_loader COMMAND aivm_test_program_loader)
@@ -215,6 +223,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_bytes_host COMMAND aivm_test_bytes_host)
+    add_test(NAME aivm_test_remote_channel COMMAND aivm_test_remote_channel)
     add_test(
         NAME aivm_test_parity_cli
         COMMAND aivm_parity_cli
