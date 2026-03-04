@@ -148,6 +148,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core)
 
+    add_executable(aivm_test_process_lifecycle_stress
+        tests/test_process_lifecycle_stress.c
+    )
+    target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core)
+
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
             tests/test_shared_bridge_loader.c
@@ -180,6 +185,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_bytes_host PRIVATE /W4)
+        target_compile_options(aivm_test_process_lifecycle_stress PRIVATE /W4)
     else()
         target_compile_options(aivm_test_program_loader PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -197,6 +203,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_bytes_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_process_lifecycle_stress PRIVATE -Wall -Wextra -Wpedantic -Werror)
     endif()
 
     add_test(NAME aivm_test_program_loader COMMAND aivm_test_program_loader)
@@ -215,6 +222,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_bytes_host COMMAND aivm_test_bytes_host)
+    add_test(NAME aivm_test_process_lifecycle_stress COMMAND aivm_test_process_lifecycle_stress)
     add_test(
         NAME aivm_test_parity_cli
         COMMAND aivm_parity_cli
