@@ -1353,14 +1353,14 @@ static int test_call_sys_success_and_void_result(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui_getWindowSize" },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui_drawRect" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.getWindowSize" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.drawRect" },
         { .type = AIVM_VAL_INT, .int_value = 1 },
         { .type = AIVM_VAL_STRING, .string_value = "#fff" }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.ui_getWindowSize", host_ui_get_window_size },
-        { "sys.ui_drawRect", host_ui_draw_rect }
+        { "sys.ui.getWindowSize", host_ui_get_window_size },
+        { "sys.ui.drawRect", host_ui_draw_rect }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -1453,19 +1453,19 @@ static int test_call_sys_string_contracts_success(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_substring" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
         { .type = AIVM_VAL_STRING, .string_value = "abcde" },
         { .type = AIVM_VAL_INT, .int_value = 1 },
         { .type = AIVM_VAL_INT, .int_value = 2 },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_remove" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.remove" },
         { .type = AIVM_VAL_STRING, .string_value = "vwxyz" },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_utf8ByteCount" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
         { .type = AIVM_VAL_STRING, .string_value = "a😀bc" }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str_substring", host_str_substring },
-        { "sys.str_remove", host_str_remove },
-        { "sys.str_utf8ByteCount", host_str_utf8_byte_count }
+        { "sys.str.substring", host_str_substring },
+        { "sys.str.remove", host_str_remove },
+        { "sys.str.utf8ByteCount", host_str_utf8_byte_count }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -1517,13 +1517,13 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_substring" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
         { .type = AIVM_VAL_STRING, .string_value = "abcde" },
         { .type = AIVM_VAL_STRING, .string_value = "bad_start_type" },
         { .type = AIVM_VAL_INT, .int_value = 2 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str_substring", host_str_substring }
+        { "sys.str.substring", host_str_substring }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -1560,12 +1560,12 @@ static int test_call_sys_missing_binding_sets_not_found_error(void)
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_substring" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
         { .type = AIVM_VAL_STRING, .string_value = "abcde" },
         { .type = AIVM_VAL_INT, .int_value = 1 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str_remove", host_str_remove }
+        { "sys.str.remove", host_str_remove }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -1675,11 +1675,11 @@ static int test_async_call_sys_and_await_roundtrip(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_utf8ByteCount" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
         { .type = AIVM_VAL_STRING, .string_value = "a😀bc" }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str_utf8ByteCount", host_str_utf8_byte_count }
+        { "sys.str.utf8ByteCount", host_str_utf8_byte_count }
     };
     static const AivmProgram program = {
         .instructions = instructions,

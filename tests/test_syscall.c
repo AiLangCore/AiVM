@@ -218,28 +218,28 @@ int main(void)
         { "sys.echo", handler_echo }
     };
     static const AivmSyscallBinding ui_bindings[] = {
-        { "sys.ui_drawRect", handler_draw_rect },
-        { "sys.ui_getWindowSize", handler_window_size },
-        { "sys.ui_pollEvent", handler_poll_event }
+        { "sys.ui.drawRect", handler_draw_rect },
+        { "sys.ui.getWindowSize", handler_window_size },
+        { "sys.ui.pollEvent", handler_poll_event }
     };
     static const AivmSyscallBinding ui_bad_return_bindings[] = {
-        { "sys.ui_getWindowSize", handler_window_size_wrong_type },
-        { "sys.ui_pollEvent", handler_poll_event_wrong_type }
+        { "sys.ui.getWindowSize", handler_window_size_wrong_type },
+        { "sys.ui.pollEvent", handler_poll_event_wrong_type }
     };
     static const AivmSyscallBinding console_bindings[] = {
-        { "sys.console_write", handler_console_write },
-        { "sys.console_readLine", handler_console_read_line }
+        { "sys.console.write", handler_console_write },
+        { "sys.console.readLine", handler_console_read_line }
     };
     static const AivmSyscallBinding process_bindings[] = {
-        { "sys.process_cwd", handler_process_cwd },
-        { "sys.process_argv", handler_process_argv }
+        { "sys.process.cwd", handler_process_cwd },
+        { "sys.process.args", handler_process_argv }
     };
     static const AivmSyscallBinding system_bindings[] = {
-        { "sys.time_nowUnixMs", handler_time_now },
-        { "sys.fs_readFile", handler_fs_read_file }
+        { "sys.time.nowUnixMs", handler_time_now },
+        { "sys.fs.file.read", handler_fs_read_file }
     };
     static const AivmSyscallBinding crypto_bindings[] = {
-        { "sys.crypto_base64Encode", handler_crypto_base64_encode }
+        { "sys.crypto.base64Encode", handler_crypto_base64_encode }
     };
 
     status = aivm_syscall_invoke(NULL, "sys.echo", NULL, 0U, &result);
@@ -278,7 +278,7 @@ int main(void)
     rect_args[3] = aivm_value_int(20);
     rect_args[4] = aivm_value_int(1);
     rect_args[5] = aivm_value_string("#fff");
-    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui_drawRect", rect_args, 6U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui.drawRect", rect_args, 6U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
@@ -286,12 +286,12 @@ int main(void)
         return 1;
     }
 
-    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui_drawRect", rect_args, 5U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui.drawRect", rect_args, 5U, &result);
     if (expect(status == AIVM_SYSCALL_ERR_CONTRACT) != 0) {
         return 1;
     }
 
-    status = aivm_syscall_dispatch_checked_with_contract(ui_bindings, 3U, "sys.ui_drawRect", rect_args, 5U, &result, &contract_status);
+    status = aivm_syscall_dispatch_checked_with_contract(ui_bindings, 3U, "sys.ui.drawRect", rect_args, 5U, &result, &contract_status);
     if (expect(status == AIVM_SYSCALL_ERR_CONTRACT) != 0) {
         return 1;
     }
@@ -300,7 +300,7 @@ int main(void)
     }
 
     window_arg = aivm_value_int(1);
-    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui_getWindowSize", &window_arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui.getWindowSize", &window_arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
@@ -308,12 +308,12 @@ int main(void)
         return 1;
     }
 
-    status = aivm_syscall_dispatch_checked(ui_bad_return_bindings, 2U, "sys.ui_getWindowSize", &window_arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bad_return_bindings, 2U, "sys.ui.getWindowSize", &window_arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_ERR_RETURN_TYPE) != 0) {
         return 1;
     }
 
-    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui_pollEvent", &window_arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.ui.pollEvent", &window_arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
@@ -321,7 +321,7 @@ int main(void)
         return 1;
     }
 
-    status = aivm_syscall_dispatch_checked(ui_bad_return_bindings, 2U, "sys.ui_pollEvent", &window_arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(ui_bad_return_bindings, 2U, "sys.ui.pollEvent", &window_arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_ERR_RETURN_TYPE) != 0) {
         return 1;
     }
@@ -336,35 +336,35 @@ int main(void)
         return 1;
     }
     arg = aivm_value_string("hello");
-    status = aivm_syscall_dispatch_checked(console_bindings, 2U, "sys.console_write", &arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(console_bindings, 2U, "sys.console.write", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
     if (expect(result.type == AIVM_VAL_VOID) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(console_bindings, 2U, "sys.console_readLine", NULL, 0U, &result);
+    status = aivm_syscall_dispatch_checked(console_bindings, 2U, "sys.console.readLine", NULL, 0U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
     if (expect(result.type == AIVM_VAL_STRING) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(process_bindings, 2U, "sys.process_cwd", NULL, 0U, &result);
+    status = aivm_syscall_dispatch_checked(process_bindings, 2U, "sys.process.cwd", NULL, 0U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
     if (expect(result.type == AIVM_VAL_STRING) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(process_bindings, 2U, "sys.process_argv", NULL, 0U, &result);
+    status = aivm_syscall_dispatch_checked(process_bindings, 2U, "sys.process.args", NULL, 0U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
     if (expect(result.type == AIVM_VAL_NODE) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(system_bindings, 2U, "sys.time_nowUnixMs", NULL, 0U, &result);
+    status = aivm_syscall_dispatch_checked(system_bindings, 2U, "sys.time.nowUnixMs", NULL, 0U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
@@ -372,14 +372,14 @@ int main(void)
         return 1;
     }
     arg = aivm_value_string("x");
-    status = aivm_syscall_dispatch_checked(system_bindings, 2U, "sys.fs_readFile", &arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(system_bindings, 2U, "sys.fs.file.read", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
     if (expect(result.type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(crypto_bindings, 1U, "sys.crypto_base64Encode", &arg, 1U, &result);
+    status = aivm_syscall_dispatch_checked(crypto_bindings, 1U, "sys.crypto.base64Encode", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }

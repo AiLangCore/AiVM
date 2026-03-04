@@ -21,25 +21,25 @@ int main(void)
     AivmSyscallStatus status;
 
     one_arg[0] = aivm_value_bytes(left_raw, 3U);
-    status = native_syscall_bytes_length("sys.bytes_length", one_arg, 1U, &result);
+    status = native_syscall_bytes_length("sys.bytes.length", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_INT && result.int_value == 3);
 
     two_args[0] = aivm_value_bytes(left_raw, 3U);
     two_args[1] = aivm_value_int(1);
-    status = native_syscall_bytes_at("sys.bytes_at", two_args, 2U, &result);
+    status = native_syscall_bytes_at("sys.bytes.at", two_args, 2U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_INT && result.int_value == 2);
 
     two_args[1] = aivm_value_int(99);
-    status = native_syscall_bytes_at("sys.bytes_at", two_args, 2U, &result);
+    status = native_syscall_bytes_at("sys.bytes.at", two_args, 2U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_INT && result.int_value == -1);
 
     three_args[0] = aivm_value_bytes(left_raw, 3U);
     three_args[1] = aivm_value_int(1);
     three_args[2] = aivm_value_int(2);
-    status = native_syscall_bytes_slice("sys.bytes_slice", three_args, 3U, &result);
+    status = native_syscall_bytes_slice("sys.bytes.slice", three_args, 3U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BYTES && result.bytes_value.length == 2U);
     CHECK(result.bytes_value.data != NULL);
@@ -47,7 +47,7 @@ int main(void)
 
     two_args[0] = aivm_value_bytes(left_raw, 3U);
     two_args[1] = aivm_value_bytes(right_raw, 2U);
-    status = native_syscall_bytes_concat("sys.bytes_concat", two_args, 2U, &result);
+    status = native_syscall_bytes_concat("sys.bytes.concat", two_args, 2U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BYTES && result.bytes_value.length == 5U);
     CHECK(result.bytes_value.data[0] == 1U &&
@@ -57,13 +57,13 @@ int main(void)
           result.bytes_value.data[4] == 5U);
 
     one_arg[0] = aivm_value_bytes(left_raw, 3U);
-    status = native_syscall_bytes_to_base64("sys.bytes_toBase64", one_arg, 1U, &result);
+    status = native_syscall_bytes_to_base64("sys.bytes.toBase64", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING);
     CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("AQID")) == 1);
 
     one_arg[0] = aivm_value_string("AQID");
-    status = native_syscall_bytes_from_base64("sys.bytes_fromBase64", one_arg, 1U, &result);
+    status = native_syscall_bytes_from_base64("sys.bytes.fromBase64", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BYTES && result.bytes_value.length == 3U);
     CHECK(result.bytes_value.data[0] == 1U &&
@@ -71,7 +71,7 @@ int main(void)
           result.bytes_value.data[2] == 3U);
 
     one_arg[0] = aivm_value_string("not-base64!!");
-    status = native_syscall_bytes_from_base64("sys.bytes_fromBase64", one_arg, 1U, &result);
+    status = native_syscall_bytes_from_base64("sys.bytes.fromBase64", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
     return 0;
