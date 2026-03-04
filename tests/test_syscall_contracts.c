@@ -215,7 +215,7 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.remote.call", remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(111U, remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(117U, remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(return_type == AIVM_VAL_INT) != 0) {
