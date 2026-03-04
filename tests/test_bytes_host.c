@@ -15,8 +15,11 @@ int main(void)
     const uint8_t left_raw[3] = { 1U, 2U, 3U };
     const uint8_t right_raw[2] = { 4U, 5U };
     const uint8_t utf8_raw[5] = { 'h', 'e', 'l', 'l', 'o' };
+    const uint8_t empty_raw[1] = { 0U };
     const uint8_t nul_raw[3] = { 'a', 0U, 'b' };
     const uint8_t invalid_utf8_raw[2] = { 0xC0U, 0xAFU };
+    const uint8_t truncated_utf8_raw[2] = { 0xE2U, 0x82U };
+    const uint8_t out_of_range_utf8_raw[4] = { 0xF4U, 0x90U, 0x80U, 0x80U };
     AivmValue one_arg[1];
     AivmValue two_args[2];
     AivmValue three_args[3];
@@ -83,11 +86,29 @@ int main(void)
     CHECK(result.type == AIVM_VAL_STRING);
     CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("hello")) == 1);
 
+    one_arg[0] = aivm_value_bytes(empty_raw, 0U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("")) == 1);
+
     one_arg[0] = aivm_value_bytes(nul_raw, 3U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
     one_arg[0] = aivm_value_bytes(invalid_utf8_raw, 2U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    one_arg[0] = aivm_value_bytes(truncated_utf8_raw, 2U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    one_arg[0] = aivm_value_bytes(out_of_range_utf8_raw, 4U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    one_arg[0] = aivm_value_bytes(utf8_raw, NATIVE_BYTES_SCRATCH_CAPACITY);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
