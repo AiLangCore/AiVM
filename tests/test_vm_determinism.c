@@ -70,7 +70,7 @@ int main(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str_utf8ByteCount" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
         { .type = AIVM_VAL_STRING, .string_value = "a😀bc" },
         { .type = AIVM_VAL_INT, .int_value = 5 }
     };
@@ -84,7 +84,7 @@ int main(void)
         .section_count = 0U
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str_utf8ByteCount", host_utf8_count_constant }
+        { "sys.str.utf8ByteCount", host_utf8_count_constant }
     };
     int iteration;
 

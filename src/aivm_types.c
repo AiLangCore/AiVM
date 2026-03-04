@@ -63,6 +63,15 @@ AivmValue aivm_value_string(const char* input)
     return value;
 }
 
+AivmValue aivm_value_bytes(const uint8_t* data, size_t length)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_BYTES;
+    value.bytes_value.data = data;
+    value.bytes_value.length = length;
+    return value;
+}
+
 AivmValue aivm_value_node(int64_t input)
 {
     AivmValue value;
@@ -89,6 +98,25 @@ int aivm_value_equals(AivmValue left, AivmValue right)
 
         case AIVM_VAL_STRING:
             return aivm_cstring_equals(left.string_value, right.string_value);
+
+        case AIVM_VAL_BYTES: {
+            size_t i;
+            if (left.bytes_value.length != right.bytes_value.length) {
+                return 0;
+            }
+            if (left.bytes_value.length == 0U) {
+                return 1;
+            }
+            if (left.bytes_value.data == NULL || right.bytes_value.data == NULL) {
+                return 0;
+            }
+            for (i = 0U; i < left.bytes_value.length; i += 1U) {
+                if (left.bytes_value.data[i] != right.bytes_value.data[i]) {
+                    return 0;
+                }
+            }
+            return 1;
+        }
 
         case AIVM_VAL_NODE:
             return left.node_handle == right.node_handle ? 1 : 0;

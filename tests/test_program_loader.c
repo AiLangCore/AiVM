@@ -100,6 +100,18 @@ int main(void)
         1, 0, 0, 0,
         9
     };
+    static const uint8_t constants_section_with_bytes[43] = {
+        'A', 'I', 'B', 'C',
+        1, 0, 0, 0,
+        0, 0, 0, 0,
+        1, 0, 0, 0,
+        2, 0, 0, 0,   /* constants */
+        13, 0, 0, 0,  /* section size */
+        1, 0, 0, 0,   /* constant count */
+        5,            /* bytes */
+        4, 0, 0, 0,   /* len */
+        0x00, 0x01, 0x7f, 0xff
+    };
     static const uint8_t section_limit_exceeded[16] = {
         'A', 'I', 'B', 'C',
         2, 0, 0, 0,
@@ -290,6 +302,35 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(aivm_value_string(aivm_program_status_code(result.status)), aivm_value_string("AIVMP011")) == 1) != 0) {
+        return 1;
+    }
+
+    result = aivm_program_load_aibc1(constants_section_with_bytes, 43U, &program);
+    if (expect(result.status == AIVM_PROGRAM_OK) != 0) {
+        return 1;
+    }
+    if (expect(program.constant_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.length == 4U) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.data != NULL) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.data[0] == 0x00U) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.data[1] == 0x01U) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.data[2] == 0x7fU) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].bytes_value.data[3] == 0xffU) != 0) {
         return 1;
     }
 
