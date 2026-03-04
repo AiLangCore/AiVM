@@ -17,6 +17,7 @@ int main(void)
     AivmValue console_write_arg[1];
     AivmValue int_arg[1];
     AivmValue fs_write_args[2];
+    AivmValue fs_dir_delete_args[2];
     AivmValue crypto_hmac_args[2];
     AivmValue net_int_string_args[2];
     AivmValue net_string_int_args[2];
@@ -32,6 +33,7 @@ int main(void)
     AivmValue bytes_int_args[2];
     AivmValue bytes_range_args[3];
     AivmValue two_bytes_args[2];
+    AivmValue process_spawn_args[4];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
 
     draw_rect_args[0] = aivm_value_int(0);
@@ -146,6 +148,65 @@ int main(void)
     if (expect(return_type == AIVM_VAL_NODE) != 0) {
         return 1;
     }
+    process_spawn_args[0] = aivm_value_string("echo hi");
+    process_spawn_args[1] = aivm_value_node(1);
+    process_spawn_args[2] = aivm_value_string(".");
+    process_spawn_args[3] = aivm_value_node(1);
+    int_arg[0] = aivm_value_int(1);
+    if (expect(aivm_syscall_contract_validate("sys.process.spawn", process_spawn_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(105U, process_spawn_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process.wait", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(106U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process.kill", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(107U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process.stdout.read", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(108U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process.stderr.read", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(109U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.process.poll", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(110U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
     int_arg[0] = aivm_value_int(1);
     if (expect(aivm_syscall_contract_validate("sys.time_nowUnixMs", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
@@ -231,6 +292,26 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(25U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.fs.file.delete", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(103U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    fs_dir_delete_args[0] = aivm_value_string("dir");
+    fs_dir_delete_args[1] = aivm_value_bool(1);
+    if (expect(aivm_syscall_contract_validate("sys.fs.dir.delete", fs_dir_delete_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(104U, fs_dir_delete_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.crypto_base64Encode", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
