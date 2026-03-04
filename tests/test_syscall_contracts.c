@@ -34,6 +34,7 @@ int main(void)
     AivmValue bytes_range_args[3];
     AivmValue two_bytes_args[2];
     AivmValue process_spawn_args[4];
+    AivmValue remote_call_args[3];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
 
     draw_rect_args[0] = aivm_value_int(0);
@@ -202,6 +203,18 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(110U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    remote_call_args[0] = aivm_value_string("cap.remote");
+    remote_call_args[1] = aivm_value_string("echoInt");
+    remote_call_args[2] = aivm_value_int(7);
+    if (expect(aivm_syscall_contract_validate("sys.remote.call", remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(111U, remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(return_type == AIVM_VAL_INT) != 0) {

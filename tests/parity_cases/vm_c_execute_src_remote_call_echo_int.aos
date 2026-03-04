@@ -1,0 +1,14 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.remote.call")
+  Const#k1(kind=string value="cap.remote")
+  Const#k2(kind=string value="echoInt")
+  Const#k3(kind=int value=7)
+  Func#f_main(name=main params="argv" locals="") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CONST a=1)
+    Inst#i2(op=CONST a=2)
+    Inst#i3(op=CONST a=3)
+    Inst#i4(op=CALL_SYS a=3)
+    Inst#i5(op=HALT)
+  }
+}

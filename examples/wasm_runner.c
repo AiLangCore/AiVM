@@ -189,6 +189,90 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+static int remote_cap_granted(const char* cap)
+{
+    const char* caps_env;
+    const char* cursor;
+    size_t cap_len;
+    if (cap == NULL) {
+        return 0;
+    }
+    caps_env = getenv("AIVM_REMOTE_CAPS");
+    if (caps_env == NULL || *caps_env == '\0') {
+        return 0;
+    }
+    cap_len = strlen(cap);
+    cursor = caps_env;
+    while (*cursor != '\0') {
+        const char* end = cursor;
+        while (*end != '\0' && *end != ',') {
+            end += 1;
+        }
+        if ((size_t)(end - cursor) == cap_len && strncmp(cursor, cap, cap_len) == 0) {
+            return 1;
+        }
+        cursor = (*end == ',') ? (end + 1) : end;
+    }
+    return 0;
+}
+
+static int native_syscall_remote_call(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    const char* cap;
+    const char* op;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 3U ||
+        args == NULL ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT ||
+        args[0].string_value == NULL ||
+        args[1].string_value == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    cap = args[0].string_value;
+    op = args[1].string_value;
+    if (!remote_cap_granted(cap)) {
+        if (snprintf(
+                g_wasm_syscall_error_message_buf,
+                sizeof(g_wasm_syscall_error_message_buf),
+                "remote capability '%s' is not granted on this target.",
+                cap) <= 0) {
+            g_wasm_syscall_error_message = "remote capability is not granted on this target.";
+        } else {
+            g_wasm_syscall_error_message = g_wasm_syscall_error_message_buf;
+        }
+        g_wasm_syscall_error_code = "RUN101";
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_NOT_FOUND;
+    }
+    if (strcmp(cap, "cap.remote") == 0 && strcmp(op, "echoInt") == 0) {
+        *result = aivm_value_int(args[2].int_value);
+        return AIVM_SYSCALL_OK;
+    }
+    if (snprintf(
+            g_wasm_syscall_error_message_buf,
+            sizeof(g_wasm_syscall_error_message_buf),
+            "remote operation '%s/%s' is not available on this target.",
+            cap,
+            op) <= 0) {
+        g_wasm_syscall_error_message = "remote operation is not available on this target.";
+    } else {
+        g_wasm_syscall_error_message = g_wasm_syscall_error_message_buf;
+    }
+    g_wasm_syscall_error_code = "RUN101";
+    result->type = AIVM_VAL_VOID;
+    return AIVM_SYSCALL_ERR_NOT_FOUND;
+}
+
 int main(int argc, char** argv)
 {
     unsigned char* bytes = NULL;
@@ -242,6 +326,8 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_stdout_write_line;
         } else if (strcmp(contract->target, "sys.process.args") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
+        } else if (strcmp(contract->target, "sys.remote.call") == 0) {
+            bindings[binding_count].handler = native_syscall_remote_call;
         }
         binding_count += 1U;
     }
