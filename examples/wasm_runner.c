@@ -3,6 +3,10 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef AIVM_WASM_WEB
+#include <emscripten/emscripten.h>
+#endif
+
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 #include "remote/aivm_remote_channel.h"
@@ -191,11 +195,14 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+#ifndef AIVM_WASM_WEB
 static AivmRemoteServerConfig g_remote_server_config;
 static AivmRemoteServerSession g_remote_server_session;
-static uint32_t g_remote_next_request_id = 1U;
 static int g_remote_session_ready = 0;
+static uint32_t g_remote_next_request_id = 1U;
+#endif
 
+#ifndef AIVM_WASM_WEB
 static int remote_parse_caps_csv(
     const char* csv,
     char out_caps[AIVM_REMOTE_MAX_CAPS][AIVM_REMOTE_MAX_TEXT + 1],
@@ -234,6 +241,7 @@ static int remote_parse_caps_csv(
     *out_count = count;
     return 1;
 }
+#endif
 
 static int remote_token_authorized(void)
 {
@@ -255,6 +263,23 @@ static int remote_token_authorized(void)
     return strcmp(expected, provided) == 0;
 }
 
+#ifdef AIVM_WASM_WEB
+EM_JS(int, aivm_web_remote_call_sync, (const char* cap_ptr, const char* op_ptr, int value), {
+    const cap = UTF8ToString(cap_ptr);
+    const op = UTF8ToString(op_ptr);
+    if (typeof globalThis.__aivmRemoteCall !== 'function') {
+        return -2147483647;
+    }
+    return Asyncify.handleSleep((wakeUp) => {
+        Promise.resolve()
+            .then(() => globalThis.__aivmRemoteCall(cap, op, value))
+            .then((v) => wakeUp((v | 0)))
+            .catch(() => wakeUp(-2147483647));
+    });
+});
+#endif
+
+#ifndef AIVM_WASM_WEB
 static int remote_session_ensure_ready(void)
 {
     uint8_t request_bytes[1024];
@@ -327,6 +352,7 @@ static int remote_session_ensure_ready(void)
     g_remote_session_ready = 1;
     return 1;
 }
+#endif
 
 static int remote_session_invoke_call(
     const char* cap,
@@ -334,6 +360,21 @@ static int remote_session_invoke_call(
     int64_t value,
     AivmValue* result)
 {
+#ifdef AIVM_WASM_WEB
+    int web_result;
+    if (cap == NULL || op == NULL || result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    web_result = aivm_web_remote_call_sync(cap, op, (int)value);
+    if (web_result == -2147483647) {
+        g_wasm_syscall_error_message = "web remote client is not available.";
+        g_wasm_syscall_error_code = "RUN101";
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_NOT_FOUND;
+    }
+    *result = aivm_value_int((int64_t)web_result);
+    return AIVM_SYSCALL_OK;
+#else
     uint8_t request_bytes[1024];
     uint8_t response_bytes[1024];
     size_t request_len = 0U;
@@ -424,6 +465,7 @@ static int remote_session_invoke_call(
     g_wasm_syscall_error_code = "RUN101";
     result->type = AIVM_VAL_VOID;
     return AIVM_SYSCALL_ERR_INVALID;
+#endif
 }
 
 static int native_syscall_remote_call(
