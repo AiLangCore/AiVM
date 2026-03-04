@@ -2139,6 +2139,92 @@ void aivm_step(AivmVm* vm)
             break;
         }
 
+        case AIVM_OP_MAKE_FIELD_STRING: {
+            AivmValue value;
+            AivmValue key_value;
+            AivmNodeAttr attrs[1];
+            int64_t child_handle = -1;
+            int64_t handle = -1;
+            int64_t children[1];
+            if (!aivm_stack_pop(vm, &value) || !aivm_stack_pop(vm, &key_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (key_value.type != AIVM_VAL_STRING || key_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_FIELD_STRING requires (string,any).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_runtime_node_from_value(vm, value, &child_handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            attrs[0].key = "key";
+            attrs[0].kind = AIVM_NODE_ATTR_STRING;
+            attrs[0].string_value = key_value.string_value;
+            children[0] = child_handle;
+            if (!create_node_record(vm, "Field", "field", attrs, 1U, children, 1U, &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAKE_MAP: {
+            AivmValue count_value;
+            int64_t handle = -1;
+            int64_t children[AIVM_VM_NODE_CHILD_CAPACITY];
+            size_t count = 0U;
+            size_t i = 0U;
+            if (!aivm_stack_pop(vm, &count_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (count_value.type != AIVM_VAL_INT || count_value.int_value < 0) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_MAP requires int child count.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            count = (size_t)count_value.int_value;
+            if (count > AIVM_VM_NODE_CHILD_CAPACITY || vm->stack_count < count) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "MAKE_MAP count exceeded VM limits.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            for (i = 0U; i < count; i += 1U) {
+                AivmValue child_value;
+                int64_t child_handle = -1;
+                if (!aivm_stack_pop(vm, &child_value)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                if (!create_runtime_node_from_value(vm, child_value, &child_handle)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                children[count - i - 1U] = child_handle;
+            }
+            if (vm->status == AIVM_VM_STATUS_ERROR) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_node_record(vm, "Map", "map", NULL, 0U, children, count, &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
         default:
             set_vm_error(vm, AIVM_VM_ERR_INVALID_OPCODE, "Unsupported opcode.");
             vm->instruction_pointer = vm->program->instruction_count;
