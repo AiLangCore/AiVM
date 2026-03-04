@@ -391,7 +391,7 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.net.write", net_int_string_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.net.close", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+    if (expect(aivm_syscall_contract_validate("sys.net.tcp.close", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.net.tcp.connect", net_string_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
