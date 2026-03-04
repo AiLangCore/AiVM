@@ -14,6 +14,8 @@ int main(void)
 {
     const uint8_t left_raw[3] = { 1U, 2U, 3U };
     const uint8_t right_raw[2] = { 4U, 5U };
+    const uint8_t utf8_raw[5] = { 'h', 'e', 'l', 'l', 'o' };
+    const uint8_t nul_raw[3] = { 'a', 0U, 'b' };
     AivmValue one_arg[1];
     AivmValue two_args[2];
     AivmValue three_args[3];
@@ -72,6 +74,16 @@ int main(void)
 
     one_arg[0] = aivm_value_string("not-base64!!");
     status = native_syscall_bytes_from_base64("sys.bytes.fromBase64", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    one_arg[0] = aivm_value_bytes(utf8_raw, 5U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING);
+    CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("hello")) == 1);
+
+    one_arg[0] = aivm_value_bytes(nul_raw, 3U);
+    status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
 
     return 0;

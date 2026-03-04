@@ -735,6 +735,15 @@ int main(void)
     if (expect(return_type == AIVM_VAL_STRING) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_validate("sys.bytes.toUtf8String", bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(114U, bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.bytes.fromBase64", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
