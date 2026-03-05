@@ -302,6 +302,13 @@ EM_JS(int, aivm_web_ui_close_window, (int window_id), {
     }
     return globalThis.__aivmUiCloseWindow(window_id) | 0;
 });
+
+EM_JS(int, aivm_web_ui_wait_frame, (int window_id), {
+    if (typeof globalThis.__aivmUiWaitFrame !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiWaitFrame(window_id) | 0;
+});
 #endif
 
 static int g_ui_next_window_id = 1;
@@ -673,6 +680,13 @@ static int native_syscall_ui_wait_frame(
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
+#ifdef AIVM_WASM_WEB
+    if (aivm_web_ui_wait_frame((int)args[0].int_value) != 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
     *result = aivm_value_void();
     return AIVM_SYSCALL_OK;
 }
