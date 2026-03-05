@@ -454,6 +454,15 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.debug_traceAsync", int_string_string_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_validate("sys.debug_taskReclaimStats", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(90U, NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_NODE) != 0) {
+        return 1;
+    }
 
     ui_window_args[0] = aivm_value_string("Hello");
     ui_window_args[1] = aivm_value_int(800);

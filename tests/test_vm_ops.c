@@ -1591,6 +1591,116 @@ static int test_call_sys_missing_binding_sets_not_found_error(void)
     return 0;
 }
 
+static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    const AivmNodeRecord* stats_node;
+    const AivmNodeAttr* attr0;
+    const AivmNodeAttr* attr1;
+    const AivmNodeAttr* attr2;
+    size_t i;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.debug_taskReclaimStats" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 6U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
+    vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
+    for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
+        vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
+        vm.completed_tasks[i].handle = (int64_t)i + 1;
+        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+    }
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_NODE) != 0) {
+        return 1;
+    }
+    stats_node = &vm.nodes[(size_t)(out.node_handle - 1)];
+    if (expect(strcmp(stats_node->kind, "DebugTaskReclaimStats") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strncmp(stats_node->id, "debug_task_reclaim_stats_", 25U) == 0) != 0) {
+        return 1;
+    }
+    if (expect(stats_node->attr_count == 3U) != 0) {
+        return 1;
+    }
+    attr0 = &vm.node_attrs[stats_node->attr_start];
+    attr1 = &vm.node_attrs[stats_node->attr_start + 1U];
+    attr2 = &vm.node_attrs[stats_node->attr_start + 2U];
+    if (expect(strcmp(attr0->key, "reclaimed") == 0 && attr0->kind == AIVM_NODE_ATTR_INT && attr0->int_value == 1) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(attr1->key, "skipPinned") == 0 && attr1->kind == AIVM_NODE_ATTR_INT && attr1->int_value == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(attr2->key, "exhausted") == 0 && attr2->kind == AIVM_NODE_ATTR_INT && attr2->int_value == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_call_sys_debug_task_reclaim_stats_arity_error(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.debug_taskReclaimStats" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC002: Syscall argument count was invalid.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_async_call_and_await_roundtrip(void)
 {
     AivmVm vm;
@@ -3086,6 +3196,12 @@ int main(void)
         return 1;
     }
     if (test_call_sys_missing_binding_sets_not_found_error() != 0) {
+        return 1;
+    }
+    if (test_call_sys_debug_task_reclaim_stats_intrinsic() != 0) {
+        return 1;
+    }
+    if (test_call_sys_debug_task_reclaim_stats_arity_error() != 0) {
         return 1;
     }
     if (test_async_call_and_await_roundtrip() != 0) {

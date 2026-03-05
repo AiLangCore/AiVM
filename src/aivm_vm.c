@@ -1,5 +1,6 @@
 #include "aivm_vm.h"
 #include <string.h>
+#include "aivm_syscall_contracts.h"
 
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
@@ -14,6 +15,17 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
+static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
+static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value);
+static int create_node_record(
+    AivmVm* vm,
+    const char* kind,
+    const char* id,
+    const AivmNodeAttr* attrs,
+    size_t attr_count,
+    const int64_t* children,
+    size_t child_count,
+    int64_t* out_handle);
 
 static int operand_to_index(AivmVm* vm, int64_t operand, size_t* out_index)
 {
@@ -317,6 +329,19 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CALL_SYS target must be string.");
         return 0;
     }
+    if (strcmp(target_value.string_value, "sys.debug_taskReclaimStats") == 0) {
+        AivmValueType expected_return_type = AIVM_VAL_VOID;
+        contract_status = aivm_syscall_contract_validate(
+            target_value.string_value,
+            args,
+            arg_count,
+            &expected_return_type);
+        if (contract_status != AIVM_CONTRACT_OK) {
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_contract_failure_detail(contract_status));
+            return 0;
+        }
+        return call_debug_task_reclaim_stats(vm, out_result);
+    }
 
     syscall_status = aivm_syscall_dispatch_checked_with_contract(
         vm->syscall_bindings,
@@ -554,6 +579,39 @@ static int task_terminal_payload_is_valid(const AivmVm* vm, const AivmCompletedT
         }
         return strcmp(node->kind, "Err") == 0;
     }
+    return 1;
+}
+
+static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result)
+{
+    AivmNodeAttr attrs[3];
+    int64_t handle;
+    char id_buffer[40];
+    size_t suffix_length;
+    if (vm == NULL || out_result == NULL) {
+        return 0;
+    }
+    memcpy(id_buffer, "debug_task_reclaim_stats_", 25U);
+    suffix_length = write_u64_decimal(id_buffer + 25U, sizeof(id_buffer) - 25U, (uint64_t)vm->node_count + 1U);
+    if (suffix_length == 0U) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "debug task stats node id overflow.");
+        return 0;
+    }
+
+    attrs[0].key = "reclaimed";
+    attrs[0].kind = AIVM_NODE_ATTR_INT;
+    attrs[0].int_value = (int64_t)vm->task_reclaim_count;
+    attrs[1].key = "skipPinned";
+    attrs[1].kind = AIVM_NODE_ATTR_INT;
+    attrs[1].int_value = (int64_t)vm->task_reclaim_skip_pinned_count;
+    attrs[2].key = "exhausted";
+    attrs[2].kind = AIVM_NODE_ATTR_INT;
+    attrs[2].int_value = (int64_t)vm->task_reclaim_exhausted_count;
+
+    if (!create_node_record(vm, "DebugTaskReclaimStats", id_buffer, attrs, 3U, NULL, 0U, &handle)) {
+        return 0;
+    }
+    *out_result = aivm_value_node(handle);
     return 1;
 }
 
