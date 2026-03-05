@@ -21,3 +21,6 @@ parity_vm_c_unlinked_gate|./tools/airun run examples/hello.aos --vm=c|cat src/Ai
 parity_vm_c_unlinked_gate_bundle|./tools/airun run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|printf ''
 parity_vm_default_is_canonical|./tools/airun run examples/golden/vm_default_is_canonical.in.aos|cat examples/golden/vm_default_is_canonical.out.aos; exit 3|3
 parity_vm_unsupported_construct|./tools/airun run examples/golden/vm_unsupported_construct.in.aos|cat examples/golden/vm_unsupported_construct.err; exit 3|3
+parity_vm_c_execute_src_await_edge_invalid|./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_await_edge_invalid.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_await_edge_invalid.out; exit 3|3
+parity_vm_c_execute_src_par_join_edge_invalid|./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.out; exit 3|3
+parity_vm_c_execute_src_par_cancel_edge_noop|./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos --vm=c|printf ''|0

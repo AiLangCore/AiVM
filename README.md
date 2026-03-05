@@ -36,7 +36,34 @@ This scaffold does not introduce new language semantics or runtime behavior.
 
 `aivm_parity_cli` is provided as an initial harness utility to compare two text outputs using deterministic normalization (CRLF/LF normalization and trailing newline trimming).
 
-`aivm_runtime.h` provides a minimal host-bridge execution API (`aivm_execute_program`) for future CLI/runtime integration phases.
+`aivm_runtime.h` provides host-bridge execution APIs:
+
+- `aivm_execute_program(...)`
+- `aivm_execute_program_with_syscalls(...)`
+- `aivm_execute_program_with_syscalls_and_argv(...)`
+
+`aivm_runtime.h` also provides host adapter helpers for deterministic event queue integration:
+
+- `aivm_runtime_host_enqueue_event(...)`
+- `aivm_runtime_host_drain_events(...)`
+
+Adapter contract:
+
+- VM semantic state mutation remains owner-thread only.
+- Worker/host threads may produce events, but they must enqueue through host adapter callbacks.
+- Drain step is explicit and bounded (`max_events`) to keep deterministic sequencing at host boundary.
+- Adapter failures map to explicit statuses:
+  - `AIVM_RUNTIME_HOST_EVENT_OK`
+  - `AIVM_RUNTIME_HOST_EVENT_INVALID`
+  - `AIVM_RUNTIME_HOST_EVENT_REJECTED`
+
+Local host integration shape:
+
+1. Provide `AivmRuntimeHostAdapter` with `enqueue` and `drain` callbacks plus host context.
+2. Use `aivm_execute_program_with_syscalls*` to run VM steps with syscall bindings.
+3. Route external events into `aivm_runtime_host_enqueue_event(...)`.
+4. On owner-thread loop, call `aivm_runtime_host_drain_events(...)` and apply drained events in deterministic order.
+
 `aivm_syscall_contracts.h` provides deterministic typed syscall-contract validation scaffolding.
 `aivm_c_api.h` provides a C-ABI-friendly execution entrypoint for host integration.
 

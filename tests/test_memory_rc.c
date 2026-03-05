@@ -52,6 +52,9 @@ int main(void)
 {
     size_t first = 0U;
     size_t second = 0U;
+    size_t baseline = 0U;
+    size_t current = 0U;
+    size_t i = 0U;
 
     if (run_string_program(&first) != 0) {
         return 1;
@@ -63,6 +66,16 @@ int main(void)
     /* Deterministic explicit reset point: arena usage should not grow across runs. */
     if (expect(first == second) != 0) {
         return 1;
+    }
+
+    baseline = first;
+    for (i = 0U; i < 1000U; i += 1U) {
+        if (run_string_program(&current) != 0) {
+            return 1;
+        }
+        if (expect(current == baseline) != 0) {
+            return 1;
+        }
     }
 
     return 0;

@@ -25,7 +25,8 @@ typedef enum {
     AIVM_VM_ERR_TYPE_MISMATCH = 7,
     AIVM_VM_ERR_INVALID_PROGRAM = 8,
     AIVM_VM_ERR_STRING_OVERFLOW = 9,
-    AIVM_VM_ERR_SYSCALL = 10
+    AIVM_VM_ERR_SYSCALL = 10,
+    AIVM_VM_ERR_MEMORY_PRESSURE = 11
 } AivmVmError;
 
 typedef struct {
@@ -60,7 +61,15 @@ typedef struct {
     size_t child_count;
 } AivmNodeRecord;
 
+typedef enum {
+    AIVM_TASK_STATE_PENDING = 0,
+    AIVM_TASK_STATE_COMPLETED = 1,
+    AIVM_TASK_STATE_FAILED = 2,
+    AIVM_TASK_STATE_CANCELED = 3
+} AivmTaskState;
+
 typedef struct {
+    AivmTaskState state;
     int64_t handle;
     AivmValue result;
 } AivmCompletedTask;
@@ -82,7 +91,13 @@ enum {
     AIVM_VM_NODE_CHILD_CAPACITY = 2048,
     AIVM_VM_TASK_CAPACITY = 256,
     AIVM_VM_PAR_CONTEXT_CAPACITY = 64,
-    AIVM_VM_PAR_VALUE_CAPACITY = 1024
+    AIVM_VM_PAR_VALUE_CAPACITY = 1024,
+    AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS = 64,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR = 3,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR = 4,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD =
+        (AIVM_VM_NODE_CAPACITY * AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR) /
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR
 };
 
 typedef struct {
@@ -112,6 +127,9 @@ typedef struct {
     AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
     size_t completed_task_count;
     int64_t next_task_handle;
+    size_t task_reclaim_count;
+    size_t task_reclaim_skip_pinned_count;
+    size_t task_reclaim_exhausted_count;
     AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
     size_t par_context_count;
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];
@@ -125,6 +143,20 @@ typedef struct {
     size_t node_child_count;
     int64_t ui_default_window_size_node_handle;
     int64_t ui_empty_event_node_handle;
+    size_t string_arena_high_water;
+    size_t bytes_arena_high_water;
+    size_t node_high_water;
+    size_t node_attr_high_water;
+    size_t node_child_high_water;
+    size_t node_gc_compaction_count;
+    size_t node_gc_attempt_count;
+    size_t node_gc_reclaimed_nodes;
+    size_t node_gc_reclaimed_attrs;
+    size_t node_gc_reclaimed_children;
+    size_t node_allocations_since_gc;
+    size_t string_arena_pressure_count;
+    size_t bytes_arena_pressure_count;
+    size_t node_arena_pressure_count;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);

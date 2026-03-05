@@ -1,0 +1,1 @@
+Err#err1(code=RUN001 message="AiBC1 execution failed. phase=exec function=main pc=0 nodeId=unknown opcode=AWAIT callTarget=unknown vmCode=AIVM003 vmMessage=Stack underflow. detail=Stack underflow." nodeId=vm)

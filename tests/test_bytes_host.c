@@ -25,6 +25,9 @@ int main(void)
     AivmValue three_args[3];
     AivmValue result;
     AivmSyscallStatus status;
+    int64_t worker_ok = -1;
+    int64_t worker_fail = -1;
+    int64_t worker_sleep = -1;
 
     one_arg[0] = aivm_value_bytes(left_raw, 3U);
     status = native_syscall_bytes_length("sys.bytes.length", one_arg, 1U, &result);
@@ -119,6 +122,86 @@ int main(void)
     one_arg[0] = aivm_value_bytes(utf8_raw, NATIVE_BYTES_SCRATCH_CAPACITY + 1U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    two_args[0] = aivm_value_string("echo");
+    two_args[1] = aivm_value_string("worker-ok");
+    status = native_syscall_worker_start("sys.worker.start", two_args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value > 0);
+    worker_ok = result.int_value;
+
+    two_args[0] = aivm_value_string("fail");
+    two_args[1] = aivm_value_string("worker-fail");
+    status = native_syscall_worker_start("sys.worker.start", two_args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value > 0);
+    worker_fail = result.int_value;
+
+    two_args[0] = aivm_value_string("sleep");
+    two_args[1] = aivm_value_string("2");
+    status = native_syscall_worker_start("sys.worker.start", two_args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value > 0);
+    worker_sleep = result.int_value;
+
+    one_arg[0] = aivm_value_int(worker_ok);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == 0);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == 1);
+    status = native_syscall_worker_result("sys.worker.result", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-ok") == 0);
+    status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "") == 0);
+
+    one_arg[0] = aivm_value_int(worker_fail);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == 0);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == -1);
+    status = native_syscall_worker_result("sys.worker.result", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "") == 0);
+    status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-fail") == 0);
+
+    one_arg[0] = aivm_value_int(worker_sleep);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == 0);
+    status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 1);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == -2);
+    status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "canceled") == 0);
+    status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
+
+    one_arg[0] = aivm_value_int(99999);
+    status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == -3);
+    status = native_syscall_worker_result("sys.worker.result", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "") == 0);
+    status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "unknown_worker") == 0);
+    status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
 
     return 0;
 }

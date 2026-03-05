@@ -22,6 +22,7 @@ static int host_ui_get_window_size(
 int main(void)
 {
     AivmCResult result;
+    AivmVm vm;
     uint32_t abi_version;
     static const AivmInstruction ok_instructions[] = {
         { .opcode = AIVM_OP_NOP, .operand_int = 0 },
@@ -186,6 +187,30 @@ int main(void)
         return 1;
     }
     if (expect(result.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+
+    if (expect(aivm_c_vm_task_reclaim_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_exhausted_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+
+    aivm_init(&vm, NULL);
+    vm.task_reclaim_count = 7U;
+    vm.task_reclaim_skip_pinned_count = 5U;
+    vm.task_reclaim_exhausted_count = 2U;
+    if (expect(aivm_c_vm_task_reclaim_count(&vm) == 7U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(&vm) == 5U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_exhausted_count(&vm) == 2U) != 0) {
         return 1;
     }
 
