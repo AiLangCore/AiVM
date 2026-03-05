@@ -1724,6 +1724,15 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
     if (expect(vm.completed_tasks[AIVM_VM_TASK_CAPACITY - 1U].handle == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
         return 1;
     }
+    if (expect(vm.task_reclaim_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_skip_pinned_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_exhausted_count == 0U) != 0) {
+        return 1;
+    }
     if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
         return 1;
     }
@@ -1819,6 +1828,15 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
     if (expect(vm.completed_tasks[AIVM_VM_TASK_CAPACITY - 1U].handle == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
         return 1;
     }
+    if (expect(vm.task_reclaim_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_skip_pinned_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_exhausted_count == 0U) != 0) {
+        return 1;
+    }
     return 0;
 }
 
@@ -1853,6 +1871,15 @@ static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "Task table capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_skip_pinned_count == AIVM_VM_TASK_CAPACITY) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_exhausted_count == 1U) != 0) {
         return 1;
     }
     return 0;

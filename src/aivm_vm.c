@@ -430,8 +430,10 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
         if (!is_task_handle_pinned(vm, vm->completed_tasks[index].handle)) {
             break;
         }
+        vm->task_reclaim_skip_pinned_count += 1U;
     }
     if (index >= vm->completed_task_count) {
+        vm->task_reclaim_exhausted_count += 1U;
         return 0;
     }
     if (index + 1U < vm->completed_task_count) {
@@ -441,6 +443,7 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
             (vm->completed_task_count - index - 1U) * sizeof(AivmCompletedTask));
     }
     vm->completed_task_count -= 1U;
+    vm->task_reclaim_count += 1U;
     return 1;
 }
 
@@ -831,6 +834,9 @@ void aivm_reset_state(AivmVm* vm)
     vm->string_arena[0] = '\0';
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
+    vm->task_reclaim_count = 0U;
+    vm->task_reclaim_skip_pinned_count = 0U;
+    vm->task_reclaim_exhausted_count = 0U;
     vm->par_context_count = 0U;
     vm->par_value_count = 0U;
     vm->next_par_node_id = 1;

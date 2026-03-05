@@ -117,6 +117,9 @@ typedef struct {
     AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
     size_t completed_task_count;
     int64_t next_task_handle;
+    size_t task_reclaim_count;
+    size_t task_reclaim_skip_pinned_count;
+    size_t task_reclaim_exhausted_count;
     AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
     size_t par_context_count;
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];
