@@ -568,6 +568,62 @@ static int test_reset_clears_pressure_counters_after_bytes_failure(void)
     return 0;
 }
 
+static int test_reset_clears_pressure_counters_after_node_failure(void)
+{
+    AivmVm vm;
+    AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 1U) * 2U + 1U];
+    AivmValue constants[1];
+    AivmProgram program;
+    size_t ip = 0U;
+    size_t i;
+
+    constants[0] = aivm_value_string("tmp");
+    for (i = 0U; i < (size_t)(AIVM_VM_NODE_CAPACITY + 1U); i += 1U) {
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = 1U;
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+
+    aivm_reset_state(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -607,6 +663,9 @@ int main(void)
         return 1;
     }
     if (test_reset_clears_pressure_counters_after_bytes_failure() != 0) {
+        return 1;
+    }
+    if (test_reset_clears_pressure_counters_after_node_failure() != 0) {
         return 1;
     }
 
