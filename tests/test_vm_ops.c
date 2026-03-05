@@ -594,6 +594,46 @@ static int test_call_ret_restores_caller_locals_scope(void)
     return 0;
 }
 
+static int test_tail_call_reuses_frame_in_recursive_loop(void)
+{
+    AivmVm vm;
+    size_t i;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    for (i = 0U; i < 2000U; i += 1U) {
+        if (vm.status != AIVM_VM_STATUS_READY && vm.status != AIVM_VM_STATUS_RUNNING) {
+            break;
+        }
+        aivm_step(&vm);
+        if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+            return 1;
+        }
+        if (expect(vm.call_frame_count <= 1U) != 0) {
+            return 1;
+        }
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.call_frame_count <= 1U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_negative_jump_operand_sets_error(void)
 {
     AivmVm vm;
@@ -2661,6 +2701,9 @@ int main(void)
         return 1;
     }
     if (test_call_ret_restores_caller_locals_scope() != 0) {
+        return 1;
+    }
+    if (test_tail_call_reuses_frame_in_recursive_loop() != 0) {
         return 1;
     }
     if (test_negative_jump_operand_sets_error() != 0) {

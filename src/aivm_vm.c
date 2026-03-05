@@ -961,6 +961,11 @@ int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
     return 1;
 }
 
+static int is_return_opcode(AivmOpcode opcode)
+{
+    return opcode == AIVM_OP_RET || opcode == AIVM_OP_RETURN;
+}
+
 void aivm_step(AivmVm* vm)
 {
     const AivmInstruction* instruction;
@@ -1136,6 +1141,7 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_CALL: {
             size_t target;
+            int is_tail_call = 0;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -1145,9 +1151,14 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, vm->stack_count)) {
-                vm->instruction_pointer = vm->program->instruction_count;
-                break;
+            if ((vm->instruction_pointer + 1U) < vm->program->instruction_count) {
+                is_tail_call = is_return_opcode(vm->program->instructions[vm->instruction_pointer + 1U].opcode);
+            }
+            if (is_tail_call == 0) {
+                if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, vm->stack_count)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
             }
             vm->instruction_pointer = target;
             break;
