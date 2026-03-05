@@ -171,6 +171,67 @@ static int test_reset_keeps_gc_allocation_counter_deterministic(void)
     return 0;
 }
 
+static int test_reset_clears_gc_counters_after_allocations(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "tmp" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count > 1U) != 0) {
+        return 1;
+    }
+
+    aivm_reset_state(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_attrs == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_children == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -192,6 +253,9 @@ int main(void)
         return 1;
     }
     if (test_reset_keeps_gc_allocation_counter_deterministic() != 0) {
+        return 1;
+    }
+    if (test_reset_clears_gc_counters_after_allocations() != 0) {
         return 1;
     }
 
