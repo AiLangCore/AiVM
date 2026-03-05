@@ -5,11 +5,11 @@ Program#p1 {
       Block#b1 {
         Let#l2(name=i) { Lit#i1(value=0) }
         Let#l3(name=acc) { Lit#i2(value=0) }
-        While#w1 {
-          Eq#e2 { Var#v1(name=i) Lit#i3(value=0) }
+        Loop#lp1 {
           Block#b2 {
             Let#l4(name=acc) { Add#a1 { Var#v2(name=acc) Lit#i4(value=5) } }
             Let#l5(name=i) { Lit#i5(value=1) }
+            Break#k1 { }
           }
         }
         Return#r1 { Var#v3(name=acc) }
