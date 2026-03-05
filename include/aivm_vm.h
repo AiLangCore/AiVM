@@ -133,6 +133,7 @@ typedef struct {
     size_t node_gc_reclaimed_nodes;
     size_t node_gc_reclaimed_attrs;
     size_t node_gc_reclaimed_children;
+    size_t node_allocations_since_gc;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);

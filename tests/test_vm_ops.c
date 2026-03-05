@@ -2318,6 +2318,65 @@ static int test_node_compaction_reclaims_unreachable_nodes(void)
     return 0;
 }
 
+static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
+{
+    AivmVm vm;
+    AivmInstruction instructions[1024];
+    AivmValue constants[1];
+    AivmProgram program;
+    size_t ip = 0U;
+    size_t i;
+    size_t transient_nodes = AIVM_VM_NODE_CAPACITY - 8U;
+
+    constants[0] = aivm_value_string("tmp");
+    for (i = 0U; i < transient_nodes; i += 1U) {
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_POP;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions[ip].opcode = AIVM_OP_CONST;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = 1U;
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_high_water < AIVM_VM_NODE_CAPACITY) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_make_node_requires_node_args(void)
 {
     AivmVm vm;
@@ -2877,6 +2936,9 @@ int main(void)
         return 1;
     }
     if (test_node_compaction_reclaims_unreachable_nodes() != 0) {
+        return 1;
+    }
+    if (test_node_compaction_runs_before_capacity_when_pressure_is_high() != 0) {
         return 1;
     }
     if (test_make_node_requires_node_args() != 0) {

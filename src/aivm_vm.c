@@ -1,6 +1,11 @@
 #include "aivm_vm.h"
 #include <string.h>
 
+enum {
+    AIVM_VM_NODE_GC_INTERVAL = 64U,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD = (AIVM_VM_NODE_CAPACITY * 3U) / 4U
+};
+
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
     if (vm == NULL) {
@@ -765,6 +770,20 @@ static int compact_node_arenas(AivmVm* vm)
     return 1;
 }
 
+static int should_attempt_proactive_node_gc(const AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->node_count < AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) {
+        return 0;
+    }
+    if (vm->node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL) {
+        return 0;
+    }
+    return 1;
+}
+
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -780,12 +799,19 @@ static int create_node_record(
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
     }
+    if (should_attempt_proactive_node_gc(vm)) {
+        if (!compact_node_arenas(vm)) {
+            return 0;
+        }
+        vm->node_allocations_since_gc = 0U;
+    }
     if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
         vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
         vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
         if (!compact_node_arenas(vm)) {
             return 0;
         }
+        vm->node_allocations_since_gc = 0U;
         if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
             vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
             vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
@@ -840,6 +866,9 @@ static int create_node_record(
     }
     if (vm->node_child_count > vm->node_child_high_water) {
         vm->node_child_high_water = vm->node_child_count;
+    }
+    if (vm->node_allocations_since_gc < (size_t)-1) {
+        vm->node_allocations_since_gc += 1U;
     }
     *out_handle = (int64_t)vm->node_count;
     return 1;
@@ -1045,8 +1074,10 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_gc_reclaimed_nodes = 0U;
     vm->node_gc_reclaimed_attrs = 0U;
     vm->node_gc_reclaimed_children = 0U;
+    vm->node_allocations_since_gc = 0U;
     vm->process_argv_node_handle = 0;
     (void)initialize_process_argv_node(vm);
+    vm->node_allocations_since_gc = 0U;
 }
 
 void aivm_init(AivmVm* vm, const AivmProgram* program)
