@@ -1,11 +1,6 @@
 #include "aivm_vm.h"
 #include <string.h>
 
-enum {
-    AIVM_VM_NODE_GC_INTERVAL = 64U,
-    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD = (AIVM_VM_NODE_CAPACITY * 3U) / 4U
-};
-
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
     if (vm == NULL) {
@@ -778,7 +773,7 @@ static int should_attempt_proactive_node_gc(const AivmVm* vm)
     if (vm->node_count < AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) {
         return 0;
     }
-    if (vm->node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL) {
+    if (vm->node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) {
         return 0;
     }
     return 1;
