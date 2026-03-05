@@ -470,14 +470,21 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
     return 1;
 }
 
-static int find_completed_task(const AivmVm* vm, int64_t handle, AivmValue* out_result)
+static int is_terminal_task_state(AivmTaskState state)
+{
+    return state == AIVM_TASK_STATE_COMPLETED ||
+        state == AIVM_TASK_STATE_FAILED ||
+        state == AIVM_TASK_STATE_CANCELED;
+}
+
+static int find_terminal_task_result(const AivmVm* vm, int64_t handle, AivmValue* out_result)
 {
     size_t i;
     if (vm == NULL || out_result == NULL) {
         return 0;
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
-        if (vm->completed_tasks[i].state == AIVM_TASK_STATE_COMPLETED &&
+        if (is_terminal_task_state(vm->completed_tasks[i].state) &&
             vm->completed_tasks[i].handle == handle) {
             *out_result = vm->completed_tasks[i].result;
             return 1;
@@ -1457,7 +1464,7 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (handle_value.type != AIVM_VAL_INT ||
-                !find_completed_task(vm, handle_value.int_value, &completed)) {
+                !find_terminal_task_result(vm, handle_value.int_value, &completed)) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -1545,7 +1552,7 @@ void aivm_step(AivmVm* vm)
                 AivmValue task_result;
                 int64_t child_handle;
                 if (value.type == AIVM_VAL_INT &&
-                    find_completed_task(vm, value.int_value, &task_result)) {
+                    find_terminal_task_result(vm, value.int_value, &task_result)) {
                     value = task_result;
                 }
                 if (!create_runtime_node_from_value(vm, value, &child_handle)) {

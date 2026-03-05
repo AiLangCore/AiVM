@@ -1807,6 +1807,102 @@ static int test_await_pending_task_handle_sets_error(void)
     return 0;
 }
 
+static int test_await_failed_task_handle_returns_terminal_result(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 1 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = 1U;
+    vm.completed_tasks[0].state = AIVM_TASK_STATE_FAILED;
+    vm.completed_tasks[0].handle = 1;
+    vm.completed_tasks[0].result = aivm_value_int(-11);
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT && out.int_value == -11) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_parallel_join_resolves_canceled_task_handles(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    const AivmNodeRecord* block_node;
+    const AivmNodeRecord* child;
+    const AivmNodeAttr* child_attr;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PAR_BEGIN, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_PAR_FORK, .operand_int = 0 },
+        { .opcode = AIVM_OP_PAR_JOIN, .operand_int = 1 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 1 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 5U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = 1U;
+    vm.completed_tasks[0].state = AIVM_TASK_STATE_CANCELED;
+    vm.completed_tasks[0].handle = 1;
+    vm.completed_tasks[0].result = aivm_value_int(-22);
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_NODE) != 0) {
+        return 1;
+    }
+    block_node = &vm.nodes[(size_t)(out.node_handle - 1)];
+    if (expect(block_node->child_count == 1U) != 0) {
+        return 1;
+    }
+    child = &vm.nodes[(size_t)(vm.node_children[block_node->child_start] - 1)];
+    child_attr = &vm.node_attrs[child->attr_start];
+    if (expect(child_attr->kind == AIVM_NODE_ATTR_INT && child_attr->int_value == -22) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_parallel_begin_fork_join_and_cancel(void)
 {
     AivmVm vm;
@@ -2725,6 +2821,9 @@ int main(void)
     if (test_await_pending_task_handle_sets_error() != 0) {
         return 1;
     }
+    if (test_await_failed_task_handle_returns_terminal_result() != 0) {
+        return 1;
+    }
     if (test_parallel_begin_fork_join_and_cancel() != 0) {
         return 1;
     }
@@ -2732,6 +2831,9 @@ int main(void)
         return 1;
     }
     if (test_parallel_join_resolves_completed_task_handles() != 0) {
+        return 1;
+    }
+    if (test_parallel_join_resolves_canceled_task_handles() != 0) {
         return 1;
     }
     if (test_parallel_fork_requires_context() != 0) {
