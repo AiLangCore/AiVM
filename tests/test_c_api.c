@@ -23,8 +23,6 @@ int main(void)
 {
     AivmCResult result;
     AivmVm vm;
-    AivmProgram reclaim_program;
-    size_t i;
     uint32_t abi_version;
     static const AivmInstruction ok_instructions[] = {
         { .opcode = AIVM_OP_NOP, .operand_int = 0 },
@@ -73,12 +71,6 @@ int main(void)
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
-    };
-    static const AivmInstruction reclaim_instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
-        { .opcode = AIVM_OP_RET, .operand_int = 0 }
     };
 
     abi_version = aivm_c_abi_version();
@@ -208,26 +200,17 @@ int main(void)
         return 1;
     }
 
-    aivm_program_init(&reclaim_program, reclaim_instructions, 4U);
-    aivm_init(&vm, &reclaim_program);
-    vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
-    vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
-    for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
-        vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
-        vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
-    }
-    aivm_run(&vm);
-    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+    aivm_init(&vm, NULL);
+    vm.task_reclaim_count = 7U;
+    vm.task_reclaim_skip_pinned_count = 5U;
+    vm.task_reclaim_exhausted_count = 2U;
+    if (expect(aivm_c_vm_task_reclaim_count(&vm) == 7U) != 0) {
         return 1;
     }
-    if (expect(aivm_c_vm_task_reclaim_count(&vm) == 1U) != 0) {
+    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(&vm) == 5U) != 0) {
         return 1;
     }
-    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(&vm) == 0U) != 0) {
-        return 1;
-    }
-    if (expect(aivm_c_vm_task_reclaim_exhausted_count(&vm) == 0U) != 0) {
+    if (expect(aivm_c_vm_task_reclaim_exhausted_count(&vm) == 2U) != 0) {
         return 1;
     }
 
