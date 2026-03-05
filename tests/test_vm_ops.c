@@ -1667,7 +1667,7 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
     }
 
     aivm_run(&vm);
@@ -1858,7 +1858,7 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
     }
 
     aivm_run(&vm);
@@ -1923,7 +1923,7 @@ static int test_await_evicted_task_handle_sets_error(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
     }
 
     aivm_run(&vm);
@@ -1957,7 +1957,7 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
     }
     vm.stack_count = 1U;
     vm.stack[0] = aivm_value_int(1);
@@ -2009,7 +2009,7 @@ static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
         vm.stack[i] = aivm_value_int((int64_t)i + 1);
     }
 

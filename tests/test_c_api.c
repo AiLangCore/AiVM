@@ -215,7 +215,7 @@ int main(void)
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
-        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
     }
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {

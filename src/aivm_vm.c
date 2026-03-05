@@ -514,6 +514,12 @@ static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
             return 1;
         }
     }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].handle != handle &&
+            value_matches_task_handle(vm->completed_tasks[i].result, handle)) {
+            return 1;
+        }
+    }
     return 0;
 }
 
