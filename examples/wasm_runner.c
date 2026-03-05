@@ -265,6 +265,23 @@ EM_JS(int, aivm_web_ui_draw_ellipse, (int window_id, int x, int y, int w, int h,
     return globalThis.__aivmUiDrawEllipse(window_id, x, y, w, h, color) | 0;
 });
 
+EM_JS(int, aivm_web_ui_draw_path, (int window_id, const char* path_ptr, const char* color_ptr, int stroke_width), {
+    if (typeof globalThis.__aivmUiDrawPath !== 'function') {
+        return -1;
+    }
+    const path = UTF8ToString(path_ptr);
+    const color = UTF8ToString(color_ptr);
+    return globalThis.__aivmUiDrawPath(window_id, path, color, stroke_width) | 0;
+});
+
+EM_JS(int, aivm_web_ui_draw_image, (int window_id, int x, int y, int w, int h, const char* src_ptr), {
+    if (typeof globalThis.__aivmUiDrawImage !== 'function') {
+        return -1;
+    }
+    const src = UTF8ToString(src_ptr);
+    return globalThis.__aivmUiDrawImage(window_id, x, y, w, h, src) | 0;
+});
+
 EM_JS(int, aivm_web_ui_end_frame, (int window_id), {
     if (typeof globalThis.__aivmUiEndFrame !== 'function') {
         return -1;
@@ -519,6 +536,79 @@ static int native_syscall_ui_draw_ellipse(
     return AIVM_SYSCALL_OK;
 }
 
+static int native_syscall_ui_draw_path(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 4U || args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[1].string_value == NULL ||
+        args[2].type != AIVM_VAL_STRING ||
+        args[2].string_value == NULL ||
+        args[3].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    if (aivm_web_ui_draw_path(
+            (int)args[0].int_value,
+            args[1].string_value,
+            args[2].string_value,
+            (int)args[3].int_value) != 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_draw_image(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 6U || args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_INT ||
+        args[2].type != AIVM_VAL_INT ||
+        args[3].type != AIVM_VAL_INT ||
+        args[4].type != AIVM_VAL_INT ||
+        args[5].type != AIVM_VAL_STRING ||
+        args[5].string_value == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    if (aivm_web_ui_draw_image(
+            (int)args[0].int_value,
+            (int)args[1].int_value,
+            (int)args[2].int_value,
+            (int)args[3].int_value,
+            (int)args[4].int_value,
+            args[5].string_value) != 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
 static int native_syscall_ui_end_frame(
     const char* target,
     const AivmValue* args,
@@ -565,6 +655,24 @@ static int native_syscall_ui_present(
 #else
     return ui_fail_not_available(result);
 #endif
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_wait_frame(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
     *result = aivm_value_void();
     return AIVM_SYSCALL_OK;
 }
@@ -1089,10 +1197,16 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_ui_draw_line;
         } else if (strcmp(contract->target, "sys.ui.drawEllipse") == 0) {
             bindings[binding_count].handler = native_syscall_ui_draw_ellipse;
+        } else if (strcmp(contract->target, "sys.ui.drawPath") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_draw_path;
+        } else if (strcmp(contract->target, "sys.ui.drawImage") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_draw_image;
         } else if (strcmp(contract->target, "sys.ui.endFrame") == 0) {
             bindings[binding_count].handler = native_syscall_ui_end_frame;
         } else if (strcmp(contract->target, "sys.ui.present") == 0) {
             bindings[binding_count].handler = native_syscall_ui_present;
+        } else if (strcmp(contract->target, "sys.ui.waitFrame") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_wait_frame;
         } else if (strcmp(contract->target, "sys.ui.closeWindow") == 0) {
             bindings[binding_count].handler = native_syscall_ui_close_window;
         }
