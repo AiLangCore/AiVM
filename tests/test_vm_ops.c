@@ -1233,6 +1233,15 @@ static int test_string_arena_overflow_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM001: string arena capacity exceeded.") == 0) != 0) {
         return 1;
     }
+    if (expect(vm.string_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
 
     aivm_init(&vm, &program_to_string);
     vm.string_arena_used = AIVM_VM_STRING_ARENA_CAPACITY;
@@ -1246,6 +1255,15 @@ static int test_string_arena_overflow_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM001: string arena capacity exceeded.") == 0) != 0) {
         return 1;
     }
+    if (expect(vm.string_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
 
     aivm_init(&vm, &program_escape);
     vm.string_arena_used = AIVM_VM_STRING_ARENA_CAPACITY;
@@ -1257,6 +1275,15 @@ static int test_string_arena_overflow_sets_error(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM001: string arena capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
         return 1;
     }
 
@@ -1297,6 +1324,15 @@ static int test_bytes_arena_overflow_sets_error(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM002: bytes arena capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
         return 1;
     }
     if (expect(vm.bytes_arena_used == 0U) != 0) {
@@ -2563,6 +2599,15 @@ static int test_node_capacity_failure_resets_gc_allocation_counter(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM005: node arena capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 1U) != 0) {
         return 1;
     }
     if (expect(vm.node_gc_compaction_count >= 1U) != 0) {

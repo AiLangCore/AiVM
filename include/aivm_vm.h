@@ -140,6 +140,9 @@ typedef struct {
     size_t node_gc_reclaimed_attrs;
     size_t node_gc_reclaimed_children;
     size_t node_allocations_since_gc;
+    size_t string_arena_pressure_count;
+    size_t bytes_arena_pressure_count;
+    size_t node_arena_pressure_count;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);

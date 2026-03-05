@@ -36,6 +36,7 @@ static char* arena_alloc(AivmVm* vm, size_t size)
         return NULL;
     }
     if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
+        vm->string_arena_pressure_count += 1U;
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return NULL;
     }
@@ -55,6 +56,7 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
         return NULL;
     }
     if (vm->bytes_arena_used + size > AIVM_VM_BYTES_ARENA_CAPACITY) {
+        vm->bytes_arena_pressure_count += 1U;
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         return NULL;
     }
@@ -810,6 +812,7 @@ static int create_node_record(
         if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
             vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
             vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+            vm->node_arena_pressure_count += 1U;
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             return 0;
         }
@@ -1070,6 +1073,9 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_gc_reclaimed_attrs = 0U;
     vm->node_gc_reclaimed_children = 0U;
     vm->node_allocations_since_gc = 0U;
+    vm->string_arena_pressure_count = 0U;
+    vm->bytes_arena_pressure_count = 0U;
+    vm->node_arena_pressure_count = 0U;
     vm->process_argv_node_handle = 0;
     (void)initialize_process_argv_node(vm);
     vm->node_allocations_since_gc = 0U;

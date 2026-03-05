@@ -247,6 +247,15 @@ static int test_reset_clears_gc_counters_after_allocations(void)
     if (expect(vm.node_allocations_since_gc == 0U) != 0) {
         return 1;
     }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
     return 0;
 }
 
