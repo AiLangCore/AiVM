@@ -2368,7 +2368,16 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
     if (expect(vm.node_gc_compaction_count > 0U) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+        return 1;
+    }
     if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
         return 1;
     }
     if (expect(vm.node_high_water < AIVM_VM_NODE_CAPACITY) != 0) {
