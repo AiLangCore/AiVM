@@ -310,6 +310,20 @@ EM_JS(int, aivm_web_ui_wait_frame, (int window_id), {
     }
     return globalThis.__aivmUiWaitFrame(window_id) | 0;
 });
+
+EM_JS(int, aivm_web_ui_get_window_width, (int window_id), {
+    if (typeof globalThis.__aivmUiGetWindowWidth !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiGetWindowWidth(window_id) | 0;
+});
+
+EM_JS(int, aivm_web_ui_get_window_height, (int window_id), {
+    if (typeof globalThis.__aivmUiGetWindowHeight !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiGetWindowHeight(window_id) | 0;
+});
 #endif
 
 static int g_ui_next_window_id = 1;
@@ -763,6 +777,14 @@ static int native_syscall_ui_get_window_size(
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
     #ifdef AIVM_WASM_WEB
+    {
+        int width = aivm_web_ui_get_window_width((int)args[0].int_value);
+        int height = aivm_web_ui_get_window_height((int)args[0].int_value);
+        if (width <= 0 || height <= 0) {
+            return ui_fail_not_available(result);
+        }
+        (void)ui_update_window_size_node(g_wasm_active_vm, width, height);
+    }
     if (g_wasm_active_vm == NULL || g_wasm_active_vm->ui_default_window_size_node_handle <= 0) {
         return ui_fail_not_available(result);
     }
