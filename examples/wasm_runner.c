@@ -324,6 +324,27 @@ EM_JS(int, aivm_web_ui_get_window_height, (int window_id), {
     }
     return globalThis.__aivmUiGetWindowHeight(window_id) | 0;
 });
+
+EM_JS(int, aivm_web_ui_poll_event_type, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventType !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiPollEventType(window_id) | 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_x, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventX !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiPollEventX(window_id) | 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_y, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventY !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiPollEventY(window_id) | 0;
+});
 #endif
 
 static int g_ui_next_window_id = 1;
@@ -361,6 +382,43 @@ static int ui_update_window_size_node(AivmVm* vm, int width, int height)
             attr->int_value = width;
         } else if (strcmp(attr->key, "height") == 0) {
             attr->int_value = height;
+        }
+    }
+    return 1;
+}
+
+static int ui_update_event_node(AivmVm* vm, int event_type, int x, int y)
+{
+    size_t node_index;
+    size_t i;
+    AivmNodeRecord* node;
+    const char* type_text = "none";
+    if (vm == NULL || vm->ui_empty_event_node_handle <= 0) {
+        return 0;
+    }
+    if (event_type == 1) {
+        type_text = "click";
+    } else if (event_type == 2) {
+        type_text = "move";
+    } else if (event_type == 3) {
+        type_text = "keydown";
+    }
+    node_index = (size_t)(vm->ui_empty_event_node_handle - 1);
+    if (node_index >= vm->node_count) {
+        return 0;
+    }
+    node = &vm->nodes[node_index];
+    for (i = 0U; i < node->attr_count; i += 1U) {
+        AivmNodeAttr* attr = &vm->node_attrs[node->attr_start + i];
+        if (attr->key == NULL) {
+            continue;
+        }
+        if (strcmp(attr->key, "type") == 0 && attr->kind == AIVM_NODE_ATTR_IDENTIFIER) {
+            attr->string_value = type_text;
+        } else if (strcmp(attr->key, "x") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
+            attr->int_value = x;
+        } else if (strcmp(attr->key, "y") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
+            attr->int_value = y;
         }
     }
     return 1;
@@ -751,6 +809,15 @@ static int native_syscall_ui_poll_event(
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
     #ifdef AIVM_WASM_WEB
+    {
+        int event_type = aivm_web_ui_poll_event_type((int)args[0].int_value);
+        int event_x = aivm_web_ui_poll_event_x((int)args[0].int_value);
+        int event_y = aivm_web_ui_poll_event_y((int)args[0].int_value);
+        if (event_type < 0 || event_x < 0 || event_y < 0) {
+            return ui_fail_not_available(result);
+        }
+        (void)ui_update_event_node(g_wasm_active_vm, event_type, event_x, event_y);
+    }
     if (g_wasm_active_vm == NULL || g_wasm_active_vm->ui_empty_event_node_handle <= 0) {
         return ui_fail_not_available(result);
     }
