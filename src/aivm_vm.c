@@ -551,6 +551,204 @@ static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** 
     return 1;
 }
 
+static int remap_value_node_handle(AivmValue* value, const int64_t* handle_map)
+{
+    int64_t old_handle;
+    if (value == NULL || handle_map == NULL) {
+        return 0;
+    }
+    if (value->type != AIVM_VAL_NODE) {
+        return 1;
+    }
+    old_handle = value->node_handle;
+    if (old_handle <= 0 || old_handle > (int64_t)AIVM_VM_NODE_CAPACITY) {
+        return 0;
+    }
+    if (handle_map[old_handle] <= 0) {
+        return 0;
+    }
+    value->node_handle = handle_map[old_handle];
+    return 1;
+}
+
+static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
+{
+    int64_t queue[AIVM_VM_NODE_CAPACITY];
+    size_t queue_read = 0U;
+    size_t queue_write = 0U;
+    size_t i;
+
+    if (vm == NULL || live == NULL) {
+        return 0;
+    }
+
+    #define ENQUEUE_HANDLE(handle_value) \
+        do { \
+            int64_t __h = (handle_value); \
+            if (__h > 0 && __h <= (int64_t)vm->node_count) { \
+                size_t __idx = (size_t)(__h - 1); \
+                if (live[__idx] == 0U) { \
+                    if (queue_write >= AIVM_VM_NODE_CAPACITY) { \
+                        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node mark queue overflow."); \
+                        return 0; \
+                    } \
+                    live[__idx] = 1U; \
+                    queue[queue_write] = __h; \
+                    queue_write += 1U; \
+                } \
+            } \
+        } while (0)
+
+    ENQUEUE_HANDLE(vm->process_argv_node_handle);
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (vm->stack[i].type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->stack[i].node_handle);
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (vm->locals[i].type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->locals[i].node_handle);
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].result.type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->completed_tasks[i].result.node_handle);
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (vm->par_values[i].type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->par_values[i].node_handle);
+        }
+    }
+
+    while (queue_read < queue_write) {
+        const AivmNodeRecord* node;
+        int64_t handle = queue[queue_read];
+        size_t child_index;
+        queue_read += 1U;
+        if (!lookup_node(vm, handle, &node)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid node handle during GC mark.");
+            return 0;
+        }
+        for (child_index = 0U; child_index < node->child_count; child_index += 1U) {
+            ENQUEUE_HANDLE(vm->node_children[node->child_start + child_index]);
+        }
+    }
+
+    #undef ENQUEUE_HANDLE
+    return 1;
+}
+
+static int compact_node_arenas(AivmVm* vm)
+{
+    uint8_t live[AIVM_VM_NODE_CAPACITY];
+    int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
+    AivmNodeRecord new_nodes[AIVM_VM_NODE_CAPACITY];
+    AivmNodeAttr new_attrs[AIVM_VM_NODE_ATTR_CAPACITY];
+    int64_t new_children[AIVM_VM_NODE_CHILD_CAPACITY];
+    size_t new_node_count = 0U;
+    size_t new_attr_count = 0U;
+    size_t new_child_count = 0U;
+    size_t i;
+
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->node_count == 0U) {
+        return 1;
+    }
+
+    memset(live, 0, sizeof(live));
+    memset(handle_map, 0, sizeof(handle_map));
+    if (!mark_live_node_handles(vm, live)) {
+        return 0;
+    }
+
+    for (i = 0U; i < vm->node_count; i += 1U) {
+        if (live[i] != 0U) {
+            handle_map[i + 1U] = (int64_t)(new_node_count + 1U);
+            new_node_count += 1U;
+        }
+    }
+
+    for (i = 0U; i < vm->node_count; i += 1U) {
+        const AivmNodeRecord* old_node;
+        AivmNodeRecord* out_node;
+        size_t attr_i;
+        size_t child_i;
+
+        if (live[i] == 0U) {
+            continue;
+        }
+        old_node = &vm->nodes[i];
+        out_node = &new_nodes[handle_map[i + 1U] - 1U];
+        *out_node = *old_node;
+        out_node->attr_start = new_attr_count;
+        out_node->child_start = new_child_count;
+
+        if (new_attr_count + old_node->attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+            new_child_count + old_node->child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node GC compaction overflow.");
+            return 0;
+        }
+
+        for (attr_i = 0U; attr_i < old_node->attr_count; attr_i += 1U) {
+            new_attrs[new_attr_count + attr_i] = vm->node_attrs[old_node->attr_start + attr_i];
+        }
+        for (child_i = 0U; child_i < old_node->child_count; child_i += 1U) {
+            int64_t old_child = vm->node_children[old_node->child_start + child_i];
+            if (old_child <= 0 || old_child > (int64_t)AIVM_VM_NODE_CAPACITY || handle_map[old_child] <= 0) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling child handle during node GC.");
+                return 0;
+            }
+            new_children[new_child_count + child_i] = handle_map[old_child];
+        }
+        new_attr_count += old_node->attr_count;
+        new_child_count += old_node->child_count;
+    }
+
+    memcpy(vm->nodes, new_nodes, sizeof(new_nodes));
+    memcpy(vm->node_attrs, new_attrs, sizeof(new_attrs));
+    memcpy(vm->node_children, new_children, sizeof(new_children));
+    vm->node_count = new_node_count;
+    vm->node_attr_count = new_attr_count;
+    vm->node_child_count = new_child_count;
+
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (!remap_value_node_handle(&vm->stack[i], handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid stack node handle during node GC.");
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (!remap_value_node_handle(&vm->locals[i], handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid local node handle during node GC.");
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (!remap_value_node_handle(&vm->completed_tasks[i].result, handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid completed-task node handle during node GC.");
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (!remap_value_node_handle(&vm->par_values[i], handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid parallel-value node handle during node GC.");
+            return 0;
+        }
+    }
+    if (vm->process_argv_node_handle > 0) {
+        if (vm->process_argv_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
+            handle_map[vm->process_argv_node_handle] <= 0) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid process argv node handle during node GC.");
+            return 0;
+        }
+        vm->process_argv_node_handle = handle_map[vm->process_argv_node_handle];
+    }
+    return 1;
+}
+
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -569,8 +767,15 @@ static int create_node_record(
     if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
         vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
         vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node arena capacity exceeded.");
-        return 0;
+        if (!compact_node_arenas(vm)) {
+            return 0;
+        }
+        if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
+            vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+            vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node arena capacity exceeded.");
+            return 0;
+        }
     }
 
     node = &vm->nodes[vm->node_count];
