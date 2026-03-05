@@ -624,6 +624,43 @@ static int test_reset_clears_pressure_counters_after_node_failure(void)
     return 0;
 }
 
+static int test_pressure_counters_remain_zero_on_successful_run(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 2 },
+        { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -666,6 +703,9 @@ int main(void)
         return 1;
     }
     if (test_reset_clears_pressure_counters_after_node_failure() != 0) {
+        return 1;
+    }
+    if (test_pressure_counters_remain_zero_on_successful_run() != 0) {
         return 1;
     }
 
