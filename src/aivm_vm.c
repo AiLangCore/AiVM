@@ -784,7 +784,7 @@ static int initialize_process_argv_node(AivmVm* vm)
 static int initialize_ui_builtin_nodes(AivmVm* vm)
 {
     AivmNodeAttr size_attrs[2];
-    AivmNodeAttr event_attrs[3];
+    AivmNodeAttr event_attrs[8];
     if (vm == NULL) {
         return 0;
     }
@@ -811,20 +811,35 @@ static int initialize_ui_builtin_nodes(AivmVm* vm)
     }
 
     event_attrs[0].key = "type";
-    event_attrs[0].kind = AIVM_NODE_ATTR_IDENTIFIER;
+    event_attrs[0].kind = AIVM_NODE_ATTR_STRING;
     event_attrs[0].string_value = "none";
-    event_attrs[1].key = "x";
-    event_attrs[1].kind = AIVM_NODE_ATTR_INT;
-    event_attrs[1].int_value = 0;
-    event_attrs[2].key = "y";
+    event_attrs[1].key = "targetId";
+    event_attrs[1].kind = AIVM_NODE_ATTR_STRING;
+    event_attrs[1].string_value = "";
+    event_attrs[2].key = "x";
     event_attrs[2].kind = AIVM_NODE_ATTR_INT;
-    event_attrs[2].int_value = 0;
+    event_attrs[2].int_value = -1;
+    event_attrs[3].key = "y";
+    event_attrs[3].kind = AIVM_NODE_ATTR_INT;
+    event_attrs[3].int_value = -1;
+    event_attrs[4].key = "key";
+    event_attrs[4].kind = AIVM_NODE_ATTR_STRING;
+    event_attrs[4].string_value = "";
+    event_attrs[5].key = "text";
+    event_attrs[5].kind = AIVM_NODE_ATTR_STRING;
+    event_attrs[5].string_value = "";
+    event_attrs[6].key = "modifiers";
+    event_attrs[6].kind = AIVM_NODE_ATTR_STRING;
+    event_attrs[6].string_value = "";
+    event_attrs[7].key = "repeat";
+    event_attrs[7].kind = AIVM_NODE_ATTR_BOOL;
+    event_attrs[7].bool_value = 0;
     if (!create_node_record(
             vm,
             "UiEvent",
             "ui_event",
             event_attrs,
-            3U,
+            8U,
             NULL,
             0U,
             &vm->ui_empty_event_node_handle)) {

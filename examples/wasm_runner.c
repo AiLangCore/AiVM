@@ -345,6 +345,57 @@ EM_JS(int, aivm_web_ui_poll_event_y, (int window_id), {
     }
     return globalThis.__aivmUiPollEventY(window_id) | 0;
 });
+
+EM_JS(int, aivm_web_ui_poll_event_target_id, (int window_id, char* out_ptr, int out_len), {
+    if (typeof globalThis.__aivmUiPollEventTargetId !== 'function') {
+        return -1;
+    }
+    if (!out_ptr || out_len <= 0) {
+        return -1;
+    }
+    stringToUTF8(globalThis.__aivmUiPollEventTargetId(window_id) || "", out_ptr, out_len);
+    return 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_key, (int window_id, char* out_ptr, int out_len), {
+    if (typeof globalThis.__aivmUiPollEventKey !== 'function') {
+        return -1;
+    }
+    if (!out_ptr || out_len <= 0) {
+        return -1;
+    }
+    stringToUTF8(globalThis.__aivmUiPollEventKey(window_id) || "", out_ptr, out_len);
+    return 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_text, (int window_id, char* out_ptr, int out_len), {
+    if (typeof globalThis.__aivmUiPollEventText !== 'function') {
+        return -1;
+    }
+    if (!out_ptr || out_len <= 0) {
+        return -1;
+    }
+    stringToUTF8(globalThis.__aivmUiPollEventText(window_id) || "", out_ptr, out_len);
+    return 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_modifiers, (int window_id, char* out_ptr, int out_len), {
+    if (typeof globalThis.__aivmUiPollEventModifiers !== 'function') {
+        return -1;
+    }
+    if (!out_ptr || out_len <= 0) {
+        return -1;
+    }
+    stringToUTF8(globalThis.__aivmUiPollEventModifiers(window_id) || "", out_ptr, out_len);
+    return 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_repeat, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventRepeat !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiPollEventRepeat(window_id) | 0;
+});
 #endif
 
 static int g_ui_next_window_id = 1;
@@ -360,6 +411,11 @@ static int ui_fail_not_available(AivmValue* result)
 }
 
 #ifdef AIVM_WASM_WEB
+static char g_ui_event_target_id[128];
+static char g_ui_event_key[64];
+static char g_ui_event_text[64];
+static char g_ui_event_modifiers[64];
+
 static int ui_update_window_size_node(AivmVm* vm, int width, int height)
 {
     size_t node_index;
@@ -387,21 +443,57 @@ static int ui_update_window_size_node(AivmVm* vm, int width, int height)
     return 1;
 }
 
-static int ui_update_event_node(AivmVm* vm, int event_type, int x, int y)
+static int ui_update_event_node(
+    AivmVm* vm,
+    int event_type,
+    const char* target_id,
+    int x,
+    int y,
+    const char* key,
+    const char* text,
+    const char* modifiers,
+    int repeat_flag)
 {
     size_t node_index;
     size_t i;
     AivmNodeRecord* node;
     const char* type_text = "none";
+    const char* target_text = (target_id != NULL) ? target_id : "";
+    const char* key_text = (key != NULL) ? key : "";
+    const char* input_text = (text != NULL) ? text : "";
+    const char* modifiers_text = (modifiers != NULL) ? modifiers : "";
+    int normalized_x = x;
+    int normalized_y = y;
+    int normalized_repeat = (repeat_flag != 0) ? 1 : 0;
     if (vm == NULL || vm->ui_empty_event_node_handle <= 0) {
         return 0;
     }
     if (event_type == 1) {
-        type_text = "click";
+        type_text = "closed";
+        normalized_x = -1;
+        normalized_y = -1;
+        key_text = "";
+        input_text = "";
+        modifiers_text = "";
+        normalized_repeat = 0;
     } else if (event_type == 2) {
-        type_text = "move";
+        type_text = "click";
+        key_text = "";
+        input_text = "";
+        modifiers_text = "";
+        normalized_repeat = 0;
     } else if (event_type == 3) {
-        type_text = "keydown";
+        type_text = "key";
+        normalized_x = -1;
+        normalized_y = -1;
+    } else {
+        normalized_x = -1;
+        normalized_y = -1;
+        target_text = "";
+        key_text = "";
+        input_text = "";
+        modifiers_text = "";
+        normalized_repeat = 0;
     }
     node_index = (size_t)(vm->ui_empty_event_node_handle - 1);
     if (node_index >= vm->node_count) {
@@ -413,12 +505,22 @@ static int ui_update_event_node(AivmVm* vm, int event_type, int x, int y)
         if (attr->key == NULL) {
             continue;
         }
-        if (strcmp(attr->key, "type") == 0 && attr->kind == AIVM_NODE_ATTR_IDENTIFIER) {
+        if (strcmp(attr->key, "type") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
             attr->string_value = type_text;
+        } else if (strcmp(attr->key, "targetId") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
+            attr->string_value = target_text;
         } else if (strcmp(attr->key, "x") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
-            attr->int_value = x;
+            attr->int_value = normalized_x;
         } else if (strcmp(attr->key, "y") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
-            attr->int_value = y;
+            attr->int_value = normalized_y;
+        } else if (strcmp(attr->key, "key") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
+            attr->string_value = key_text;
+        } else if (strcmp(attr->key, "text") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
+            attr->string_value = input_text;
+        } else if (strcmp(attr->key, "modifiers") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
+            attr->string_value = modifiers_text;
+        } else if (strcmp(attr->key, "repeat") == 0 && attr->kind == AIVM_NODE_ATTR_BOOL) {
+            attr->bool_value = normalized_repeat;
         }
     }
     return 1;
@@ -813,10 +915,28 @@ static int native_syscall_ui_poll_event(
         int event_type = aivm_web_ui_poll_event_type((int)args[0].int_value);
         int event_x = aivm_web_ui_poll_event_x((int)args[0].int_value);
         int event_y = aivm_web_ui_poll_event_y((int)args[0].int_value);
-        if (event_type < 0 || event_x < 0 || event_y < 0) {
+        int event_repeat;
+        if (event_type < 0 || event_x < -1 || event_y < -1 ||
+            aivm_web_ui_poll_event_target_id((int)args[0].int_value, g_ui_event_target_id, (int)sizeof(g_ui_event_target_id)) != 0 ||
+            aivm_web_ui_poll_event_key((int)args[0].int_value, g_ui_event_key, (int)sizeof(g_ui_event_key)) != 0 ||
+            aivm_web_ui_poll_event_text((int)args[0].int_value, g_ui_event_text, (int)sizeof(g_ui_event_text)) != 0 ||
+            aivm_web_ui_poll_event_modifiers((int)args[0].int_value, g_ui_event_modifiers, (int)sizeof(g_ui_event_modifiers)) != 0) {
             return ui_fail_not_available(result);
         }
-        (void)ui_update_event_node(g_wasm_active_vm, event_type, event_x, event_y);
+        event_repeat = aivm_web_ui_poll_event_repeat((int)args[0].int_value);
+        if (event_repeat < 0) {
+            return ui_fail_not_available(result);
+        }
+        (void)ui_update_event_node(
+            g_wasm_active_vm,
+            event_type,
+            g_ui_event_target_id,
+            event_x,
+            event_y,
+            g_ui_event_key,
+            g_ui_event_text,
+            g_ui_event_modifiers,
+            event_repeat);
     }
     if (g_wasm_active_vm == NULL || g_wasm_active_vm->ui_empty_event_node_handle <= 0) {
         return ui_fail_not_available(result);
