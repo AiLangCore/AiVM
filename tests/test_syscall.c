@@ -206,6 +206,88 @@ static int handler_crypto_base64_encode(
     return AIVM_SYSCALL_ERR_INVALID;
 }
 
+static int handler_worker_poll(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].int_value == 1) {
+        *result = aivm_value_int(0);
+    } else if (args[0].int_value == 2) {
+        *result = aivm_value_int(1);
+    } else if (args[0].int_value == 3) {
+        *result = aivm_value_int(-1);
+    } else if (args[0].int_value == 4) {
+        *result = aivm_value_int(-2);
+    } else {
+        *result = aivm_value_int(-3);
+    }
+    return AIVM_SYSCALL_OK;
+}
+
+static int handler_worker_result(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].int_value == 2) {
+        *result = aivm_value_string("worker-ok");
+    } else {
+        *result = aivm_value_string("");
+    }
+    return AIVM_SYSCALL_OK;
+}
+
+static int handler_worker_error(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].int_value == 3) {
+        *result = aivm_value_string("worker-fail");
+    } else if (args[0].int_value == 4) {
+        *result = aivm_value_string("canceled");
+    } else if (args[0].int_value == 999) {
+        *result = aivm_value_string("unknown_worker");
+    } else {
+        *result = aivm_value_string("");
+    }
+    return AIVM_SYSCALL_OK;
+}
+
+static int handler_worker_cancel(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bool(args[0].int_value == 1);
+    return AIVM_SYSCALL_OK;
+}
+
 int main(void)
 {
     AivmValue result;
@@ -240,6 +322,12 @@ int main(void)
     };
     static const AivmSyscallBinding crypto_bindings[] = {
         { "sys.crypto.base64Encode", handler_crypto_base64_encode }
+    };
+    static const AivmSyscallBinding worker_bindings[] = {
+        { "sys.worker.poll", handler_worker_poll },
+        { "sys.worker.result", handler_worker_result },
+        { "sys.worker.error", handler_worker_error },
+        { "sys.worker.cancel", handler_worker_cancel }
     };
 
     status = aivm_syscall_invoke(NULL, "sys.echo", NULL, 0U, &result);
@@ -384,6 +472,80 @@ int main(void)
         return 1;
     }
     if (expect(result.type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(1);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(2);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == 1) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(3);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == -1) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(4);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == -2) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(999);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == -3) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(2);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.result", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_STRING &&
+               strcmp(result.string_value, "worker-ok") == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(999);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.result", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_STRING &&
+               strcmp(result.string_value, "") == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(3);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.error", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_STRING &&
+               strcmp(result.string_value, "worker-fail") == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(4);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.error", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_STRING &&
+               strcmp(result.string_value, "canceled") == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(999);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.error", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_STRING &&
+               strcmp(result.string_value, "unknown_worker") == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(1);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.cancel", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_BOOL && result.bool_value == 1) != 0) {
+        return 1;
+    }
+    arg = aivm_value_int(999);
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.cancel", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_BOOL && result.bool_value == 0) != 0) {
+        return 1;
+    }
+    arg = aivm_value_string("bad");
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
+    if (expect(status == AIVM_SYSCALL_ERR_CONTRACT) != 0) {
+        return 1;
+    }
+    status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.cancel", NULL, 0U, &result);
+    if (expect(status == AIVM_SYSCALL_ERR_CONTRACT) != 0) {
         return 1;
     }
     if (expect(strcmp(aivm_syscall_status_code((AivmSyscallStatus)-999), "AIVMS999") == 0) != 0) {
