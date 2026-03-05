@@ -415,6 +415,72 @@ static char g_ui_event_target_id[128];
 static char g_ui_event_key[64];
 static char g_ui_event_text[64];
 static char g_ui_event_modifiers[64];
+static char g_ui_event_modifiers_normalized[32];
+
+static int modifiers_has_token(const char* text, const char* token)
+{
+    const char* p = text;
+    size_t token_len;
+    if (text == NULL || token == NULL) {
+        return 0;
+    }
+    token_len = strlen(token);
+    if (token_len == 0U) {
+        return 0;
+    }
+    while (p != NULL && *p != '\0') {
+        const char* end = strchr(p, ',');
+        size_t len = (end != NULL) ? (size_t)(end - p) : strlen(p);
+        if (len == token_len && strncmp(p, token, token_len) == 0) {
+            return 1;
+        }
+        if (end == NULL) {
+            break;
+        }
+        p = end + 1;
+    }
+    return 0;
+}
+
+static const char* normalize_modifiers(const char* text)
+{
+    size_t used = 0U;
+    int has_any = 0;
+    struct TokenEntry {
+        const char* token;
+    };
+    static const struct TokenEntry tokens[] = {
+        { "alt" },
+        { "ctrl" },
+        { "meta" },
+        { "shift" }
+    };
+    size_t i;
+    g_ui_event_modifiers_normalized[0] = '\0';
+    for (i = 0U; i < sizeof(tokens) / sizeof(tokens[0]); i += 1U) {
+        const char* token = tokens[i].token;
+        size_t token_len;
+        if (!modifiers_has_token(text, token)) {
+            continue;
+        }
+        token_len = strlen(token);
+        if (has_any) {
+            if (used + 1U >= sizeof(g_ui_event_modifiers_normalized)) {
+                break;
+            }
+            g_ui_event_modifiers_normalized[used] = ',';
+            used += 1U;
+        }
+        if (used + token_len >= sizeof(g_ui_event_modifiers_normalized)) {
+            break;
+        }
+        memcpy(g_ui_event_modifiers_normalized + used, token, token_len);
+        used += token_len;
+        has_any = 1;
+    }
+    g_ui_event_modifiers_normalized[used] = '\0';
+    return g_ui_event_modifiers_normalized;
+}
 
 static int ui_update_window_size_node(AivmVm* vm, int width, int height)
 {
@@ -461,7 +527,7 @@ static int ui_update_event_node(
     const char* target_text = (target_id != NULL) ? target_id : "";
     const char* key_text = (key != NULL) ? key : "";
     const char* input_text = (text != NULL) ? text : "";
-    const char* modifiers_text = (modifiers != NULL) ? modifiers : "";
+    const char* modifiers_text = normalize_modifiers((modifiers != NULL) ? modifiers : "");
     int normalized_x = x;
     int normalized_y = y;
     int normalized_repeat = (repeat_flag != 0) ? 1 : 0;
