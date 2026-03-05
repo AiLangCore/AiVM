@@ -17,6 +17,7 @@
 static const char* g_wasm_syscall_error_message = NULL;
 static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
+static AivmVm* g_wasm_active_vm = NULL;
 
 static int native_syscall_unavailable(
     const char* target,
@@ -323,6 +324,35 @@ static int ui_fail_not_available(AivmValue* result)
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
 
+#ifdef AIVM_WASM_WEB
+static int ui_update_window_size_node(AivmVm* vm, int width, int height)
+{
+    size_t node_index;
+    size_t i;
+    AivmNodeRecord* node;
+    if (vm == NULL || vm->ui_default_window_size_node_handle <= 0) {
+        return 0;
+    }
+    node_index = (size_t)(vm->ui_default_window_size_node_handle - 1);
+    if (node_index >= vm->node_count) {
+        return 0;
+    }
+    node = &vm->nodes[node_index];
+    for (i = 0U; i < node->attr_count; i += 1U) {
+        AivmNodeAttr* attr = &vm->node_attrs[node->attr_start + i];
+        if (attr->kind != AIVM_NODE_ATTR_INT || attr->key == NULL) {
+            continue;
+        }
+        if (strcmp(attr->key, "width") == 0) {
+            attr->int_value = width;
+        } else if (strcmp(attr->key, "height") == 0) {
+            attr->int_value = height;
+        }
+    }
+    return 1;
+}
+#endif
+
 static int native_syscall_ui_create_window(
     const char* target,
     const AivmValue* args,
@@ -355,6 +385,7 @@ static int native_syscall_ui_create_window(
     if (aivm_web_ui_create_window(window_id, args[0].string_value, (int)args[1].int_value, (int)args[2].int_value) != 0) {
         return ui_fail_not_available(result);
     }
+    (void)ui_update_window_size_node(g_wasm_active_vm, (int)args[1].int_value, (int)args[2].int_value);
 #else
     return ui_fail_not_available(result);
 #endif
@@ -689,6 +720,58 @@ static int native_syscall_ui_wait_frame(
 #endif
     *result = aivm_value_void();
     return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_poll_event(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    #ifdef AIVM_WASM_WEB
+    if (g_wasm_active_vm == NULL || g_wasm_active_vm->ui_empty_event_node_handle <= 0) {
+        return ui_fail_not_available(result);
+    }
+    *result = aivm_value_node(g_wasm_active_vm->ui_empty_event_node_handle);
+    return AIVM_SYSCALL_OK;
+    #else
+    (void)g_wasm_active_vm;
+    return ui_fail_not_available(result);
+    #endif
+}
+
+static int native_syscall_ui_get_window_size(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    #ifdef AIVM_WASM_WEB
+    if (g_wasm_active_vm == NULL || g_wasm_active_vm->ui_default_window_size_node_handle <= 0) {
+        return ui_fail_not_available(result);
+    }
+    *result = aivm_value_node(g_wasm_active_vm->ui_default_window_size_node_handle);
+    return AIVM_SYSCALL_OK;
+    #else
+    (void)g_wasm_active_vm;
+    return ui_fail_not_available(result);
+    #endif
 }
 
 static int native_syscall_ui_close_window(
@@ -1221,11 +1304,17 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_ui_present;
         } else if (strcmp(contract->target, "sys.ui.waitFrame") == 0) {
             bindings[binding_count].handler = native_syscall_ui_wait_frame;
+        } else if (strcmp(contract->target, "sys.ui.pollEvent") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_poll_event;
+        } else if (strcmp(contract->target, "sys.ui.getWindowSize") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_get_window_size;
         } else if (strcmp(contract->target, "sys.ui.closeWindow") == 0) {
             bindings[binding_count].handler = native_syscall_ui_close_window;
         }
         binding_count += 1U;
     }
+
+    g_wasm_active_vm = &vm;
 
     if (!aivm_execute_program_with_syscalls_and_argv(
             &program,
@@ -1241,18 +1330,23 @@ int main(int argc, char** argv)
                 "Err#err1(code=%s message=\"%s\" nodeId=vm)\n",
                 (g_wasm_syscall_error_code != NULL) ? g_wasm_syscall_error_code : "RUN001",
                 g_wasm_syscall_error_message);
+            g_wasm_active_vm = NULL;
             return 3;
         }
         fprintf(stderr, "Err#err1(code=RUN001 message=\"AiBC1 execution failed.\" nodeId=vm)\n");
+        g_wasm_active_vm = NULL;
         return 3;
     }
     if (vm.status == AIVM_VM_STATUS_HALTED && vm.stack_count > 0U) {
         const AivmValue* top = &vm.stack[vm.stack_count - 1U];
         if (top->type == AIVM_VAL_INT) {
             printf("Ok#ok1(type=int value=%d)\n", (int)top->int_value);
+            g_wasm_active_vm = NULL;
             return (int)top->int_value;
         }
     }
+
+    g_wasm_active_vm = NULL;
 
     return 0;
 }

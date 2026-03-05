@@ -781,6 +781,49 @@ static int initialize_process_argv_node(AivmVm* vm)
     return 1;
 }
 
+static int initialize_ui_builtin_nodes(AivmVm* vm)
+{
+    AivmNodeAttr size_attrs[2];
+    if (vm == NULL) {
+        return 0;
+    }
+
+    vm->ui_default_window_size_node_handle = 0;
+    vm->ui_empty_event_node_handle = 0;
+
+    size_attrs[0].key = "width";
+    size_attrs[0].kind = AIVM_NODE_ATTR_INT;
+    size_attrs[0].int_value = 800;
+    size_attrs[1].key = "height";
+    size_attrs[1].kind = AIVM_NODE_ATTR_INT;
+    size_attrs[1].int_value = 600;
+    if (!create_node_record(
+            vm,
+            "UiWindowSize",
+            "ui_window_size",
+            size_attrs,
+            2U,
+            NULL,
+            0U,
+            &vm->ui_default_window_size_node_handle)) {
+        return 0;
+    }
+
+    if (!create_node_record(
+            vm,
+            "UiEventNone",
+            "ui_event_none",
+            NULL,
+            0U,
+            NULL,
+            0U,
+            &vm->ui_empty_event_node_handle)) {
+        return 0;
+    }
+
+    return 1;
+}
+
 void aivm_reset_state(AivmVm* vm)
 {
     if (vm == NULL) {
@@ -807,7 +850,10 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_attr_count = 0U;
     vm->node_child_count = 0U;
     vm->process_argv_node_handle = 0;
+    vm->ui_default_window_size_node_handle = 0;
+    vm->ui_empty_event_node_handle = 0;
     (void)initialize_process_argv_node(vm);
+    (void)initialize_ui_builtin_nodes(vm);
 }
 
 void aivm_init(AivmVm* vm, const AivmProgram* program)

@@ -123,6 +123,8 @@ typedef struct {
     size_t node_attr_count;
     int64_t node_children[AIVM_VM_NODE_CHILD_CAPACITY];
     size_t node_child_count;
+    int64_t ui_default_window_size_node_handle;
+    int64_t ui_empty_event_node_handle;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);
