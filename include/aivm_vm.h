@@ -136,6 +136,7 @@ typedef struct {
     size_t node_attr_high_water;
     size_t node_child_high_water;
     size_t node_gc_compaction_count;
+    size_t node_gc_attempt_count;
     size_t node_gc_reclaimed_nodes;
     size_t node_gc_reclaimed_attrs;
     size_t node_gc_reclaimed_children;

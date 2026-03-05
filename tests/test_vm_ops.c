@@ -2421,6 +2421,9 @@ static int test_node_compaction_reclaims_unreachable_nodes(void)
     if (expect(vm.node_gc_compaction_count > 0U) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_attempt_count >= vm.node_gc_compaction_count) != 0) {
+        return 1;
+    }
     if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
         return 1;
     }
@@ -2480,6 +2483,9 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
         return 1;
     }
     if (expect(vm.node_gc_compaction_count > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_attempt_count >= vm.node_gc_compaction_count) != 0) {
         return 1;
     }
     if (expect(vm.node_gc_compaction_count >= 1U) != 0) {
@@ -2552,6 +2558,9 @@ static int test_node_compaction_does_not_run_below_pressure_threshold(void)
     if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
+        return 1;
+    }
     if (expect(vm.node_count == expected_node_count) != 0) {
         return 1;
     }
@@ -2611,6 +2620,9 @@ static int test_node_capacity_failure_resets_gc_allocation_counter(void)
         return 1;
     }
     if (expect(vm.node_gc_compaction_count >= 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_attempt_count >= vm.node_gc_compaction_count) != 0) {
         return 1;
     }
     if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {

@@ -204,6 +204,9 @@ static int test_reset_keeps_gc_allocation_counter_deterministic(void)
     if (expect(vm.node_allocations_since_gc == 0U) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
+        return 1;
+    }
     return 0;
 }
 
@@ -251,6 +254,9 @@ static int test_reset_clears_gc_counters_after_allocations(void)
         return 1;
     }
     if (expect(vm.node_gc_compaction_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
         return 1;
     }
     if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
@@ -332,6 +338,9 @@ static int test_gc_policy_requires_interval_even_under_pressure(void)
     if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
+        return 1;
+    }
     if (expect(vm.node_allocations_since_gc == (size_t)(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U)) != 0) {
         return 1;
     }
@@ -395,6 +404,9 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
         return 1;
     }
     if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_attempt_count == 1U) != 0) {
         return 1;
     }
     if (expect(vm.node_gc_reclaimed_nodes == (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {

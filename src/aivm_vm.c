@@ -665,6 +665,7 @@ static int compact_node_arenas(AivmVm* vm)
     if (vm == NULL) {
         return 0;
     }
+    vm->node_gc_attempt_count += 1U;
     if (vm->node_count == 0U) {
         return 1;
     }
@@ -1069,6 +1070,7 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_attr_high_water = 0U;
     vm->node_child_high_water = 0U;
     vm->node_gc_compaction_count = 0U;
+    vm->node_gc_attempt_count = 0U;
     vm->node_gc_reclaimed_nodes = 0U;
     vm->node_gc_reclaimed_attrs = 0U;
     vm->node_gc_reclaimed_children = 0U;
