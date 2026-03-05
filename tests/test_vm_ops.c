@@ -1208,7 +1208,7 @@ static int test_string_arena_overflow_sets_error(void)
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
-    if (expect(vm.error == AIVM_VM_ERR_STRING_OVERFLOW) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
         return 1;
     }
 
@@ -1218,7 +1218,7 @@ static int test_string_arena_overflow_sets_error(void)
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
-    if (expect(vm.error == AIVM_VM_ERR_STRING_OVERFLOW) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
         return 1;
     }
 
@@ -1228,7 +1228,7 @@ static int test_string_arena_overflow_sets_error(void)
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
-    if (expect(vm.error == AIVM_VM_ERR_STRING_OVERFLOW) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
         return 1;
     }
 

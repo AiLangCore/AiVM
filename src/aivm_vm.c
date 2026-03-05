@@ -36,7 +36,7 @@ static char* arena_alloc(AivmVm* vm, size_t size)
         return NULL;
     }
     if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
-        set_vm_error(vm, AIVM_VM_ERR_STRING_OVERFLOW, "VM string arena overflow.");
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return NULL;
     }
 
@@ -55,7 +55,7 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
         return NULL;
     }
     if (vm->bytes_arena_used + size > AIVM_VM_BYTES_ARENA_CAPACITY) {
-        set_vm_error(vm, AIVM_VM_ERR_STRING_OVERFLOW, "VM bytes arena overflow.");
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         return NULL;
     }
     start = &vm->bytes_arena[vm->bytes_arena_used];
@@ -595,7 +595,7 @@ static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
                 size_t __idx = (size_t)(__h - 1); \
                 if (live[__idx] == 0U) { \
                     if (queue_write >= AIVM_VM_NODE_CAPACITY) { \
-                        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node mark queue overflow."); \
+                        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue capacity exceeded."); \
                         return 0; \
                     } \
                     live[__idx] = 1U; \
@@ -700,7 +700,7 @@ static int compact_node_arenas(AivmVm* vm)
 
         if (new_attr_count + old_node->attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
             new_child_count + old_node->child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node GC compaction overflow.");
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
             return 0;
         }
 
@@ -789,7 +789,7 @@ static int create_node_record(
         if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
             vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
             vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node arena capacity exceeded.");
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             return 0;
         }
     }
@@ -2530,6 +2530,8 @@ const char* aivm_vm_error_code(AivmVmError error)
             return "AIVM009";
         case AIVM_VM_ERR_SYSCALL:
             return "AIVM010";
+        case AIVM_VM_ERR_MEMORY_PRESSURE:
+            return "AIVM011";
         default:
             return "AIVM999";
     }
@@ -2560,6 +2562,8 @@ const char* aivm_vm_error_message(AivmVmError error)
             return "VM string arena overflow.";
         case AIVM_VM_ERR_SYSCALL:
             return "Syscall dispatch failed.";
+        case AIVM_VM_ERR_MEMORY_PRESSURE:
+            return "VM memory pressure limit exceeded.";
         default:
             return "Unknown VM error.";
     }

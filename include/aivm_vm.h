@@ -25,7 +25,8 @@ typedef enum {
     AIVM_VM_ERR_TYPE_MISMATCH = 7,
     AIVM_VM_ERR_INVALID_PROGRAM = 8,
     AIVM_VM_ERR_STRING_OVERFLOW = 9,
-    AIVM_VM_ERR_SYSCALL = 10
+    AIVM_VM_ERR_SYSCALL = 10,
+    AIVM_VM_ERR_MEMORY_PRESSURE = 11
 } AivmVmError;
 
 typedef struct {
