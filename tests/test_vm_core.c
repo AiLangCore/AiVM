@@ -422,6 +422,84 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
     return 0;
 }
 
+static int test_gc_counters_saturate_without_wrapping(void)
+{
+    AivmVm vm;
+    AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "tmp" }
+    };
+    AivmProgram program;
+    const char* argv_values[AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U];
+    size_t i;
+    size_t ip = 0U;
+
+    for (i = 0U; i < (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U); i += 1U) {
+        argv_values[i] = "arg";
+    }
+
+    for (i = 0U; i < (size_t)(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U); i += 1U) {
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_POP;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = 1U;
+
+    aivm_init_with_syscalls_and_argv(
+        &vm,
+        &program,
+        NULL,
+        0U,
+        argv_values,
+        (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U));
+
+    vm.node_gc_attempt_count = (size_t)-1;
+    vm.node_gc_compaction_count = (size_t)-1;
+    vm.node_gc_reclaimed_nodes = (size_t)-1;
+    vm.node_gc_reclaimed_attrs = (size_t)-1;
+    vm.node_gc_reclaimed_children = (size_t)-1;
+
+    aivm_run(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_attempt_count == (size_t)-1) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == (size_t)-1) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == (size_t)-1) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_attrs == (size_t)-1) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_children == (size_t)-1) != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
 {
     AivmVm vm;
@@ -703,6 +781,9 @@ int main(void)
         return 1;
     }
     if (test_gc_policy_triggers_when_interval_and_pressure_align() != 0) {
+        return 1;
+    }
+    if (test_gc_counters_saturate_without_wrapping() != 0) {
         return 1;
     }
     if (test_reset_clears_bytes_arena_after_syscall_materialization() != 0) {
