@@ -1,0 +1,20 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.ui.drawRect")
+  Const#k1(kind=int value=1)
+  Const#k2(kind=int value=0)
+  Const#k3(kind=int value=0)
+  Const#k4(kind=int value=100)
+  Const#k5(kind=int value=40)
+  Const#k6(kind=string value="#00AAFF")
+  Func#f_main(name=main params="argv" locals="") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CONST a=1)
+    Inst#i2(op=CONST a=2)
+    Inst#i3(op=CONST a=3)
+    Inst#i4(op=CONST a=4)
+    Inst#i5(op=CONST a=5)
+    Inst#i6(op=CONST a=6)
+    Inst#i7(op=CALL_SYS a=6)
+    Inst#i8(op=HALT)
+  }
+}
