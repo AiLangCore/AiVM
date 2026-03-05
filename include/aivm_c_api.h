@@ -57,6 +57,9 @@ AIVM_API AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
     const char* const* process_argv,
     size_t process_argv_count);
 AIVM_API AivmCResult aivm_c_execute_aibc1(const uint8_t* bytes, size_t byte_count);
+AIVM_API size_t aivm_c_vm_task_reclaim_count(const AivmVm* vm);
+AIVM_API size_t aivm_c_vm_task_reclaim_skip_pinned_count(const AivmVm* vm);
+AIVM_API size_t aivm_c_vm_task_reclaim_exhausted_count(const AivmVm* vm);
 AIVM_API uint32_t aivm_c_abi_version(void);
 
 #ifdef __cplusplus

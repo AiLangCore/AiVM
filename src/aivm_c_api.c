@@ -163,6 +163,21 @@ AivmCResult aivm_c_execute_aibc1(const uint8_t* bytes, size_t byte_count)
     return result;
 }
 
+size_t aivm_c_vm_task_reclaim_count(const AivmVm* vm)
+{
+    return vm != NULL ? vm->task_reclaim_count : 0U;
+}
+
+size_t aivm_c_vm_task_reclaim_skip_pinned_count(const AivmVm* vm)
+{
+    return vm != NULL ? vm->task_reclaim_skip_pinned_count : 0U;
+}
+
+size_t aivm_c_vm_task_reclaim_exhausted_count(const AivmVm* vm)
+{
+    return vm != NULL ? vm->task_reclaim_exhausted_count : 0U;
+}
+
 uint32_t aivm_c_abi_version(void)
 {
     return 1U;
