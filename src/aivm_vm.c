@@ -812,6 +812,8 @@ static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
         } while (0)
 
     ENQUEUE_HANDLE(vm->process_argv_node_handle);
+    ENQUEUE_HANDLE(vm->ui_default_window_size_node_handle);
+    ENQUEUE_HANDLE(vm->ui_empty_event_node_handle);
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (vm->stack[i].type == AIVM_VAL_NODE) {
             ENQUEUE_HANDLE(vm->stack[i].node_handle);
@@ -968,6 +970,22 @@ static int compact_node_arenas(AivmVm* vm)
             return 0;
         }
         vm->process_argv_node_handle = handle_map[vm->process_argv_node_handle];
+    }
+    if (vm->ui_default_window_size_node_handle > 0) {
+        if (vm->ui_default_window_size_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
+            handle_map[vm->ui_default_window_size_node_handle] <= 0) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid ui window size node handle during node GC.");
+            return 0;
+        }
+        vm->ui_default_window_size_node_handle = handle_map[vm->ui_default_window_size_node_handle];
+    }
+    if (vm->ui_empty_event_node_handle > 0) {
+        if (vm->ui_empty_event_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
+            handle_map[vm->ui_empty_event_node_handle] <= 0) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid ui event node handle during node GC.");
+            return 0;
+        }
+        vm->ui_empty_event_node_handle = handle_map[vm->ui_empty_event_node_handle];
     }
     return 1;
 }
