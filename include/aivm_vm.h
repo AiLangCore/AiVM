@@ -123,6 +123,15 @@ typedef struct {
     size_t node_attr_count;
     int64_t node_children[AIVM_VM_NODE_CHILD_CAPACITY];
     size_t node_child_count;
+    size_t string_arena_high_water;
+    size_t bytes_arena_high_water;
+    size_t node_high_water;
+    size_t node_attr_high_water;
+    size_t node_child_high_water;
+    size_t node_gc_compaction_count;
+    size_t node_gc_reclaimed_nodes;
+    size_t node_gc_reclaimed_attrs;
+    size_t node_gc_reclaimed_children;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);

@@ -42,6 +42,9 @@ static char* arena_alloc(AivmVm* vm, size_t size)
 
     start = &vm->string_arena[vm->string_arena_used];
     vm->string_arena_used += size;
+    if (vm->string_arena_used > vm->string_arena_high_water) {
+        vm->string_arena_high_water = vm->string_arena_used;
+    }
     return start;
 }
 
@@ -57,6 +60,9 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
     }
     start = &vm->bytes_arena[vm->bytes_arena_used];
     vm->bytes_arena_used += size;
+    if (vm->bytes_arena_used > vm->bytes_arena_high_water) {
+        vm->bytes_arena_high_water = vm->bytes_arena_used;
+    }
     return start;
 }
 
@@ -649,6 +655,9 @@ static int compact_node_arenas(AivmVm* vm)
     size_t new_node_count = 0U;
     size_t new_attr_count = 0U;
     size_t new_child_count = 0U;
+    size_t old_node_count;
+    size_t old_attr_count;
+    size_t old_child_count;
     size_t i;
 
     if (vm == NULL) {
@@ -657,6 +666,9 @@ static int compact_node_arenas(AivmVm* vm)
     if (vm->node_count == 0U) {
         return 1;
     }
+    old_node_count = vm->node_count;
+    old_attr_count = vm->node_attr_count;
+    old_child_count = vm->node_child_count;
 
     memset(live, 0, sizeof(live));
     memset(handle_map, 0, sizeof(handle_map));
@@ -713,6 +725,10 @@ static int compact_node_arenas(AivmVm* vm)
     vm->node_count = new_node_count;
     vm->node_attr_count = new_attr_count;
     vm->node_child_count = new_child_count;
+    vm->node_gc_compaction_count += 1U;
+    vm->node_gc_reclaimed_nodes += old_node_count - new_node_count;
+    vm->node_gc_reclaimed_attrs += old_attr_count - new_attr_count;
+    vm->node_gc_reclaimed_children += old_child_count - new_child_count;
 
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (!remap_value_node_handle(&vm->stack[i], handle_map)) {
@@ -816,6 +832,15 @@ static int create_node_record(
     vm->node_attr_count += attr_count;
     vm->node_child_count += child_count;
     vm->node_count += 1U;
+    if (vm->node_count > vm->node_high_water) {
+        vm->node_high_water = vm->node_count;
+    }
+    if (vm->node_attr_count > vm->node_attr_high_water) {
+        vm->node_attr_high_water = vm->node_attr_count;
+    }
+    if (vm->node_child_count > vm->node_child_high_water) {
+        vm->node_child_high_water = vm->node_child_count;
+    }
     *out_handle = (int64_t)vm->node_count;
     return 1;
 }
@@ -1011,6 +1036,15 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_count = 0U;
     vm->node_attr_count = 0U;
     vm->node_child_count = 0U;
+    vm->string_arena_high_water = 0U;
+    vm->bytes_arena_high_water = 0U;
+    vm->node_high_water = 0U;
+    vm->node_attr_high_water = 0U;
+    vm->node_child_high_water = 0U;
+    vm->node_gc_compaction_count = 0U;
+    vm->node_gc_reclaimed_nodes = 0U;
+    vm->node_gc_reclaimed_attrs = 0U;
+    vm->node_gc_reclaimed_children = 0U;
     vm->process_argv_node_handle = 0;
     (void)initialize_process_argv_node(vm);
 }

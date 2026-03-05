@@ -2306,6 +2306,15 @@ static int test_node_compaction_reclaims_unreachable_nodes(void)
     if (expect(vm.node_count <= AIVM_VM_NODE_CAPACITY) != 0) {
         return 1;
     }
+    if (expect(vm.node_gc_compaction_count > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_high_water >= vm.node_count) != 0) {
+        return 1;
+    }
     return 0;
 }
 
