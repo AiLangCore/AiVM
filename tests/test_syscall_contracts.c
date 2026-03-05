@@ -469,10 +469,34 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(73U, crypto_hmac_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.worker.start", crypto_hmac_args, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_COUNT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(73U, crypto_hmac_args, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_COUNT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.worker.start", net_string_int_args, 2U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(73U, net_string_int_args, 2U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.worker.poll", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(74U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.worker.poll", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(74U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.worker.result", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
@@ -481,16 +505,31 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(75U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.worker.error", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(76U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.worker.cancel", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(77U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.worker.cancel", NULL, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(77U, NULL, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.debug.emit", crypto_hmac_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
@@ -545,6 +584,15 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.debug.traceAsync", int_string_string_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.debug.taskReclaimStats", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(115U, NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_NODE) != 0) {
         return 1;
     }
 

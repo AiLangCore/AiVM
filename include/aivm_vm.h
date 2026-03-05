@@ -61,7 +61,15 @@ typedef struct {
     size_t child_count;
 } AivmNodeRecord;
 
+typedef enum {
+    AIVM_TASK_STATE_PENDING = 0,
+    AIVM_TASK_STATE_COMPLETED = 1,
+    AIVM_TASK_STATE_FAILED = 2,
+    AIVM_TASK_STATE_CANCELED = 3
+} AivmTaskState;
+
 typedef struct {
+    AivmTaskState state;
     int64_t handle;
     AivmValue result;
 } AivmCompletedTask;
@@ -119,6 +127,9 @@ typedef struct {
     AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
     size_t completed_task_count;
     int64_t next_task_handle;
+    size_t task_reclaim_count;
+    size_t task_reclaim_skip_pinned_count;
+    size_t task_reclaim_exhausted_count;
     AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
     size_t par_context_count;
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];

@@ -1,5 +1,6 @@
 #include "aivm_vm.h"
 #include <string.h>
+#include "sys/aivm_syscall_contracts.h"
 
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
@@ -13,6 +14,18 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
+static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
+static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
+static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value);
+static int create_node_record(
+    AivmVm* vm,
+    const char* kind,
+    const char* id,
+    const AivmNodeAttr* attrs,
+    size_t attr_count,
+    const int64_t* children,
+    size_t child_count,
+    int64_t* out_handle);
 
 static void increment_counter_saturating(size_t* counter)
 {
@@ -418,6 +431,19 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CALL_SYS target must be string.");
         return 0;
     }
+    if (strcmp(target_value.string_value, "sys.debug.taskReclaimStats") == 0) {
+        AivmValueType expected_return_type = AIVM_VAL_VOID;
+        contract_status = aivm_syscall_contract_validate(
+            target_value.string_value,
+            args,
+            arg_count,
+            &expected_return_type);
+        if (contract_status != AIVM_CONTRACT_OK) {
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_contract_failure_detail(contract_status));
+            return 0;
+        }
+        return call_debug_task_reclaim_stats(vm, out_result);
+    }
 
     syscall_status = aivm_syscall_dispatch_checked_with_contract(
         vm->syscall_bindings,
@@ -476,21 +502,114 @@ static const char* syscall_contract_failure_detail(AivmContractStatus status)
     }
 }
 
+static int transition_task_state(AivmVm* vm, AivmCompletedTask* task, AivmTaskState next_state)
+{
+    if (vm == NULL || task == NULL) {
+        return 0;
+    }
+    if (task->state == AIVM_TASK_STATE_PENDING &&
+        (next_state == AIVM_TASK_STATE_COMPLETED ||
+         next_state == AIVM_TASK_STATE_FAILED ||
+         next_state == AIVM_TASK_STATE_CANCELED)) {
+        task->state = next_state;
+        return 1;
+    }
+    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task state transition was invalid.");
+    return 0;
+}
+
+static int value_matches_task_handle(AivmValue value, int64_t handle)
+{
+    return value.type == AIVM_VAL_INT && value.int_value == handle;
+}
+
+static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
+{
+    size_t i;
+    if (vm == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (value_matches_task_handle(vm->stack[i], handle)) {
+            return 1;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (value_matches_task_handle(vm->locals[i], handle)) {
+            return 1;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (value_matches_task_handle(vm->par_values[i], handle)) {
+            return 1;
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].handle != handle &&
+            value_matches_task_handle(vm->completed_tasks[i].result, handle)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int reclaim_oldest_completed_task_slot(AivmVm* vm)
+{
+    size_t index;
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->completed_task_count == 0U) {
+        return 1;
+    }
+    for (index = 0U; index < vm->completed_task_count; index += 1U) {
+        if (!is_task_handle_pinned(vm, vm->completed_tasks[index].handle)) {
+            break;
+        }
+        vm->task_reclaim_skip_pinned_count += 1U;
+    }
+    if (index >= vm->completed_task_count) {
+        vm->task_reclaim_exhausted_count += 1U;
+        return 0;
+    }
+    if (index + 1U < vm->completed_task_count) {
+        memmove(
+            &vm->completed_tasks[index],
+            &vm->completed_tasks[index + 1U],
+            (vm->completed_task_count - index - 1U) * sizeof(AivmCompletedTask));
+    }
+    vm->completed_task_count -= 1U;
+    vm->task_reclaim_count += 1U;
+    return 1;
+}
+
 static int push_completed_task(AivmVm* vm, AivmValue result)
 {
+    AivmCompletedTask* task;
     int64_t handle;
     if (vm == NULL) {
         return 0;
     }
     if (vm->completed_task_count >= AIVM_VM_TASK_CAPACITY) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
+        if (!reclaim_oldest_completed_task_slot(vm)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
+            return 0;
+        }
+    }
+    if (vm->next_task_handle == INT64_MAX) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task handle overflow.");
         return 0;
     }
 
     handle = vm->next_task_handle;
     vm->next_task_handle += 1;
-    vm->completed_tasks[vm->completed_task_count].handle = handle;
-    vm->completed_tasks[vm->completed_task_count].result = result;
+    task = &vm->completed_tasks[vm->completed_task_count];
+    task->state = AIVM_TASK_STATE_PENDING;
+    task->handle = handle;
+    task->result = result;
+    if (!transition_task_state(vm, task, AIVM_TASK_STATE_COMPLETED)) {
+        return 0;
+    }
     vm->completed_task_count += 1U;
     return aivm_stack_push(vm, aivm_value_int(handle));
 }
@@ -549,14 +668,77 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
     return 1;
 }
 
-static int find_completed_task(const AivmVm* vm, int64_t handle, AivmValue* out_result)
+static int is_terminal_task_state(AivmTaskState state)
+{
+    return state == AIVM_TASK_STATE_COMPLETED ||
+        state == AIVM_TASK_STATE_FAILED ||
+        state == AIVM_TASK_STATE_CANCELED;
+}
+
+static int task_terminal_payload_is_valid(const AivmVm* vm, const AivmCompletedTask* task)
+{
+    const AivmNodeRecord* node;
+    if (vm == NULL || task == NULL) {
+        return 0;
+    }
+    if (task->state == AIVM_TASK_STATE_FAILED || task->state == AIVM_TASK_STATE_CANCELED) {
+        if (task->result.type != AIVM_VAL_NODE) {
+            return 0;
+        }
+        if (!lookup_node(vm, task->result.node_handle, &node)) {
+            return 0;
+        }
+        return strcmp(node->kind, "Err") == 0;
+    }
+    return 1;
+}
+
+static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result)
+{
+    AivmNodeAttr attrs[3];
+    int64_t handle;
+    char id_buffer[40];
+    size_t suffix_length;
+    if (vm == NULL || out_result == NULL) {
+        return 0;
+    }
+    memcpy(id_buffer, "debug_task_reclaim_stats_", 25U);
+    suffix_length = write_u64_decimal(id_buffer + 25U, sizeof(id_buffer) - 25U, (uint64_t)vm->node_count + 1U);
+    if (suffix_length == 0U) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "debug task stats node id overflow.");
+        return 0;
+    }
+
+    attrs[0].key = "reclaimed";
+    attrs[0].kind = AIVM_NODE_ATTR_INT;
+    attrs[0].int_value = (int64_t)vm->task_reclaim_count;
+    attrs[1].key = "skipPinned";
+    attrs[1].kind = AIVM_NODE_ATTR_INT;
+    attrs[1].int_value = (int64_t)vm->task_reclaim_skip_pinned_count;
+    attrs[2].key = "exhausted";
+    attrs[2].kind = AIVM_NODE_ATTR_INT;
+    attrs[2].int_value = (int64_t)vm->task_reclaim_exhausted_count;
+
+    if (!create_node_record(vm, "DebugTaskReclaimStats", id_buffer, attrs, 3U, NULL, 0U, &handle)) {
+        return 0;
+    }
+    *out_result = aivm_value_node(handle);
+    return 1;
+}
+
+static int find_terminal_task_result(AivmVm* vm, int64_t handle, AivmValue* out_result)
 {
     size_t i;
     if (vm == NULL || out_result == NULL) {
         return 0;
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
-        if (vm->completed_tasks[i].handle == handle) {
+        if (is_terminal_task_state(vm->completed_tasks[i].state) &&
+            vm->completed_tasks[i].handle == handle) {
+            if (!task_terminal_payload_is_valid(vm, &vm->completed_tasks[i])) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Terminal failed/canceled task requires Err node result.");
+                return 0;
+            }
             *out_result = vm->completed_tasks[i].result;
             return 1;
         }
@@ -1080,6 +1262,9 @@ void aivm_reset_state(AivmVm* vm)
     vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
+    vm->task_reclaim_count = 0U;
+    vm->task_reclaim_skip_pinned_count = 0U;
+    vm->task_reclaim_exhausted_count = 0U;
     vm->par_context_count = 0U;
     vm->par_value_count = 0U;
     vm->next_par_node_id = 1;
@@ -1849,9 +2034,15 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (handle_value.type != AIVM_VAL_INT ||
-                !find_completed_task(vm, handle_value.int_value, &completed)) {
+            if (handle_value.type != AIVM_VAL_INT) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!find_terminal_task_result(vm, handle_value.int_value, &completed)) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
+                }
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
@@ -1938,7 +2129,7 @@ void aivm_step(AivmVm* vm)
                 AivmValue task_result;
                 int64_t child_handle;
                 if (value.type == AIVM_VAL_INT &&
-                    find_completed_task(vm, value.int_value, &task_result)) {
+                    find_terminal_task_result(vm, value.int_value, &task_result)) {
                     value = task_result;
                 }
                 if (!create_runtime_node_from_value(vm, value, &child_handle)) {
