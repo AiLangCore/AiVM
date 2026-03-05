@@ -6,6 +6,14 @@ static int expect(int condition)
     return condition ? 0 : 1;
 }
 
+typedef struct {
+    size_t enqueued_count;
+    size_t drained_count;
+    int enqueue_fail;
+    int drain_fail;
+    size_t forced_drain_count;
+} HostAdapterState;
+
 static int host_ui_get_window_size(
     const char* target,
     const AivmValue* args,
@@ -35,9 +43,42 @@ static int host_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_adapter_enqueue(void* context, const char* event_name, AivmValue payload)
+{
+    HostAdapterState* state = (HostAdapterState*)context;
+    if (state == NULL || event_name == NULL) {
+        return 1;
+    }
+    if (state->enqueue_fail != 0) {
+        return 1;
+    }
+    if (payload.type == AIVM_VAL_INT && payload.int_value >= 0) {
+        state->enqueued_count += 1U;
+    }
+    return 0;
+}
+
+static int host_adapter_drain(void* context, size_t max_events, size_t* out_drained_count)
+{
+    HostAdapterState* state = (HostAdapterState*)context;
+    if (state == NULL || out_drained_count == NULL) {
+        return 1;
+    }
+    if (state->drain_fail != 0) {
+        return 1;
+    }
+    (void)max_events;
+    *out_drained_count = state->forced_drain_count;
+    state->drained_count += *out_drained_count;
+    return 0;
+}
+
 int main(void)
 {
     AivmVm vm;
+    HostAdapterState adapter_state;
+    AivmRuntimeHostAdapter adapter;
+    size_t drained_count = 0U;
     static const AivmInstruction instructions_ok[] = {
         { .opcode = AIVM_OP_NOP, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
@@ -147,6 +188,76 @@ int main(void)
         return 1;
     }
     if (expect(vm.stack[0].type == AIVM_VAL_INT && vm.stack[0].int_value == 2) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueued_count = 0U;
+    adapter_state.drained_count = 0U;
+    adapter_state.enqueue_fail = 0;
+    adapter_state.drain_fail = 0;
+    adapter_state.forced_drain_count = 2U;
+    adapter.context = &adapter_state;
+    adapter.enqueue = host_adapter_enqueue;
+    adapter.drain = host_adapter_drain;
+
+    if (expect(aivm_runtime_host_enqueue_event(NULL, "host.event.tick", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.enqueued_count == 1U) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueue_fail = 1;
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_int(2)) ==
+               AIVM_RUNTIME_HOST_EVENT_REJECTED) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueue_fail = 0;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 0U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_drain_events(NULL, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.drained_count == 2U) != 0) {
+        return 1;
+    }
+
+    adapter_state.drain_fail = 1;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_REJECTED) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 0U) != 0) {
+        return 1;
+    }
+
+    adapter_state.drain_fail = 0;
+    adapter_state.forced_drain_count = 5U;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 0U) != 0) {
         return 1;
     }
 
