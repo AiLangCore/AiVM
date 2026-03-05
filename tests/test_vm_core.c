@@ -352,10 +352,13 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
     if (expect(vm.node_gc_compaction_count == 1U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_reclaimed_nodes >= (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
+    if (expect(vm.node_gc_reclaimed_nodes == (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
         return 1;
     }
     if (expect(vm.node_allocations_since_gc == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD + 1U)) != 0) {
         return 1;
     }
 
