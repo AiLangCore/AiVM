@@ -61,9 +61,9 @@ static int spawn_kill_wait_nonzero_exit(void)
     int64_t handle;
 
 #ifdef _WIN32
-    spawn_args[0] = aivm_value_string("cmd /c ping -n 6 127.0.0.1 >NUL");
+    spawn_args[0] = aivm_value_string("cmd /c ping -n 4 127.0.0.1 >NUL");
 #else
-    spawn_args[0] = aivm_value_string("sleep 5");
+    spawn_args[0] = aivm_value_string("sleep 2");
 #endif
     spawn_args[1] = aivm_value_node(0);
     spawn_args[2] = aivm_value_string("");
@@ -90,6 +90,12 @@ static int spawn_kill_wait_nonzero_exit(void)
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_INT);
     CHECK(result.int_value != 0);
+
+    poll_args[0] = aivm_value_int(handle);
+    status = native_syscall_process_poll("sys.process.poll", poll_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == -1);
 
     return 0;
 }
@@ -133,6 +139,29 @@ static int spawn_and_wait_nonzero_exit(void)
     return 0;
 }
 
+static int interleaved_fail_and_cancel_cleanup_stress(void)
+{
+    int i;
+    int interleave_iterations = (int)(NATIVE_PROCESS_CAPACITY / 4);
+    if (interleave_iterations < 8) {
+        interleave_iterations = 8;
+    }
+    if (interleave_iterations > 32) {
+        interleave_iterations = 32;
+    }
+
+    for (i = 0; i < interleave_iterations; i += 1) {
+        if (spawn_and_wait_nonzero_exit() != 0) {
+            return 1;
+        }
+        if (spawn_kill_wait_nonzero_exit() != 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 int main(void)
 {
     int i;
@@ -149,6 +178,9 @@ int main(void)
     }
 
     if (spawn_kill_wait_nonzero_exit() != 0) {
+        return 1;
+    }
+    if (interleaved_fail_and_cancel_cleanup_stress() != 0) {
         return 1;
     }
 
