@@ -103,6 +103,32 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
     return start;
 }
 
+static char* lookup_string_in_arena(AivmVm* vm, const char* input)
+{
+    size_t offset = 0U;
+    if (vm == NULL || input == NULL) {
+        return NULL;
+    }
+    if (vm->string_arena_used > 0U &&
+        input >= vm->string_arena &&
+        input < (vm->string_arena + vm->string_arena_used)) {
+        return (char*)input;
+    }
+    while (offset < vm->string_arena_used) {
+        const char* candidate = &vm->string_arena[offset];
+        if (strcmp(candidate, input) == 0) {
+            return (char*)candidate;
+        }
+        while (offset < vm->string_arena_used && vm->string_arena[offset] != '\0') {
+            offset += 1U;
+        }
+        if (offset < vm->string_arena_used) {
+            offset += 1U;
+        }
+    }
+    return NULL;
+}
+
 static char* copy_string_to_arena(AivmVm* vm, const char* input)
 {
     size_t length = 0U;
@@ -110,6 +136,10 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     char* output;
     if (vm == NULL || input == NULL) {
         return NULL;
+    }
+    output = lookup_string_in_arena(vm, input);
+    if (output != NULL) {
+        return output;
     }
     while (input[length] != '\0') {
         length += 1U;
@@ -1466,6 +1496,20 @@ static int is_return_opcode(AivmOpcode opcode)
     return opcode == AIVM_OP_RET || opcode == AIVM_OP_RETURN;
 }
 
+static size_t infer_call_arg_count(const AivmProgram* program, size_t target)
+{
+    size_t index = target;
+    size_t count = 0U;
+    if (program == NULL || program->instructions == NULL || target >= program->instruction_count) {
+        return 0U;
+    }
+    while (index < program->instruction_count && program->instructions[index].opcode == AIVM_OP_STORE_LOCAL) {
+        count += 1U;
+        index += 1U;
+    }
+    return count;
+}
+
 void aivm_step(AivmVm* vm)
 {
     const AivmInstruction* instruction;
@@ -1641,6 +1685,8 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_CALL: {
             size_t target;
+            size_t arg_count = 0U;
+            size_t frame_base = 0U;
             int is_tail_call = 0;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -1651,14 +1697,25 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            arg_count = infer_call_arg_count(vm->program, target);
+            if (arg_count > vm->stack_count) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call argument count exceeds stack depth.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            frame_base = vm->stack_count - arg_count;
             if ((vm->instruction_pointer + 1U) < vm->program->instruction_count) {
                 is_tail_call = is_return_opcode(vm->program->instructions[vm->instruction_pointer + 1U].opcode);
             }
             if (is_tail_call == 0) {
-                if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, vm->stack_count)) {
+                if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, frame_base)) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
+            } else if (vm->call_frame_count > 0U) {
+                AivmCallFrame* frame = &vm->call_frames[vm->call_frame_count - 1U];
+                frame->frame_base = frame_base;
+                vm->locals_count = frame->locals_base;
             }
             vm->instruction_pointer = target;
             break;
