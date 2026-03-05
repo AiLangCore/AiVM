@@ -91,6 +91,25 @@ static int host_str_utf8_byte_count(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_bytes_large(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static uint8_t large_bytes[AIVM_VM_BYTES_ARENA_CAPACITY + 1U];
+    (void)target;
+    (void)args;
+    if (arg_count != 1U) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].type != AIVM_VAL_STRING) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(large_bytes, sizeof(large_bytes));
+    return AIVM_SYSCALL_OK;
+}
+
 static int test_push_store_load_pop(void)
 {
     AivmVm vm;
@@ -1232,6 +1251,45 @@ static int test_string_arena_overflow_sets_error(void)
         return 1;
     }
 
+    return 0;
+}
+
+static int test_bytes_arena_overflow_sets_error(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.bytes.fromBase64" },
+        { .type = AIVM_VAL_STRING, .string_value = "ignored" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.bytes.fromBase64", host_bytes_large }
+    };
+
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM002: bytes arena capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
     return 0;
 }
 
@@ -2994,6 +3052,9 @@ int main(void)
         return 1;
     }
     if (test_string_arena_overflow_sets_error() != 0) {
+        return 1;
+    }
+    if (test_bytes_arena_overflow_sets_error() != 0) {
         return 1;
     }
     if (test_str_substring_and_remove_rune_clamp_semantics() != 0) {
