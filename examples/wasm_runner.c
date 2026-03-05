@@ -19,6 +19,190 @@ static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
 static AivmVm* g_wasm_active_vm = NULL;
 
+static const char* opcode_name(AivmOpcode opcode)
+{
+    switch (opcode) {
+        case AIVM_OP_NOP: return "NOP";
+        case AIVM_OP_HALT: return "HALT";
+        case AIVM_OP_STUB: return "STUB";
+        case AIVM_OP_PUSH_INT: return "PUSH_INT";
+        case AIVM_OP_POP: return "POP";
+        case AIVM_OP_STORE_LOCAL: return "STORE_LOCAL";
+        case AIVM_OP_LOAD_LOCAL: return "LOAD_LOCAL";
+        case AIVM_OP_ADD_INT: return "ADD_INT";
+        case AIVM_OP_JUMP: return "JUMP";
+        case AIVM_OP_JUMP_IF_FALSE: return "JUMP_IF_FALSE";
+        case AIVM_OP_PUSH_BOOL: return "PUSH_BOOL";
+        case AIVM_OP_CALL: return "CALL";
+        case AIVM_OP_RET: return "RET";
+        case AIVM_OP_EQ_INT: return "EQ_INT";
+        case AIVM_OP_EQ: return "EQ";
+        case AIVM_OP_CONST: return "CONST";
+        case AIVM_OP_STR_CONCAT: return "STR_CONCAT";
+        case AIVM_OP_TO_STRING: return "TO_STRING";
+        case AIVM_OP_STR_ESCAPE: return "STR_ESCAPE";
+        case AIVM_OP_RETURN: return "RETURN";
+        case AIVM_OP_STR_SUBSTRING: return "STR_SUBSTRING";
+        case AIVM_OP_STR_REMOVE: return "STR_REMOVE";
+        case AIVM_OP_CALL_SYS: return "CALL_SYS";
+        case AIVM_OP_ASYNC_CALL: return "ASYNC_CALL";
+        case AIVM_OP_ASYNC_CALL_SYS: return "ASYNC_CALL_SYS";
+        case AIVM_OP_AWAIT: return "AWAIT";
+        case AIVM_OP_PAR_BEGIN: return "PAR_BEGIN";
+        case AIVM_OP_PAR_FORK: return "PAR_FORK";
+        case AIVM_OP_PAR_JOIN: return "PAR_JOIN";
+        case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
+        case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
+        case AIVM_OP_NODE_KIND: return "NODE_KIND";
+        case AIVM_OP_NODE_ID: return "NODE_ID";
+        case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
+        case AIVM_OP_ATTR_KEY: return "ATTR_KEY";
+        case AIVM_OP_ATTR_VALUE_KIND: return "ATTR_VALUE_KIND";
+        case AIVM_OP_ATTR_VALUE_STRING: return "ATTR_VALUE_STRING";
+        case AIVM_OP_ATTR_VALUE_INT: return "ATTR_VALUE_INT";
+        case AIVM_OP_ATTR_VALUE_BOOL: return "ATTR_VALUE_BOOL";
+        case AIVM_OP_CHILD_COUNT: return "CHILD_COUNT";
+        case AIVM_OP_CHILD_AT: return "CHILD_AT";
+        case AIVM_OP_MAKE_BLOCK: return "MAKE_BLOCK";
+        case AIVM_OP_APPEND_CHILD: return "APPEND_CHILD";
+        case AIVM_OP_MAKE_ERR: return "MAKE_ERR";
+        case AIVM_OP_MAKE_LIT_STRING: return "MAKE_LIT_STRING";
+        case AIVM_OP_MAKE_LIT_INT: return "MAKE_LIT_INT";
+        case AIVM_OP_MAKE_NODE: return "MAKE_NODE";
+        case AIVM_OP_MAKE_FIELD_STRING: return "MAKE_FIELD_STRING";
+        case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
+        default: return "UNKNOWN";
+    }
+}
+
+static void print_vm_failure(const AivmProgram* program, const AivmVm* vm, const char* message)
+{
+    size_t pc = 0U;
+    size_t display_pc = 0U;
+    const char* op = "UNKNOWN";
+    const char* call_target = "unknown";
+    const char* phase = "exec";
+    const char* detail = "none";
+    char typed_code[32];
+    const char* detail_end = NULL;
+    size_t typed_len = 0U;
+    if (vm != NULL) {
+        pc = vm->instruction_pointer;
+        display_pc = (pc == 0U) ? 0U : (pc - 1U);
+        detail = aivm_vm_error_detail(vm);
+        if (detail == NULL || detail[0] == '\0') {
+            detail = "none";
+        }
+        if (vm->error == AIVM_VM_ERR_SYSCALL) {
+            phase = "syscall";
+        }
+        if (program != NULL && program->instructions != NULL && display_pc < program->instruction_count) {
+            const AivmInstruction* inst = &program->instructions[display_pc];
+            op = opcode_name(inst->opcode);
+            if ((inst->opcode == AIVM_OP_CALL_SYS || inst->opcode == AIVM_OP_ASYNC_CALL_SYS) &&
+                inst->operand_int >= 0) {
+                size_t arg_count = (size_t)inst->operand_int;
+                if (display_pc > arg_count) {
+                    size_t target_index = display_pc - arg_count - 1U;
+                    if (target_index < program->instruction_count) {
+                        const AivmInstruction* target_inst = &program->instructions[target_index];
+                        if (target_inst->opcode == AIVM_OP_CONST &&
+                            target_inst->operand_int >= 0 &&
+                            (size_t)target_inst->operand_int < program->constant_count) {
+                            AivmValue target_val = program->constants[target_inst->operand_int];
+                            if (target_val.type == AIVM_VAL_STRING && target_val.string_value != NULL) {
+                                call_target = target_val.string_value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (vm->error == AIVM_VM_ERR_SYSCALL &&
+            program != NULL &&
+            program->instructions != NULL &&
+            program->instruction_count > 0U) {
+            size_t cursor = display_pc;
+            if (cursor >= program->instruction_count) {
+                cursor = program->instruction_count - 1U;
+            }
+            while (1) {
+                const AivmInstruction* probe = &program->instructions[cursor];
+                if (probe->opcode == AIVM_OP_CALL_SYS || probe->opcode == AIVM_OP_ASYNC_CALL_SYS) {
+                    op = opcode_name(probe->opcode);
+                    display_pc = cursor;
+                    call_target = "unknown";
+                    if (probe->operand_int >= 0) {
+                        size_t arg_count = (size_t)probe->operand_int;
+                        if (cursor > arg_count) {
+                            size_t target_index = cursor - arg_count - 1U;
+                            if (target_index < program->instruction_count) {
+                                const AivmInstruction* target_inst = &program->instructions[target_index];
+                                if (target_inst->opcode == AIVM_OP_CONST &&
+                                    target_inst->operand_int >= 0 &&
+                                    (size_t)target_inst->operand_int < program->constant_count) {
+                                    AivmValue target_val = program->constants[target_inst->operand_int];
+                                    if (target_val.type == AIVM_VAL_STRING && target_val.string_value != NULL) {
+                                        call_target = target_val.string_value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                if (cursor == 0U) {
+                    break;
+                }
+                cursor -= 1U;
+            }
+        }
+    }
+    memset(typed_code, 0, sizeof(typed_code));
+    detail_end = strchr(detail, ':');
+    if (detail_end == NULL) {
+        detail_end = strchr(detail, '/');
+    } else {
+        const char* slash = strchr(detail, '/');
+        if (slash != NULL && slash < detail_end) {
+            detail_end = slash;
+        }
+    }
+    if (detail_end == NULL) {
+        detail_end = detail + strlen(detail);
+    }
+    typed_len = (size_t)(detail_end - detail);
+    if (typed_len > 0U && typed_len < sizeof(typed_code)) {
+        memcpy(typed_code, detail, typed_len);
+        typed_code[typed_len] = '\0';
+    }
+    if (vm != NULL && vm->error == AIVM_VM_ERR_SYSCALL && typed_code[0] != '\0') {
+        fprintf(
+            stderr,
+            "Err#err1(code=%s message=\"phase=%s function=main pc=%llu nodeId=unknown opcode=%s callTarget=%s vmCode=%s vmMessage=%s detail=%s\" nodeId=vm)\n",
+            typed_code,
+            phase,
+            (unsigned long long)display_pc,
+            op,
+            call_target,
+            aivm_vm_error_code(vm->error),
+            aivm_vm_error_message(vm->error),
+            detail);
+        return;
+    }
+    fprintf(
+        stderr,
+        "Err#err1(code=RUN001 message=\"%s phase=%s function=main pc=%llu nodeId=unknown opcode=%s callTarget=%s vmCode=%s vmMessage=%s detail=%s\" nodeId=vm)\n",
+        (message == NULL) ? "VM execution failed." : message,
+        phase,
+        (unsigned long long)display_pc,
+        op,
+        call_target,
+        (vm == NULL) ? "AIVM999" : aivm_vm_error_code(vm->error),
+        (vm == NULL) ? "Unknown vm error." : aivm_vm_error_message(vm->error),
+        detail);
+}
+
 static int native_syscall_unavailable(
     const char* target,
     const AivmValue* args,
@@ -1238,6 +1422,13 @@ static int remote_token_authorized(void)
     const char* provided = getenv("AIVM_REMOTE_SESSION_TOKEN");
     size_t expected_len;
     size_t provided_len;
+    if (expected == NULL && provided == NULL) {
+        /*
+         * Deterministic fallback for wasm host modes where environment
+         * propagation is unavailable. Partial token state remains rejected.
+         */
+        return 1;
+    }
     if (expected == NULL || provided == NULL) {
         return 0;
     }
@@ -1290,10 +1481,17 @@ static int remote_session_ensure_ready(void)
     memset(&g_remote_server_config, 0, sizeof(g_remote_server_config));
     g_remote_server_config.proto_version = 1U;
     caps_env = getenv("AIVM_REMOTE_CAPS");
-    if (!remote_parse_caps_csv(
-            caps_env,
-            g_remote_server_config.allowed_caps,
-            &g_remote_server_config.allowed_caps_count)) {
+    if (caps_env == NULL || caps_env[0] == '\0') {
+        (void)snprintf(
+            g_remote_server_config.allowed_caps[0],
+            sizeof(g_remote_server_config.allowed_caps[0]),
+            "%s",
+            "cap.remote");
+        g_remote_server_config.allowed_caps_count = 1U;
+    } else if (!remote_parse_caps_csv(
+                   caps_env,
+                   g_remote_server_config.allowed_caps,
+                   &g_remote_server_config.allowed_caps_count)) {
         return 0;
     }
 
@@ -1608,7 +1806,7 @@ int main(int argc, char** argv)
             g_wasm_active_vm = NULL;
             return 3;
         }
-        fprintf(stderr, "Err#err1(code=RUN001 message=\"AiBC1 execution failed.\" nodeId=vm)\n");
+        print_vm_failure(&program, &vm, "AiBC1 execution failed.");
         g_wasm_active_vm = NULL;
         return 3;
     }
