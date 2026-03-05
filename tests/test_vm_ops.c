@@ -2327,6 +2327,8 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
     size_t ip = 0U;
     size_t i;
     size_t transient_nodes = AIVM_VM_NODE_CAPACITY - 8U;
+    size_t expected_alloc_counter_after_compaction =
+        transient_nodes - (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD + 2U;
 
     constants[0] = aivm_value_string("tmp");
     for (i = 0U; i < transient_nodes; i += 1U) {
@@ -2377,7 +2379,7 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
     if (expect(vm.node_allocations_since_gc > 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
+    if (expect(vm.node_allocations_since_gc == expected_alloc_counter_after_compaction) != 0) {
         return 1;
     }
     if (expect(vm.node_high_water < AIVM_VM_NODE_CAPACITY) != 0) {
