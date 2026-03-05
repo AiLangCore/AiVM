@@ -134,6 +134,43 @@ static int test_missing_instruction_buffer_sets_error_detail(void)
     return 0;
 }
 
+static int test_gc_policy_constants_are_valid(void)
+{
+    if (expect(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS > 0) != 0) {
+        return 1;
+    }
+    if (expect(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD > 0) != 0) {
+        return 1;
+    }
+    if (expect(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD < AIVM_VM_NODE_CAPACITY) != 0) {
+        return 1;
+    }
+    if (expect(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD ==
+               (AIVM_VM_NODE_CAPACITY * AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR) /
+                   AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_reset_keeps_gc_allocation_counter_deterministic(void)
+{
+    AivmVm vm;
+    static const char* argv_values[] = { "first", "second" };
+
+    aivm_init_with_syscalls_and_argv(&vm, NULL, NULL, 0U, argv_values, 2U);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count >= 3U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -149,6 +186,12 @@ int main(void)
         return 1;
     }
     if (test_missing_instruction_buffer_sets_error_detail() != 0) {
+        return 1;
+    }
+    if (test_gc_policy_constants_are_valid() != 0) {
+        return 1;
+    }
+    if (test_reset_keeps_gc_allocation_counter_deterministic() != 0) {
         return 1;
     }
 
