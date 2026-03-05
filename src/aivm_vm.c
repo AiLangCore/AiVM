@@ -398,6 +398,10 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
         return 0;
     }
+    if (vm->next_task_handle == INT64_MAX) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task handle overflow.");
+        return 0;
+    }
 
     handle = vm->next_task_handle;
     vm->next_task_handle += 1;

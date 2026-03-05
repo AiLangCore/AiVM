@@ -1663,6 +1663,32 @@ static int test_async_call_target_equal_instruction_count_sets_error(void)
     return 0;
 }
 
+static int test_async_call_task_handle_overflow_sets_error(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 4U);
+    aivm_init(&vm, &program);
+    vm.next_task_handle = INT64_MAX;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "Task handle overflow.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_async_call_sys_and_await_roundtrip(void)
 {
     AivmVm vm;
@@ -2685,6 +2711,9 @@ int main(void)
         return 1;
     }
     if (test_async_call_target_equal_instruction_count_sets_error() != 0) {
+        return 1;
+    }
+    if (test_async_call_task_handle_overflow_sets_error() != 0) {
         return 1;
     }
     if (test_async_call_sys_and_await_roundtrip() != 0) {
