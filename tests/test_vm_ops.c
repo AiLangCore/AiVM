@@ -1780,6 +1780,84 @@ static int test_await_evicted_task_handle_sets_error(void)
     return 0;
 }
 
+static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
+{
+    AivmVm vm;
+    size_t i;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 4U);
+    aivm_init(&vm, &program);
+    vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
+    vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
+    for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
+        vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
+        vm.completed_tasks[i].handle = (int64_t)i + 1;
+        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+    }
+    vm.stack_count = 1U;
+    vm.stack[0] = aivm_value_int(1);
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_task_count == AIVM_VM_TASK_CAPACITY) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_tasks[0].handle == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_tasks[1].handle == 3) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_tasks[AIVM_VM_TASK_CAPACITY - 1U].handle == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
+{
+    AivmVm vm;
+    size_t i;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 4U);
+    aivm_init(&vm, &program);
+    vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
+    vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
+    vm.stack_count = AIVM_VM_TASK_CAPACITY;
+    for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
+        vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
+        vm.completed_tasks[i].handle = (int64_t)i + 1;
+        vm.completed_tasks[i].result = aivm_value_int((int64_t)i);
+        vm.stack[i] = aivm_value_int((int64_t)i + 1);
+    }
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "Task table capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_async_call_sys_and_await_roundtrip(void)
 {
     AivmVm vm;
@@ -2999,6 +3077,12 @@ int main(void)
         return 1;
     }
     if (test_await_evicted_task_handle_sets_error() != 0) {
+        return 1;
+    }
+    if (test_async_call_reclaim_skips_pinned_oldest_handle() != 0) {
+        return 1;
+    }
+    if (test_async_call_full_table_all_pinned_sets_capacity_error() != 0) {
         return 1;
     }
     if (test_async_call_sys_and_await_roundtrip() != 0) {

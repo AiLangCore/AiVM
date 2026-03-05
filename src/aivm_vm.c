@@ -388,19 +388,57 @@ static int transition_task_state(AivmVm* vm, AivmCompletedTask* task, AivmTaskSt
     return 0;
 }
 
+static int value_matches_task_handle(AivmValue value, int64_t handle)
+{
+    return value.type == AIVM_VAL_INT && value.int_value == handle;
+}
+
+static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
+{
+    size_t i;
+    if (vm == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (value_matches_task_handle(vm->stack[i], handle)) {
+            return 1;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (value_matches_task_handle(vm->locals[i], handle)) {
+            return 1;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (value_matches_task_handle(vm->par_values[i], handle)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int reclaim_oldest_completed_task_slot(AivmVm* vm)
 {
+    size_t index;
     if (vm == NULL) {
         return 0;
     }
     if (vm->completed_task_count == 0U) {
         return 1;
     }
-    if (vm->completed_task_count > 1U) {
+    for (index = 0U; index < vm->completed_task_count; index += 1U) {
+        if (!is_task_handle_pinned(vm, vm->completed_tasks[index].handle)) {
+            break;
+        }
+    }
+    if (index >= vm->completed_task_count) {
+        return 0;
+    }
+    if (index + 1U < vm->completed_task_count) {
         memmove(
-            &vm->completed_tasks[0],
-            &vm->completed_tasks[1],
-            (vm->completed_task_count - 1U) * sizeof(AivmCompletedTask));
+            &vm->completed_tasks[index],
+            &vm->completed_tasks[index + 1U],
+            (vm->completed_task_count - index - 1U) * sizeof(AivmCompletedTask));
     }
     vm->completed_task_count -= 1U;
     return 1;
