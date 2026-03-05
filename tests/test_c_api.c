@@ -34,7 +34,7 @@ int main(void)
         { .opcode = (AivmOpcode)99, .operand_int = 0 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.ui_getWindowSize", host_ui_get_window_size }
+        { "sys.ui.getWindowSize", host_ui_get_window_size }
     };
     static const uint8_t bad_magic_program[16] = {
         'X', 'I', 'B', 'C',
@@ -62,7 +62,7 @@ int main(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue call_sys_constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui_getWindowSize" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.getWindowSize" },
         { .type = AIVM_VAL_INT, .int_value = 1 }
     };
     static const AivmProgram call_sys_program = {

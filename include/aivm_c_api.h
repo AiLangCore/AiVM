@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #include "aivm_program.h"
-#include "aivm_syscall.h"
+#include "sys/aivm_syscall.h"
 #include "aivm_vm.h"
 
 #if defined(_WIN32) && defined(AIVM_BUILD_SHARED_LIB)

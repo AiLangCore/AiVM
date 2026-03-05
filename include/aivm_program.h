@@ -53,7 +53,9 @@ typedef enum {
     AIVM_OP_MAKE_ERR = 43,
     AIVM_OP_MAKE_LIT_STRING = 44,
     AIVM_OP_MAKE_LIT_INT = 45,
-    AIVM_OP_MAKE_NODE = 46
+    AIVM_OP_MAKE_NODE = 46,
+    AIVM_OP_MAKE_FIELD_STRING = 47,
+    AIVM_OP_MAKE_MAP = 48
 } AivmOpcode;
 
 typedef struct {
@@ -69,9 +71,10 @@ typedef struct {
 
 enum {
     AIVM_PROGRAM_MAX_SECTIONS = 32,
-    AIVM_PROGRAM_MAX_INSTRUCTIONS = 4096,
+    AIVM_PROGRAM_MAX_INSTRUCTIONS = 16384,
     AIVM_PROGRAM_MAX_CONSTANTS = 1024,
     AIVM_PROGRAM_MAX_STRING_BYTES = 8192,
+    AIVM_PROGRAM_MAX_BYTES_STORAGE = 32768,
     AIVM_PROGRAM_SECTION_INSTRUCTIONS = 1,
     AIVM_PROGRAM_SECTION_CONSTANTS = 2
 };
@@ -89,6 +92,8 @@ typedef struct {
     AivmValue constant_storage[AIVM_PROGRAM_MAX_CONSTANTS];
     char string_storage[AIVM_PROGRAM_MAX_STRING_BYTES];
     size_t string_storage_used;
+    uint8_t bytes_storage[AIVM_PROGRAM_MAX_BYTES_STORAGE];
+    size_t bytes_storage_used;
 } AivmProgram;
 
 typedef enum {

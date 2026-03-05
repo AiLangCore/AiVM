@@ -1,6 +1,6 @@
 #include "aivm_vm.h"
 #include <string.h>
-#include "aivm_syscall_contracts.h"
+#include "sys/aivm_syscall_contracts.h"
 
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
@@ -58,6 +58,21 @@ static char* arena_alloc(AivmVm* vm, size_t size)
     return start;
 }
 
+static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
+{
+    uint8_t* start;
+    if (vm == NULL) {
+        return NULL;
+    }
+    if (vm->bytes_arena_used + size > AIVM_VM_BYTES_ARENA_CAPACITY) {
+        set_vm_error(vm, AIVM_VM_ERR_STRING_OVERFLOW, "VM bytes arena overflow.");
+        return NULL;
+    }
+    start = &vm->bytes_arena[vm->bytes_arena_used];
+    vm->bytes_arena_used += size;
+    return start;
+}
+
 static char* copy_string_to_arena(AivmVm* vm, const char* input)
 {
     size_t length = 0U;
@@ -80,6 +95,29 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     return output;
 }
 
+static uint8_t* copy_bytes_to_arena(AivmVm* vm, const uint8_t* input, size_t length)
+{
+    uint8_t* output;
+    size_t i;
+    if (vm == NULL) {
+        return NULL;
+    }
+    if (length == 0U) {
+        return bytes_arena_alloc(vm, 0U);
+    }
+    if (input == NULL) {
+        return NULL;
+    }
+    output = bytes_arena_alloc(vm, length);
+    if (output == NULL) {
+        return NULL;
+    }
+    for (i = 0U; i < length; i += 1U) {
+        output[i] = input[i];
+    }
+    return output;
+}
+
 static int push_string_copy(AivmVm* vm, const char* input)
 {
     char* output;
@@ -88,6 +126,40 @@ static int push_string_copy(AivmVm* vm, const char* input)
         return 0;
     }
     return aivm_stack_push(vm, aivm_value_string(output));
+}
+
+static int materialize_syscall_result(AivmVm* vm, AivmValue* io_result)
+{
+    char* copied_string;
+    uint8_t* copied_bytes;
+    if (vm == NULL || io_result == NULL) {
+        return 0;
+    }
+    if (io_result->type == AIVM_VAL_STRING) {
+        if (io_result->string_value == NULL) {
+            set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "Syscall string result must be non-null.");
+            return 0;
+        }
+        copied_string = copy_string_to_arena(vm, io_result->string_value);
+        if (copied_string == NULL) {
+            return 0;
+        }
+        *io_result = aivm_value_string(copied_string);
+        return 1;
+    }
+    if (io_result->type == AIVM_VAL_BYTES) {
+        if (io_result->bytes_value.length > 0U && io_result->bytes_value.data == NULL) {
+            set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "Syscall bytes result must provide data.");
+            return 0;
+        }
+        copied_bytes = copy_bytes_to_arena(vm, io_result->bytes_value.data, io_result->bytes_value.length);
+        if (copied_bytes == NULL && io_result->bytes_value.length > 0U) {
+            return 0;
+        }
+        *io_result = aivm_value_bytes(copied_bytes, io_result->bytes_value.length);
+        return 1;
+    }
+    return 1;
 }
 
 static int push_escaped_string(AivmVm* vm, const char* input)
@@ -329,7 +401,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CALL_SYS target must be string.");
         return 0;
     }
-    if (strcmp(target_value.string_value, "sys.debug_taskReclaimStats") == 0) {
+    if (strcmp(target_value.string_value, "sys.debug.taskReclaimStats") == 0) {
         AivmValueType expected_return_type = AIVM_VAL_VOID;
         contract_status = aivm_syscall_contract_validate(
             target_value.string_value,
@@ -356,6 +428,9 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         return 0;
     }
 
+    if (!materialize_syscall_result(vm, out_result)) {
+        return 0;
+    }
     return 1;
 }
 
@@ -786,6 +861,13 @@ static int create_runtime_node_from_value(AivmVm* vm, AivmValue value, int64_t* 
         attrs[0].kind = AIVM_NODE_ATTR_BOOL;
         attrs[0].bool_value = value.bool_value != 0 ? 1 : 0;
         attr_count = 1U;
+    } else if (value.type == AIVM_VAL_BYTES) {
+        node_kind = "Lit";
+        node_id = "runtime_bytes";
+        attr_count = 1U;
+        attrs[0].key = "byteLength";
+        attrs[0].kind = AIVM_NODE_ATTR_INT;
+        attrs[0].int_value = (int64_t)value.bytes_value.length;
     } else if (value.type == AIVM_VAL_VOID) {
         node_kind = "Block";
         node_id = "void";
@@ -890,6 +972,8 @@ void aivm_reset_state(AivmVm* vm)
     vm->locals_count = 0U;
     vm->string_arena_used = 0U;
     vm->string_arena[0] = '\0';
+    vm->bytes_arena_used = 0U;
+    vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
     vm->task_reclaim_count = 0U;
@@ -1054,6 +1138,11 @@ int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
 
     *out_value = vm->locals[index];
     return 1;
+}
+
+static int is_return_opcode(AivmOpcode opcode)
+{
+    return opcode == AIVM_OP_RET || opcode == AIVM_OP_RETURN;
 }
 
 void aivm_step(AivmVm* vm)
@@ -1231,6 +1320,7 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_CALL: {
             size_t target;
+            int is_tail_call = 0;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -1240,9 +1330,14 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, vm->stack_count)) {
-                vm->instruction_pointer = vm->program->instruction_count;
-                break;
+            if ((vm->instruction_pointer + 1U) < vm->program->instruction_count) {
+                is_tail_call = is_return_opcode(vm->program->instructions[vm->instruction_pointer + 1U].opcode);
+            }
+            if (is_tail_call == 0) {
+                if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, vm->stack_count)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
             }
             vm->instruction_pointer = target;
             break;
@@ -1395,6 +1490,7 @@ void aivm_step(AivmVm* vm)
             AivmValue value;
             char bool_buffer[6];
             char int_buffer[32];
+            char* bytes_output;
             size_t int_index;
             uint64_t magnitude;
             int negative = 0;
@@ -1463,6 +1559,35 @@ void aivm_step(AivmVm* vm)
                     int_buffer[int_index] = '-';
                 }
                 if (!push_string_copy(vm, &int_buffer[int_index])) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                vm->instruction_pointer += 1U;
+                break;
+            }
+            if (value.type == AIVM_VAL_BYTES) {
+                static const char hex[] = "0123456789abcdef";
+                size_t i;
+                size_t out_len = 2U + (value.bytes_value.length * 2U);
+                if (value.bytes_value.length > 0U && value.bytes_value.data == NULL) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "TO_STRING bytes data must be non-null.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                bytes_output = arena_alloc(vm, out_len + 1U);
+                if (bytes_output == NULL) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                bytes_output[0] = '0';
+                bytes_output[1] = 'x';
+                for (i = 0U; i < value.bytes_value.length; i += 1U) {
+                    uint8_t b = value.bytes_value.data[i];
+                    bytes_output[2U + (i * 2U)] = hex[(b >> 4U) & 0x0fU];
+                    bytes_output[2U + (i * 2U) + 1U] = hex[b & 0x0fU];
+                }
+                bytes_output[out_len] = '\0';
+                if (!aivm_stack_push(vm, aivm_value_string(bytes_output))) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
@@ -2199,6 +2324,92 @@ void aivm_step(AivmVm* vm)
                 children,
                 argc,
                 &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAKE_FIELD_STRING: {
+            AivmValue value;
+            AivmValue key_value;
+            AivmNodeAttr attrs[1];
+            int64_t child_handle = -1;
+            int64_t handle = -1;
+            int64_t children[1];
+            if (!aivm_stack_pop(vm, &value) || !aivm_stack_pop(vm, &key_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (key_value.type != AIVM_VAL_STRING || key_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_FIELD_STRING requires (string,any).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_runtime_node_from_value(vm, value, &child_handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            attrs[0].key = "key";
+            attrs[0].kind = AIVM_NODE_ATTR_STRING;
+            attrs[0].string_value = key_value.string_value;
+            children[0] = child_handle;
+            if (!create_node_record(vm, "Field", "field", attrs, 1U, children, 1U, &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAKE_MAP: {
+            AivmValue count_value;
+            int64_t handle = -1;
+            int64_t children[AIVM_VM_NODE_CHILD_CAPACITY];
+            size_t count = 0U;
+            size_t i = 0U;
+            if (!aivm_stack_pop(vm, &count_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (count_value.type != AIVM_VAL_INT || count_value.int_value < 0) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_MAP requires int child count.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            count = (size_t)count_value.int_value;
+            if (count > AIVM_VM_NODE_CHILD_CAPACITY || vm->stack_count < count) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "MAKE_MAP count exceeded VM limits.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            for (i = 0U; i < count; i += 1U) {
+                AivmValue child_value;
+                int64_t child_handle = -1;
+                if (!aivm_stack_pop(vm, &child_value)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                if (!create_runtime_node_from_value(vm, child_value, &child_handle)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                children[count - i - 1U] = child_handle;
+            }
+            if (vm->status == AIVM_VM_STATUS_ERROR) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_node_record(vm, "Map", "map", NULL, 0U, children, count, &handle)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "aivm_syscall_contracts.h"
+#include "sys/aivm_syscall_contracts.h"
 #include "aivm_types.h"
 
 typedef enum {

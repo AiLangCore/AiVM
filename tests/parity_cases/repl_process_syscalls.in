@@ -1,0 +1,20 @@
+Cmd#ps0(name=setPerms allow=sys)
+Cmd#ps1(name=load) { Program#ps2 { } }
+Cmd#ps3(name=eval) {
+  Call#ps4(target=sys.process.wait) {
+    Call#ps5(target=sys.process.spawn) { Lit#ps6(value="exit") Call#ps7(target=sys.process.args) { } Lit#ps8(value="") Call#ps9(target=sys.process.args) { } }
+  }
+}
+Cmd#ps10(name=eval) {
+  Call#ps11(target=sys.process.wait) {
+    Call#ps12(target=sys.process.spawn) { Lit#ps13(value="exit") Call#ps14(target=sys.process.args) { } Lit#ps15(value="") Call#ps16(target=sys.process.args) { } }
+  }
+}
+Cmd#ps17(name=eval) { Call#ps18(target=sys.process.poll) { Lit#ps19(value=999) } }
+Cmd#ps20(name=eval) { Call#ps21(target=sys.process.wait) { Lit#ps22(value=999) } }
+Cmd#ps23(name=eval) { Call#ps24(target=sys.process.stdout.read) { Lit#ps25(value=999) } }
+Cmd#ps26(name=eval) { Call#ps27(target=sys.process.stderr.read) { Lit#ps28(value=999) } }
+Cmd#ps29(name=eval) { Call#ps30(target=sys.process.kill) { Lit#ps31(value=999) } }
+Cmd#ps32(name=eval) {
+  Call#ps33(target=sys.process.spawn) { Lit#ps34(value="exit") Call#ps35(target=sys.process.args) { } Lit#ps36(value="") Call#ps37(target=sys.process.args) { } }
+}

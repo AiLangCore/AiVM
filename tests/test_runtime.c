@@ -66,11 +66,11 @@ int main(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants_sys[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui_getWindowSize" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.getWindowSize" },
         { .type = AIVM_VAL_INT, .int_value = 1 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.ui_getWindowSize", host_ui_get_window_size }
+        { "sys.ui.getWindowSize", host_ui_get_window_size }
     };
     static const AivmProgram program_sys = {
         .instructions = instructions_sys,
@@ -88,10 +88,10 @@ int main(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants_argv[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.process_argv" }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.process.args" }
     };
     static const AivmSyscallBinding argv_bindings[] = {
-        { "sys.process_argv", host_process_argv }
+        { "sys.process.args", host_process_argv }
     };
     static const AivmProgram program_argv = {
         .instructions = instructions_argv,

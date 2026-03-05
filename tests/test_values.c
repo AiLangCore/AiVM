@@ -16,10 +16,15 @@ int main(void)
     AivmValue false_value;
     AivmValue string_a;
     AivmValue string_b;
+    AivmValue bytes_a;
+    AivmValue bytes_b;
     AivmValue node_a;
     AivmValue node_b;
     const char hello_chars[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
     const char hello_chars_copy[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
+    const uint8_t bytes_raw[] = { 0x00U, 0x01U, 0x7fU, 0xffU };
+    const uint8_t bytes_raw_copy[] = { 0x00U, 0x01U, 0x7fU, 0xffU };
+    const uint8_t bytes_raw_diff[] = { 0x00U, 0x02U, 0x7fU, 0xffU };
 
     void_value = aivm_value_void();
     if (expect(void_value.type == AIVM_VAL_VOID) != 0) {
@@ -72,6 +77,23 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(aivm_value_string(NULL), string_a) == 0) != 0) {
+        return 1;
+    }
+    bytes_a = aivm_value_bytes(bytes_raw, sizeof(bytes_raw));
+    bytes_b = aivm_value_bytes(bytes_raw_copy, sizeof(bytes_raw_copy));
+    if (expect(bytes_a.type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(bytes_a, bytes_b) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(bytes_a, aivm_value_bytes(bytes_raw_diff, sizeof(bytes_raw_diff))) == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(aivm_value_bytes(NULL, 0U), aivm_value_bytes(NULL, 0U)) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(aivm_value_bytes(NULL, 1U), aivm_value_bytes(bytes_raw, 1U)) == 0) != 0) {
         return 1;
     }
     node_a = aivm_value_node(10);
