@@ -1299,6 +1299,15 @@ static int test_bytes_arena_overflow_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM002: bytes arena capacity exceeded.") == 0) != 0) {
         return 1;
     }
+    if (expect(vm.bytes_arena_used == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_high_water == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 0U) != 0) {
+        return 1;
+    }
     return 0;
 }
 
