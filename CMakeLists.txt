@@ -178,6 +178,9 @@ if (BUILD_TESTING)
         tests/test_bytes_host.c
     )
     target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core)
+    if (WIN32)
+        target_link_libraries(aivm_test_bytes_host PRIVATE ws2_32 psapi)
+    endif()
 
     add_executable(aivm_test_remote_channel
         tests/test_remote_channel.c
@@ -203,6 +206,9 @@ if (BUILD_TESTING)
         tests/test_process_lifecycle_stress.c
     )
     target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core)
+    if (WIN32)
+        target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE ws2_32 psapi)
+    endif()
 
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
