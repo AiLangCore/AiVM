@@ -8,6 +8,24 @@ static int expect(int condition)
     return condition ? 0 : 1;
 }
 
+static int host_core_bytes_small(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static const uint8_t payload[4] = { 1U, 2U, 3U, 4U };
+    (void)target;
+    if (arg_count != 1U) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].type != AIVM_VAL_STRING) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(payload, sizeof(payload));
+    return AIVM_SYSCALL_OK;
+}
+
 static int test_run_nop_halt(void)
 {
     AivmVm vm;
@@ -365,6 +383,60 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
     return 0;
 }
 
+static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.bytes.fromBase64" },
+        { .type = AIVM_VAL_STRING, .string_value = "ignored" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 4U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.bytes.fromBase64", host_core_bytes_small }
+    };
+
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_used == 4U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_high_water == 4U) != 0) {
+        return 1;
+    }
+
+    aivm_reset_state(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_used == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_high_water == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -395,6 +467,9 @@ int main(void)
         return 1;
     }
     if (test_gc_policy_triggers_when_interval_and_pressure_align() != 0) {
+        return 1;
+    }
+    if (test_reset_clears_bytes_arena_after_syscall_materialization() != 0) {
         return 1;
     }
 
