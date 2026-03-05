@@ -16,6 +16,15 @@ typedef struct {
     size_t forced_drain_count;
 } HostAdapterState;
 
+typedef struct {
+    int64_t values[2048];
+    size_t head;
+    size_t tail;
+    size_t count;
+    size_t drained_total;
+    size_t drained_checksum;
+} StressQueueState;
+
 static int host_ui_get_window_size(
     const char* target,
     const AivmValue* args,
@@ -150,6 +159,78 @@ static int host_adapter_drain(void* context, size_t max_events, size_t* out_drai
     (void)max_events;
     *out_drained_count = state->forced_drain_count;
     state->drained_count += *out_drained_count;
+    return 0;
+}
+
+static int stress_adapter_enqueue(void* context, const char* event_name, AivmValue payload)
+{
+    StressQueueState* state = (StressQueueState*)context;
+    if (state == NULL || event_name == NULL || payload.type != AIVM_VAL_INT) {
+        return 1;
+    }
+    if (state->count >= (sizeof(state->values) / sizeof(state->values[0]))) {
+        return 1;
+    }
+    state->values[state->tail] = payload.int_value;
+    state->tail = (state->tail + 1U) % (sizeof(state->values) / sizeof(state->values[0]));
+    state->count += 1U;
+    return 0;
+}
+
+static int stress_adapter_drain(void* context, size_t max_events, size_t* out_drained_count)
+{
+    size_t drained = 0U;
+    StressQueueState* state = (StressQueueState*)context;
+    if (state == NULL || out_drained_count == NULL) {
+        return 1;
+    }
+    while (state->count > 0U && drained < max_events) {
+        int64_t value = state->values[state->head];
+        state->head = (state->head + 1U) % (sizeof(state->values) / sizeof(state->values[0]));
+        state->count -= 1U;
+        drained += 1U;
+        state->drained_total += 1U;
+        state->drained_checksum = (state->drained_checksum * 131U) + (size_t)(value + 17);
+    }
+    *out_drained_count = drained;
+    return 0;
+}
+
+static int run_high_inflight_event_queue_stress(size_t* out_checksum)
+{
+    int64_t value;
+    size_t drained = 0U;
+    StressQueueState state;
+    AivmRuntimeHostAdapter adapter;
+
+    if (out_checksum == NULL) {
+        return 1;
+    }
+
+    memset(&state, 0, sizeof(state));
+    adapter.context = &state;
+    adapter.enqueue = stress_adapter_enqueue;
+    adapter.drain = stress_adapter_drain;
+
+    for (value = 1; value <= 1500; value += 1) {
+        if (aivm_runtime_host_enqueue_event(&adapter, "host.event.stress", aivm_value_int(value)) !=
+            AIVM_RUNTIME_HOST_EVENT_OK) {
+            return 1;
+        }
+    }
+    while (state.count > 0U) {
+        if (aivm_runtime_host_drain_events(&adapter, 7U, &drained) != AIVM_RUNTIME_HOST_EVENT_OK) {
+            return 1;
+        }
+        if (drained == 0U) {
+            return 1;
+        }
+    }
+    if (state.drained_total != 1500U) {
+        return 1;
+    }
+
+    *out_checksum = state.drained_checksum;
     return 0;
 }
 
@@ -431,6 +512,20 @@ int main(void)
     }
     if (expect(drained_count == 0U) != 0) {
         return 1;
+    }
+
+    {
+        size_t first_checksum = 0U;
+        size_t second_checksum = 0U;
+        if (expect(run_high_inflight_event_queue_stress(&first_checksum) == 0) != 0) {
+            return 1;
+        }
+        if (expect(run_high_inflight_event_queue_stress(&second_checksum) == 0) != 0) {
+            return 1;
+        }
+        if (expect(first_checksum == second_checksum) != 0) {
+            return 1;
+        }
     }
 
     return 0;
