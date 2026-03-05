@@ -388,6 +388,24 @@ static int transition_task_state(AivmVm* vm, AivmCompletedTask* task, AivmTaskSt
     return 0;
 }
 
+static int reclaim_oldest_completed_task_slot(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->completed_task_count == 0U) {
+        return 1;
+    }
+    if (vm->completed_task_count > 1U) {
+        memmove(
+            &vm->completed_tasks[0],
+            &vm->completed_tasks[1],
+            (vm->completed_task_count - 1U) * sizeof(AivmCompletedTask));
+    }
+    vm->completed_task_count -= 1U;
+    return 1;
+}
+
 static int push_completed_task(AivmVm* vm, AivmValue result)
 {
     AivmCompletedTask* task;
@@ -396,8 +414,10 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
         return 0;
     }
     if (vm->completed_task_count >= AIVM_VM_TASK_CAPACITY) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
-        return 0;
+        if (!reclaim_oldest_completed_task_slot(vm)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
+            return 0;
+        }
     }
     if (vm->next_task_handle == INT64_MAX) {
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task handle overflow.");
