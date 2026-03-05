@@ -232,6 +232,71 @@ static int test_reset_clears_gc_counters_after_allocations(void)
     return 0;
 }
 
+static int test_gc_policy_requires_interval_even_under_pressure(void)
+{
+    AivmVm vm;
+    AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U) * 3U + 1U];
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "tmp" }
+    };
+    AivmProgram program;
+    const char* argv_values[AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U];
+    size_t i;
+    size_t ip = 0U;
+
+    for (i = 0U; i < (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U); i += 1U) {
+        argv_values[i] = "arg";
+    }
+
+    for (i = 0U; i < (size_t)(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U); i += 1U) {
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_POP;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = 1U;
+
+    aivm_init_with_syscalls_and_argv(
+        &vm,
+        &program,
+        NULL,
+        0U,
+        argv_values,
+        (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U));
+    aivm_run(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == (size_t)(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U)) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD + AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U)) != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -256,6 +321,9 @@ int main(void)
         return 1;
     }
     if (test_reset_clears_gc_counters_after_allocations() != 0) {
+        return 1;
+    }
+    if (test_gc_policy_requires_interval_even_under_pressure() != 0) {
         return 1;
     }
 
