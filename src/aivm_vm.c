@@ -371,8 +371,25 @@ static const char* syscall_contract_failure_detail(AivmContractStatus status)
     }
 }
 
+static int transition_task_state(AivmVm* vm, AivmCompletedTask* task, AivmTaskState next_state)
+{
+    if (vm == NULL || task == NULL) {
+        return 0;
+    }
+    if (task->state == AIVM_TASK_STATE_PENDING &&
+        (next_state == AIVM_TASK_STATE_COMPLETED ||
+         next_state == AIVM_TASK_STATE_FAILED ||
+         next_state == AIVM_TASK_STATE_CANCELED)) {
+        task->state = next_state;
+        return 1;
+    }
+    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task state transition was invalid.");
+    return 0;
+}
+
 static int push_completed_task(AivmVm* vm, AivmValue result)
 {
+    AivmCompletedTask* task;
     int64_t handle;
     if (vm == NULL) {
         return 0;
@@ -384,8 +401,13 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
 
     handle = vm->next_task_handle;
     vm->next_task_handle += 1;
-    vm->completed_tasks[vm->completed_task_count].handle = handle;
-    vm->completed_tasks[vm->completed_task_count].result = result;
+    task = &vm->completed_tasks[vm->completed_task_count];
+    task->state = AIVM_TASK_STATE_PENDING;
+    task->handle = handle;
+    task->result = result;
+    if (!transition_task_state(vm, task, AIVM_TASK_STATE_COMPLETED)) {
+        return 0;
+    }
     vm->completed_task_count += 1U;
     return aivm_stack_push(vm, aivm_value_int(handle));
 }
@@ -451,7 +473,8 @@ static int find_completed_task(const AivmVm* vm, int64_t handle, AivmValue* out_
         return 0;
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
-        if (vm->completed_tasks[i].handle == handle) {
+        if (vm->completed_tasks[i].state == AIVM_TASK_STATE_COMPLETED &&
+            vm->completed_tasks[i].handle == handle) {
             *out_result = vm->completed_tasks[i].result;
             return 1;
         }

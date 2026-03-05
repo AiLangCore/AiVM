@@ -1742,6 +1742,45 @@ static int test_await_invalid_handle_sets_error(void)
     return 0;
 }
 
+static int test_await_pending_task_handle_sets_error(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 1 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 2U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = 1U;
+    vm.completed_tasks[0].state = AIVM_TASK_STATE_PENDING;
+    vm.completed_tasks[0].handle = 1;
+    vm.completed_tasks[0].result = aivm_value_int(42);
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "AWAIT requires valid task handle.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_parallel_begin_fork_join_and_cancel(void)
 {
     AivmVm vm;
@@ -2652,6 +2691,9 @@ int main(void)
         return 1;
     }
     if (test_await_invalid_handle_sets_error() != 0) {
+        return 1;
+    }
+    if (test_await_pending_task_handle_sets_error() != 0) {
         return 1;
     }
     if (test_parallel_begin_fork_join_and_cancel() != 0) {
