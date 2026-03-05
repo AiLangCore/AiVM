@@ -2486,7 +2486,16 @@ static int test_node_capacity_failure_resets_gc_allocation_counter(void)
     if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
         return 1;
     }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMM005: node arena capacity exceeded.") == 0) != 0) {
+        return 1;
+    }
     if (expect(vm.node_gc_compaction_count >= 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
         return 1;
     }
     if (expect(vm.node_count <= AIVM_VM_NODE_CAPACITY) != 0) {
