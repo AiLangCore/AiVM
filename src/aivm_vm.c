@@ -13,6 +13,7 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
+static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
 
 static int operand_to_index(AivmVm* vm, int64_t operand, size_t* out_index)
 {
@@ -477,7 +478,25 @@ static int is_terminal_task_state(AivmTaskState state)
         state == AIVM_TASK_STATE_CANCELED;
 }
 
-static int find_terminal_task_result(const AivmVm* vm, int64_t handle, AivmValue* out_result)
+static int task_terminal_payload_is_valid(const AivmVm* vm, const AivmCompletedTask* task)
+{
+    const AivmNodeRecord* node;
+    if (vm == NULL || task == NULL) {
+        return 0;
+    }
+    if (task->state == AIVM_TASK_STATE_FAILED || task->state == AIVM_TASK_STATE_CANCELED) {
+        if (task->result.type != AIVM_VAL_NODE) {
+            return 0;
+        }
+        if (!lookup_node(vm, task->result.node_handle, &node)) {
+            return 0;
+        }
+        return strcmp(node->kind, "Err") == 0;
+    }
+    return 1;
+}
+
+static int find_terminal_task_result(AivmVm* vm, int64_t handle, AivmValue* out_result)
 {
     size_t i;
     if (vm == NULL || out_result == NULL) {
@@ -486,6 +505,10 @@ static int find_terminal_task_result(const AivmVm* vm, int64_t handle, AivmValue
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
         if (is_terminal_task_state(vm->completed_tasks[i].state) &&
             vm->completed_tasks[i].handle == handle) {
+            if (!task_terminal_payload_is_valid(vm, &vm->completed_tasks[i])) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Terminal failed/canceled task requires Err node result.");
+                return 0;
+            }
             *out_result = vm->completed_tasks[i].result;
             return 1;
         }
@@ -1463,9 +1486,15 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (handle_value.type != AIVM_VAL_INT ||
-                !find_terminal_task_result(vm, handle_value.int_value, &completed)) {
+            if (handle_value.type != AIVM_VAL_INT) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!find_terminal_task_result(vm, handle_value.int_value, &completed)) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
+                }
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
