@@ -2395,6 +2395,8 @@ static int test_node_compaction_does_not_run_below_pressure_threshold(void)
     size_t ip = 0U;
     size_t i;
     size_t transient_nodes = (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 2U;
+    size_t expected_node_count = (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD;
+    size_t expected_alloc_counter = (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 1U;
 
     constants[0] = aivm_value_string("tmp");
     for (i = 0U; i < transient_nodes; i += 1U) {
@@ -2436,10 +2438,10 @@ static int test_node_compaction_does_not_run_below_pressure_threshold(void)
     if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_count <= (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) != 0) {
+    if (expect(vm.node_count == expected_node_count) != 0) {
         return 1;
     }
-    if (expect(vm.node_allocations_since_gc > (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
+    if (expect(vm.node_allocations_since_gc == expected_alloc_counter) != 0) {
         return 1;
     }
     return 0;
