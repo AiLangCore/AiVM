@@ -1,9 +1,26 @@
+#include <string.h>
+
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 
 static int expect(int condition)
 {
     return condition ? 0 : 1;
+}
+
+static const AivmNodeAttr* find_node_attr(const AivmVm* vm, const AivmNodeRecord* node, const char* key)
+{
+    size_t i;
+    if (vm == NULL || node == NULL || key == NULL) {
+        return NULL;
+    }
+    for (i = 0U; i < node->attr_count; i += 1U) {
+        const AivmNodeAttr* attr = &vm->node_attrs[node->attr_start + i];
+        if (attr->key != NULL && strcmp(attr->key, key) == 0) {
+            return attr;
+        }
+    }
+    return NULL;
 }
 
 static int host_ui_get_window_size(
@@ -106,6 +123,8 @@ int main(void)
         "one",
         "two"
     };
+    const AivmNodeRecord* ui_event_node;
+    const AivmNodeAttr* attr;
 
     if (expect(aivm_execute_program(&program_ok, &vm) == 1) != 0) {
         return 1;
@@ -147,6 +166,50 @@ int main(void)
         return 1;
     }
     if (expect(vm.stack[0].type == AIVM_VAL_INT && vm.stack[0].int_value == 2) != 0) {
+        return 1;
+    }
+
+    if (expect(vm.ui_empty_event_node_handle > 0) != 0) {
+        return 1;
+    }
+    ui_event_node = &vm.nodes[(size_t)(vm.ui_empty_event_node_handle - 1)];
+    if (expect(strcmp(ui_event_node->kind, "UiEvent") == 0) != 0) {
+        return 1;
+    }
+    if (expect(ui_event_node->attr_count == 8U) != 0) {
+        return 1;
+    }
+
+    attr = find_node_attr(&vm, ui_event_node, "type");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_STRING && strcmp(attr->string_value, "none") == 0) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "targetId");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_STRING && strcmp(attr->string_value, "") == 0) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "x");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_INT && attr->int_value == -1) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "y");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_INT && attr->int_value == -1) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "key");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_STRING && strcmp(attr->string_value, "") == 0) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "text");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_STRING && strcmp(attr->string_value, "") == 0) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "modifiers");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_STRING && strcmp(attr->string_value, "") == 0) != 0) {
+        return 1;
+    }
+    attr = find_node_attr(&vm, ui_event_node, "repeat");
+    if (expect(attr != NULL && attr->kind == AIVM_NODE_ATTR_BOOL && attr->bool_value == 0) != 0) {
         return 1;
     }
 
