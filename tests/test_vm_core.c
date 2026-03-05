@@ -26,6 +26,24 @@ static int host_core_bytes_small(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_core_bytes_large(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static uint8_t payload[AIVM_VM_BYTES_ARENA_CAPACITY + 1U];
+    (void)target;
+    if (arg_count != 1U) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[0].type != AIVM_VAL_STRING) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(payload, sizeof(payload));
+    return AIVM_SYSCALL_OK;
+}
+
 static int test_run_nop_halt(void)
 {
     AivmVm vm;
@@ -446,6 +464,110 @@ static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
     return 0;
 }
 
+static int test_reset_clears_pressure_counters_after_string_failure(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_STR_CONCAT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "a" },
+        { .type = AIVM_VAL_STRING, .string_value = "b" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.string_arena_used = AIVM_VM_STRING_ARENA_CAPACITY;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+
+    aivm_reset_state(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_reset_clears_pressure_counters_after_bytes_failure(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.bytes.fromBase64" },
+        { .type = AIVM_VAL_STRING, .string_value = "ignored" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.bytes.fromBase64", host_core_bytes_large }
+    };
+
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 1U) != 0) {
+        return 1;
+    }
+
+    aivm_reset_state(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -479,6 +601,12 @@ int main(void)
         return 1;
     }
     if (test_reset_clears_bytes_arena_after_syscall_materialization() != 0) {
+        return 1;
+    }
+    if (test_reset_clears_pressure_counters_after_string_failure() != 0) {
+        return 1;
+    }
+    if (test_reset_clears_pressure_counters_after_bytes_failure() != 0) {
         return 1;
     }
 
