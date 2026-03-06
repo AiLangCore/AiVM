@@ -7,6 +7,7 @@ parity_asymmetric_status|printf 'same-status-text\n'; exit 1|printf 'same-status
 parity_sys_utf8_bad_type|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_utf8_bad_type.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_utf8_bad_type.out; exit 2|2
 parity_sys_substring_bad_arity|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_substring_bad_arity.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_substring_bad_arity.out; exit 2|2
 parity_sys_remove_bad_type|./tools/airun run src/AiVM.Core/native/tests/parity_cases/sys_remove_bad_type.aos|cat src/AiVM.Core/native/tests/parity_cases/sys_remove_bad_type.out; exit 2|2
+parity_native_call_arity_error|./tools/airun run src/AiVM.Core/native/tests/parity_cases/native_call_arity_error.aos|cat src/AiVM.Core/native/tests/parity_cases/native_call_arity_error.out; exit 2|2
 parity_loop_stmt_break_exit|./tools/airun run src/AiVM.Core/native/tests/parity_cases/loop_stmt_break_exit.aos|cat src/AiVM.Core/native/tests/parity_cases/loop_stmt_break_exit.out
 parity_loop_break_continue|./tools/airun run src/AiVM.Core/native/tests/parity_cases/loop_break_continue.aos|cat src/AiVM.Core/native/tests/parity_cases/loop_break_continue.out
 parity_repl_sys_success|./tools/airun repl < src/AiVM.Core/native/tests/parity_cases/repl_sys_success.in|cat src/AiVM.Core/native/tests/parity_cases/repl_sys_success.out
