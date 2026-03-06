@@ -30,8 +30,16 @@ static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmV
 {
     const char* left_text = "";
     const char* right_text = "";
+    unsigned long long ret0 = 0ULL;
+    unsigned long long ret1 = 0ULL;
     if (vm == NULL) {
         return;
+    }
+    if (vm->call_frame_count > 0U) {
+        ret0 = (unsigned long long)vm->call_frames[vm->call_frame_count - 1U].return_instruction_pointer;
+        if (vm->call_frame_count > 1U) {
+            ret1 = (unsigned long long)vm->call_frames[vm->call_frame_count - 2U].return_instruction_pointer;
+        }
     }
     if (left.type == AIVM_VAL_STRING && left.string_value != NULL) {
         left_text = left.string_value;
@@ -42,12 +50,14 @@ static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmV
     (void)snprintf(
         vm->error_detail_storage,
         sizeof(vm->error_detail_storage),
-        "ADD_INT requires int operands. left=%s(\"%.40s\") right=%s(\"%.40s\") ip=%llu",
+        "ADD_INT requires int operands. left=%s(\"%.40s\") right=%s(\"%.40s\") ip=%llu ret0=%llu ret1=%llu",
         vm_value_type_name(left.type),
         left_text,
         vm_value_type_name(right.type),
         right_text,
-        (unsigned long long)vm->instruction_pointer);
+        (unsigned long long)vm->instruction_pointer,
+        ret0,
+        ret1);
     set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, vm->error_detail_storage);
 }
 
@@ -551,7 +561,13 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         return 0;
     }
     if (target_value.type != AIVM_VAL_STRING || target_value.string_value == NULL) {
-        set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CALL_SYS target must be string.");
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "CALL_SYS target must be string. got=%s ip=%llu",
+            vm_value_type_name(target_value.type),
+            (unsigned long long)vm->instruction_pointer);
+        set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, vm->error_detail_storage);
         return 0;
     }
     if (!is_syscall_target_string(target_value.string_value)) {
@@ -635,6 +651,18 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         out_result,
         &contract_status);
     if (syscall_status != AIVM_SYSCALL_OK) {
+        if (syscall_status == AIVM_SYSCALL_ERR_INVALID) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "AIVMS001: Syscall dispatch input was invalid. target=\"%.72s\" bindingCount=%llu argCount=%llu hasBindings=%s",
+                target_value.string_value,
+                (unsigned long long)vm->syscall_binding_count,
+                (unsigned long long)effective_arg_count,
+                vm->syscall_bindings == NULL ? "false" : "true");
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+            return 0;
+        }
         set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_failure_detail(syscall_status, contract_status));
         return 0;
     }
