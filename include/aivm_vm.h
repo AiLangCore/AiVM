@@ -106,6 +106,7 @@ typedef struct {
     AivmVmStatus status;
     AivmVmError error;
     const char* error_detail;
+    char error_detail_storage[192];
 
     AivmValue stack[AIVM_VM_STACK_CAPACITY];
     size_t stack_count;

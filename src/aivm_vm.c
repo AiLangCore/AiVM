@@ -1,4 +1,5 @@
 #include "aivm_vm.h"
+#include <stdio.h>
 #include <string.h>
 #include "sys/aivm_syscall_contracts.h"
 
@@ -11,6 +12,45 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
     vm->status = AIVM_VM_STATUS_ERROR;
     vm->error_detail = detail;
 }
+
+static const char* vm_value_type_name(AivmValueType type)
+{
+    switch (type) {
+        case AIVM_VAL_VOID: return "void";
+        case AIVM_VAL_INT: return "int";
+        case AIVM_VAL_BOOL: return "bool";
+        case AIVM_VAL_STRING: return "string";
+        case AIVM_VAL_BYTES: return "bytes";
+        case AIVM_VAL_NODE: return "node";
+        default: return "unknown";
+    }
+}
+
+static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmValue right)
+{
+    const char* left_text = "";
+    const char* right_text = "";
+    if (vm == NULL) {
+        return;
+    }
+    if (left.type == AIVM_VAL_STRING && left.string_value != NULL) {
+        left_text = left.string_value;
+    }
+    if (right.type == AIVM_VAL_STRING && right.string_value != NULL) {
+        right_text = right.string_value;
+    }
+    (void)snprintf(
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
+        "ADD_INT requires int operands. left=%s(\"%.40s\") right=%s(\"%.40s\") ip=%llu",
+        vm_value_type_name(left.type),
+        left_text,
+        vm_value_type_name(right.type),
+        right_text,
+        (unsigned long long)vm->instruction_pointer);
+    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, vm->error_detail_storage);
+}
+
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
@@ -1730,7 +1770,7 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (left.type != AIVM_VAL_INT || right.type != AIVM_VAL_INT) {
-                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "ADD_INT requires int operands.");
+                set_vm_error_add_int_type_mismatch(vm, left, right);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

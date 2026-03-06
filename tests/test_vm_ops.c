@@ -255,7 +255,7 @@ static int test_add_int_type_mismatch_sets_error(void)
     if (expect(vm.error == AIVM_VM_ERR_TYPE_MISMATCH) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "ADD_INT requires int operands.") == 0) != 0) {
+    if (expect(strncmp(aivm_vm_error_detail(&vm), "ADD_INT requires int operands.", 30U) == 0) != 0) {
         return 1;
     }
 
