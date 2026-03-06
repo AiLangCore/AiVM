@@ -1662,7 +1662,7 @@ void aivm_step(AivmVm* vm)
             break;
 
         case AIVM_OP_STUB:
-            vm->instruction_pointer += 1U;
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_OPCODE, "STUB opcode is invalid at runtime.");
             break;
 
         case AIVM_OP_PUSH_INT:

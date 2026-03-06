@@ -105,6 +105,36 @@ static int test_invalid_opcode_sets_error(void)
     return 0;
 }
 
+static int test_stub_opcode_sets_error(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_STUB, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_step(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_OPCODE) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "STUB opcode is invalid at runtime.") == 0) != 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int test_halt_without_program_is_safe(void)
 {
     AivmVm vm;
@@ -757,6 +787,9 @@ int main(void)
         return 1;
     }
     if (test_invalid_opcode_sets_error() != 0) {
+        return 1;
+    }
+    if (test_stub_opcode_sets_error() != 0) {
         return 1;
     }
     if (test_halt_without_program_is_safe() != 0) {
