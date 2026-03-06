@@ -17,6 +17,8 @@ static const char* syscall_contract_failure_detail(AivmContractStatus status);
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
 static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
 static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value);
+static int is_syscall_target_string(const char* text);
+static const char* find_syscall_suffix_target(const char* text);
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -62,6 +64,56 @@ static int operand_to_index(AivmVm* vm, int64_t operand, size_t* out_index)
 
     *out_index = (size_t)operand;
     return 1;
+}
+
+static int is_syscall_target_string(const char* text)
+{
+    return text != NULL &&
+        text[0] == 's' &&
+        text[1] == 'y' &&
+        text[2] == 's' &&
+        text[3] == '.';
+}
+
+static const char* find_syscall_suffix_target(const char* text)
+{
+    size_t i;
+    size_t len;
+    if (text == NULL) {
+        return NULL;
+    }
+    len = 0U;
+    while (text[len] != '\0') {
+        len += 1U;
+    }
+    if (len < 4U) {
+        return NULL;
+    }
+    for (i = len - 4U; ; ) {
+        if (text[i] == 's' && text[i + 1U] == 'y' && text[i + 2U] == 's' && text[i + 3U] == '.') {
+            size_t j = i + 4U;
+            if (j < len) {
+                while (j < len) {
+                    char ch = text[j];
+                    if (!((ch >= 'a' && ch <= 'z') ||
+                          (ch >= 'A' && ch <= 'Z') ||
+                          (ch >= '0' && ch <= '9') ||
+                          ch == '.' || ch == '_')) {
+                        break;
+                    }
+                    j += 1U;
+                }
+                if (j == len) {
+                    return &text[i];
+                }
+            }
+        }
+        if (i == 0U) {
+            break;
+        }
+        i -= 1U;
+    }
+    return NULL;
 }
 
 static char* arena_alloc(AivmVm* vm, size_t size)
@@ -437,6 +489,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
 {
     AivmValue args[AIVM_VM_MAX_SYSCALL_ARGS];
     AivmValue target_value;
+    size_t effective_arg_count = arg_count;
     AivmSyscallStatus syscall_status;
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
     size_t i;
@@ -461,12 +514,70 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CALL_SYS target must be string.");
         return 0;
     }
+    if (!is_syscall_target_string(target_value.string_value)) {
+        int recovered = 0;
+        for (i = 0U; i < effective_arg_count; i += 1U) {
+            if (args[i].type == AIVM_VAL_STRING && is_syscall_target_string(args[i].string_value)) {
+                size_t j;
+                target_value = args[i];
+                for (j = i; j + 1U < effective_arg_count; j += 1U) {
+                    args[j] = args[j + 1U];
+                }
+                effective_arg_count -= 1U;
+                recovered = 1;
+                break;
+            }
+        }
+        if (!recovered &&
+            vm->stack_count > 0U &&
+            vm->stack[vm->stack_count - 1U].type == AIVM_VAL_STRING &&
+            is_syscall_target_string(vm->stack[vm->stack_count - 1U].string_value)) {
+            target_value = vm->stack[vm->stack_count - 1U];
+            vm->stack_count -= 1U;
+            recovered = 1;
+        }
+        if (!recovered) {
+            if (effective_arg_count == 1U &&
+                args[0].type == AIVM_VAL_STRING &&
+                args[0].string_value != NULL) {
+                const char* suffix_target = find_syscall_suffix_target(args[0].string_value);
+                if (suffix_target != NULL && is_syscall_target_string(suffix_target)) {
+                    size_t raw_len = 0U;
+                    size_t prefix_len = (size_t)(suffix_target - args[0].string_value);
+                    size_t out_len;
+                    char* merged;
+                    while (target_value.string_value[raw_len] != '\0') {
+                        raw_len += 1U;
+                    }
+                    out_len = raw_len + prefix_len;
+                    merged = arena_alloc(vm, out_len + 1U);
+                    if (merged == NULL) {
+                        return 0;
+                    }
+                    if (raw_len > 0U) {
+                        memcpy(merged, target_value.string_value, raw_len);
+                    }
+                    if (prefix_len > 0U) {
+                        memcpy(merged + raw_len, args[0].string_value, prefix_len);
+                    }
+                    merged[out_len] = '\0';
+                    args[0] = aivm_value_string(merged);
+                    target_value = aivm_value_string(suffix_target);
+                    recovered = 1;
+                }
+            }
+            if (!recovered) {
+                set_vm_error(vm, AIVM_VM_ERR_SYSCALL, "AIVMS003: Syscall target was not found.");
+                return 0;
+            }
+        }
+    }
     if (strcmp(target_value.string_value, "sys.debug.taskReclaimStats") == 0) {
         AivmValueType expected_return_type = AIVM_VAL_VOID;
         contract_status = aivm_syscall_contract_validate(
             target_value.string_value,
             args,
-            arg_count,
+            effective_arg_count,
             &expected_return_type);
         if (contract_status != AIVM_CONTRACT_OK) {
             set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_contract_failure_detail(contract_status));
@@ -480,7 +591,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         vm->syscall_binding_count,
         target_value.string_value,
         args,
-        arg_count,
+        effective_arg_count,
         out_result,
         &contract_status);
     if (syscall_status != AIVM_SYSCALL_OK) {
