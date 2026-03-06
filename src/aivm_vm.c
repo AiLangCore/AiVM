@@ -992,7 +992,11 @@ static int remap_value_node_handle(AivmValue* value, const int64_t* handle_map)
     return 1;
 }
 
-static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
+static int mark_live_node_handles(
+    AivmVm* vm,
+    uint8_t* live,
+    const int64_t* extra_handles,
+    size_t extra_handle_count)
 {
     int64_t queue[AIVM_VM_NODE_CAPACITY];
     size_t queue_read = 0U;
@@ -1043,6 +1047,19 @@ static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
             ENQUEUE_HANDLE(vm->par_values[i].node_handle);
         }
     }
+    if (extra_handles != NULL) {
+        for (i = 0U; i < extra_handle_count; i += 1U) {
+            int64_t handle = extra_handles[i];
+            if (handle <= 0) {
+                continue;
+            }
+            if (handle > (int64_t)vm->node_count) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid extra node handle during GC mark.");
+                return 0;
+            }
+            ENQUEUE_HANDLE(handle);
+        }
+    }
 
     while (queue_read < queue_write) {
         const AivmNodeRecord* node;
@@ -1062,7 +1079,11 @@ static int mark_live_node_handles(AivmVm* vm, uint8_t* live)
     return 1;
 }
 
-static int compact_node_arenas(AivmVm* vm)
+static int compact_node_arenas_with_map(
+    AivmVm* vm,
+    const int64_t* extra_handles,
+    size_t extra_handle_count,
+    int64_t* out_handle_map)
 {
     uint8_t live[AIVM_VM_NODE_CAPACITY];
     int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
@@ -1090,7 +1111,7 @@ static int compact_node_arenas(AivmVm* vm)
 
     memset(live, 0, sizeof(live));
     memset(handle_map, 0, sizeof(handle_map));
-    if (!mark_live_node_handles(vm, live)) {
+    if (!mark_live_node_handles(vm, live, extra_handles, extra_handle_count)) {
         return 0;
     }
 
@@ -1196,6 +1217,34 @@ static int compact_node_arenas(AivmVm* vm)
         }
         vm->ui_empty_event_node_handle = handle_map[vm->ui_empty_event_node_handle];
     }
+    if (out_handle_map != NULL) {
+        memcpy(out_handle_map, handle_map, sizeof(handle_map));
+    }
+    return 1;
+}
+
+static int remap_child_handles_for_compaction(
+    AivmVm* vm,
+    int64_t* remapped_children,
+    const int64_t* children,
+    size_t child_count,
+    const int64_t* handle_map)
+{
+    size_t i;
+    (void)vm;
+    if (child_count == 0U) {
+        return 1;
+    }
+    if (remapped_children == NULL || children == NULL || handle_map == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < child_count; i += 1U) {
+        int64_t handle = children[i];
+        if (handle <= 0 || handle > (int64_t)AIVM_VM_NODE_CAPACITY || handle_map[handle] <= 0) {
+            return 0;
+        }
+        remapped_children[i] = handle_map[handle];
+    }
     return 1;
 }
 
@@ -1224,21 +1273,38 @@ static int create_node_record(
     int64_t* out_handle)
 {
     AivmNodeRecord* node;
+    int64_t remapped_children[AIVM_VM_NODE_CHILD_CAPACITY];
+    const int64_t* effective_children = children;
+    int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
     size_t i;
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
     }
     if (should_attempt_proactive_node_gc(vm)) {
-        if (!compact_node_arenas(vm)) {
+        if (!compact_node_arenas_with_map(vm, children, child_count, handle_map)) {
             return 0;
+        }
+        if (!remap_child_handles_for_compaction(vm, remapped_children, children, child_count, handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child handle remap during proactive node GC.");
+            return 0;
+        }
+        if (child_count > 0U) {
+            effective_children = remapped_children;
         }
         vm->node_allocations_since_gc = 0U;
     }
     if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
         vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
         vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
-        if (!compact_node_arenas(vm)) {
+        if (!compact_node_arenas_with_map(vm, effective_children, child_count, handle_map)) {
             return 0;
+        }
+        if (!remap_child_handles_for_compaction(vm, remapped_children, effective_children, child_count, handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child handle remap during node GC.");
+            return 0;
+        }
+        if (child_count > 0U) {
+            effective_children = remapped_children;
         }
         vm->node_allocations_since_gc = 0U;
         if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
@@ -1282,7 +1348,7 @@ static int create_node_record(
     }
 
     for (i = 0U; i < child_count; i += 1U) {
-        vm->node_children[vm->node_child_count + i] = children[i];
+        vm->node_children[vm->node_child_count + i] = effective_children[i];
     }
 
     vm->node_attr_count += attr_count;
@@ -1640,33 +1706,47 @@ int aivm_frame_pop(AivmVm* vm, AivmCallFrame* out_frame)
 
 int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
 {
+    size_t base = 0U;
+    size_t absolute_index;
     if (vm == NULL) {
         return 0;
     }
 
-    if (index >= AIVM_VM_LOCALS_CAPACITY) {
+    if (vm->call_frame_count > 0U) {
+        base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
+    }
+    if (base >= AIVM_VM_LOCALS_CAPACITY || index >= (AIVM_VM_LOCALS_CAPACITY - base)) {
         set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, "Invalid local slot.");
         return 0;
     }
-
-    vm->locals[index] = value;
-    if (index >= vm->locals_count) {
-        vm->locals_count = index + 1U;
+    absolute_index = base + index;
+    vm->locals[absolute_index] = value;
+    if (absolute_index >= vm->locals_count) {
+        vm->locals_count = absolute_index + 1U;
     }
     return 1;
 }
 
 int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
 {
+    size_t base = 0U;
+    size_t absolute_index;
     if (vm == NULL || out_value == NULL) {
         return 0;
     }
 
-    if (index >= vm->locals_count) {
+    if (vm->call_frame_count > 0U) {
+        base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
+    }
+    if (base >= AIVM_VM_LOCALS_CAPACITY || index >= (AIVM_VM_LOCALS_CAPACITY - base)) {
+        return 0;
+    }
+    absolute_index = base + index;
+    if (absolute_index >= vm->locals_count) {
         return 0;
     }
 
-    *out_value = vm->locals[index];
+    *out_value = vm->locals[absolute_index];
     return 1;
 }
 

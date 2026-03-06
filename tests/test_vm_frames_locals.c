@@ -85,5 +85,35 @@ int main(void)
         return 1;
     }
 
+    aivm_reset_state(&vm);
+    if (expect(aivm_local_set(&vm, 0U, aivm_value_int(11)) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_frame_push(&vm, 1U, 0U) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_local_set(&vm, 0U, aivm_value_int(22)) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.locals_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_local_get(&vm, 0U, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT) != 0 || expect(out.int_value == 22) != 0) {
+        return 1;
+    }
+    if (expect(aivm_frame_pop(&vm, &frame) == 1) != 0) {
+        return 1;
+    }
+    vm.locals_count = frame.locals_base;
+    if (expect(aivm_local_get(&vm, 0U, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT) != 0 || expect(out.int_value == 11) != 0) {
+        return 1;
+    }
+
     return 0;
 }
