@@ -1486,6 +1486,91 @@ static int test_str_substring_and_remove_type_mismatch(void)
     return 0;
 }
 
+static int test_str_substring_reuses_interned_results(void)
+{
+    AivmVm vm;
+    AivmVm baseline_vm;
+    AivmValue second;
+    AivmValue first;
+    size_t baseline_arena_used;
+    static const AivmInstruction baseline_instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_STR_SUBSTRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmInstruction repeated_instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_STR_SUBSTRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_STR_SUBSTRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "abcdef" },
+        { .type = AIVM_VAL_INT, .int_value = 1 },
+        { .type = AIVM_VAL_INT, .int_value = 2 }
+    };
+    static const AivmProgram baseline_program = {
+        .instructions = baseline_instructions,
+        .instruction_count = 5U,
+        .constants = constants,
+        .constant_count = 3U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmProgram repeated_program = {
+        .instructions = repeated_instructions,
+        .instruction_count = 9U,
+        .constants = constants,
+        .constant_count = 3U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&baseline_vm, &baseline_program);
+    aivm_run(&baseline_vm);
+    if (expect(baseline_vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    baseline_arena_used = baseline_vm.string_arena_used;
+
+    aivm_init(&vm, &repeated_program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &second) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &first) == 1) != 0) {
+        return 1;
+    }
+    if (expect(first.type == AIVM_VAL_STRING && strcmp(first.string_value, "bc") == 0) != 0) {
+        return 1;
+    }
+    if (expect(second.type == AIVM_VAL_STRING && strcmp(second.string_value, "bc") == 0) != 0) {
+        return 1;
+    }
+    if (expect(first.string_value == second.string_value) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena_used == baseline_arena_used) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_call_sys_success_and_void_result(void)
 {
     AivmVm vm;
@@ -3695,6 +3780,9 @@ int main(void)
         return 1;
     }
     if (test_str_substring_and_remove_type_mismatch() != 0) {
+        return 1;
+    }
+    if (test_str_substring_reuses_interned_results() != 0) {
         return 1;
     }
     if (test_call_sys_success_and_void_result() != 0) {

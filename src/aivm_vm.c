@@ -231,6 +231,26 @@ static char* lookup_string_in_arena(AivmVm* vm, const char* input)
     return NULL;
 }
 
+static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t length)
+{
+    size_t offset = 0U;
+    if (vm == NULL || input == NULL) {
+        return NULL;
+    }
+    while (offset < vm->string_arena_used) {
+        char* candidate = &vm->string_arena[offset];
+        size_t candidate_length = strlen(candidate);
+        if (candidate_length == length && memcmp(candidate, input, length) == 0) {
+            return candidate;
+        }
+        offset += candidate_length;
+        if (offset < vm->string_arena_used) {
+            offset += 1U;
+        }
+    }
+    return NULL;
+}
+
 static char* copy_string_to_arena(AivmVm* vm, const char* input)
 {
     size_t length = 0U;
@@ -254,6 +274,70 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
         output[i] = input[i];
     }
     output[length] = '\0';
+    return output;
+}
+
+static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t length)
+{
+    char* output;
+    size_t i;
+    if (vm == NULL || input == NULL) {
+        return NULL;
+    }
+    output = lookup_string_range_in_arena(vm, input, length);
+    if (output != NULL) {
+        return output;
+    }
+    output = arena_alloc(vm, length + 1U);
+    if (output == NULL) {
+        return NULL;
+    }
+    for (i = 0U; i < length; i += 1U) {
+        output[i] = input[i];
+    }
+    output[length] = '\0';
+    return output;
+}
+
+static char* copy_string_splice_to_arena(
+    AivmVm* vm,
+    const char* prefix,
+    size_t prefix_length,
+    const char* suffix,
+    size_t suffix_length)
+{
+    size_t offset = 0U;
+    size_t total_length;
+    char* output;
+    size_t i;
+    if (vm == NULL || prefix == NULL || suffix == NULL) {
+        return NULL;
+    }
+    total_length = prefix_length + suffix_length;
+    while (offset < vm->string_arena_used) {
+        char* candidate = &vm->string_arena[offset];
+        size_t candidate_length = strlen(candidate);
+        if (candidate_length == total_length &&
+            memcmp(candidate, prefix, prefix_length) == 0 &&
+            memcmp(candidate + prefix_length, suffix, suffix_length) == 0) {
+            return candidate;
+        }
+        offset += candidate_length;
+        if (offset < vm->string_arena_used) {
+            offset += 1U;
+        }
+    }
+    output = arena_alloc(vm, total_length + 1U);
+    if (output == NULL) {
+        return NULL;
+    }
+    for (i = 0U; i < prefix_length; i += 1U) {
+        output[i] = prefix[i];
+    }
+    for (i = 0U; i < suffix_length; i += 1U) {
+        output[prefix_length + i] = suffix[i];
+    }
+    output[total_length] = '\0';
     return output;
 }
 
@@ -453,7 +537,6 @@ static int push_substring_by_runes(AivmVm* vm, const char* text, int64_t start, 
     size_t start_byte;
     size_t end_byte;
     size_t copy_length;
-    size_t i;
     char* output;
 
     if (vm == NULL) {
@@ -473,14 +556,10 @@ static int push_substring_by_runes(AivmVm* vm, const char* text, int64_t start, 
     start_byte = utf8_byte_offset_for_rune(text, start_rune);
     end_byte = utf8_byte_offset_for_rune(text, end_rune);
     copy_length = end_byte - start_byte;
-    output = arena_alloc(vm, copy_length + 1U);
+    output = copy_string_range_to_arena(vm, text + start_byte, copy_length);
     if (output == NULL) {
         return 0;
     }
-    for (i = 0U; i < copy_length; i += 1U) {
-        output[i] = text[start_byte + i];
-    }
-    output[copy_length] = '\0';
     return aivm_stack_push(vm, aivm_value_string(output));
 }
 
@@ -492,8 +571,6 @@ static int push_remove_by_runes(AivmVm* vm, const char* text, int64_t start, int
     size_t start_byte;
     size_t end_byte;
     size_t input_length = 0U;
-    size_t output_length;
-    size_t i;
     char* output;
 
     if (vm == NULL) {
@@ -519,19 +596,15 @@ static int push_remove_by_runes(AivmVm* vm, const char* text, int64_t start, int
 
     start_byte = utf8_byte_offset_for_rune(text, start_rune);
     end_byte = utf8_byte_offset_for_rune(text, end_rune);
-    output_length = input_length - (end_byte - start_byte);
-    output = arena_alloc(vm, output_length + 1U);
+    output = copy_string_splice_to_arena(
+        vm,
+        text,
+        start_byte,
+        text + end_byte,
+        input_length - end_byte);
     if (output == NULL) {
         return 0;
     }
-
-    for (i = 0U; i < start_byte; i += 1U) {
-        output[i] = text[i];
-    }
-    for (; i < output_length; i += 1U) {
-        output[i] = text[end_byte + (i - start_byte)];
-    }
-    output[output_length] = '\0';
     return aivm_stack_push(vm, aivm_value_string(output));
 }
 
