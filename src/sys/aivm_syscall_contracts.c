@@ -100,6 +100,7 @@ static const AivmSyscallContract Contracts[] = {
     { 26U, "sys.str.utf8ByteCount", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_INT },
     { 59U, "sys.str.substring", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING },
     { 60U, "sys.str.remove", 3U, { AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_STRING },
+    { 116U, "sys.str.find", 3U, { AIVM_VAL_STRING, AIVM_VAL_STRING, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_INT },
     { 111U, "sys.str.fromCodePoint", 1U, { AIVM_VAL_INT, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING },
     { 112U, "sys.str.decodeUnicodeHex4", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING },
     { 113U, "sys.str.decodeUnicodeSurrogatePairHex4", 2U, { AIVM_VAL_STRING, AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING },

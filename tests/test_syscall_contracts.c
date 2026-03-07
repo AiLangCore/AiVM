@@ -736,6 +736,18 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(60U, str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    str_args[0] = aivm_value_string("hello");
+    str_args[1] = aivm_value_string("ll");
+    str_args[2] = aivm_value_int(0);
+    if (expect(aivm_syscall_contract_validate("sys.str.find", str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(116U, str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
     int_arg[0] = aivm_value_int(0x263A);
     if (expect(aivm_syscall_contract_validate("sys.str.fromCodePoint", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
