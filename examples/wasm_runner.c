@@ -231,6 +231,20 @@ static int native_syscall_unavailable(
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
 
+static int has_binding_target(const AivmSyscallBinding* bindings, size_t binding_count, const char* target)
+{
+    size_t index;
+    if (bindings == NULL || target == NULL) {
+        return 0;
+    }
+    for (index = 0U; index < binding_count; index += 1U) {
+        if (bindings[index].target != NULL && strcmp(bindings[index].target, target) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
 {
     FILE* f;
@@ -1784,6 +1798,15 @@ int main(int argc, char** argv)
         } else if (strcmp(contract->target, "sys.ui.closeWindow") == 0) {
             bindings[binding_count].handler = native_syscall_ui_close_window;
         }
+        binding_count += 1U;
+    }
+    if (!has_binding_target(bindings, binding_count, "sys.image.decodeToRgbaBase64")) {
+        if (binding_count >= (sizeof(bindings) / sizeof(bindings[0]))) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm syscall binding overflow.\" nodeId=syscall)\n");
+            return 2;
+        }
+        bindings[binding_count].target = "sys.image.decodeToRgbaBase64";
+        bindings[binding_count].handler = native_syscall_unavailable;
         binding_count += 1U;
     }
 
