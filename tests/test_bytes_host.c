@@ -140,7 +140,7 @@ int main(void)
         two_args[0] = aivm_value_bytes(g_native_bytes_scratch, png_len);
         two_args[1] = aivm_value_string("image/png");
         status = native_syscall_image_decode_to_rgba_base64("sys.image.decodeToRgbaBase64", two_args, 2U, &result);
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_WIN32)
         CHECK(status == AIVM_SYSCALL_OK);
         CHECK(result.type == AIVM_VAL_STRING);
         CHECK(result.string_value != NULL && strlen(result.string_value) > 0U);
