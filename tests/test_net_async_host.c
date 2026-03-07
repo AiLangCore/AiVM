@@ -90,6 +90,13 @@ int main(void)
     CHECK(result.type == AIVM_VAL_INT);
     connection = result.int_value;
     CHECK(connection > 0);
+    for (i = 0; i < 1000 && accepted == NATIVE_INVALID_SOCKET; i += 1) {
+        accepted = accept(listener, NULL, NULL);
+        if (accepted != NATIVE_INVALID_SOCKET) {
+            break;
+        }
+        test_sleep_ms(1);
+    }
     CHECK(accepted != NATIVE_INVALID_SOCKET);
 
     args[0] = aivm_value_int(connection);

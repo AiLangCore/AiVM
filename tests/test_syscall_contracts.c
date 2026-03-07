@@ -819,6 +819,15 @@ int main(void)
     if (expect(return_type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_validate("sys.bytes.fromUtf8String", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(118U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
     bytes_int_args[0] = bytes_arg[0];
     bytes_int_args[1] = aivm_value_int(1);
     if (expect(aivm_syscall_contract_validate("sys.bytes.at", bytes_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {

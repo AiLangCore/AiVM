@@ -112,6 +112,7 @@ static const AivmSyscallContract Contracts[] = {
     { 101U, "sys.bytes.slice", 3U, { AIVM_VAL_BYTES, AIVM_VAL_INT, AIVM_VAL_INT, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
     { 102U, "sys.bytes.concat", 2U, { AIVM_VAL_BYTES, AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
     { 114U, "sys.bytes.toUtf8String", 1U, { AIVM_VAL_BYTES, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_STRING },
+    { 118U, "sys.bytes.fromUtf8String", 1U, { AIVM_VAL_STRING, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_BYTES },
     { 115U, "sys.debug.taskReclaimStats", 0U, { AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID, AIVM_VAL_VOID }, AIVM_VAL_NODE }
 };
 

@@ -90,6 +90,12 @@ int main(void)
     CHECK(result.type == AIVM_VAL_STRING);
     CHECK(aivm_value_equals(aivm_value_string(result.string_value), aivm_value_string("hello")) == 1);
 
+    one_arg[0] = aivm_value_string("hello");
+    status = native_syscall_bytes_from_utf8_string("sys.bytes.fromUtf8String", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BYTES && result.bytes_value.length == 5U);
+    CHECK(memcmp(result.bytes_value.data, utf8_raw, 5U) == 0);
+
     one_arg[0] = aivm_value_bytes(empty_raw, 0U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);

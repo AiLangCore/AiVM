@@ -233,6 +233,43 @@ if (BUILD_TESTING)
     if (WIN32)
         target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE ws2_32 psapi)
     endif()
+    if (APPLE)
+        target_link_libraries(
+            aivm_test_bytes_host PRIVATE
+            "-framework AppKit"
+            "-framework Foundation"
+            "-framework Security"
+            "-framework CoreFoundation"
+        )
+        target_link_libraries(
+            aivm_test_ui_image_host PRIVATE
+            "-framework AppKit"
+            "-framework Foundation"
+            "-framework Security"
+            "-framework CoreFoundation"
+        )
+        target_link_libraries(
+            aivm_test_net_async_host PRIVATE
+            "-framework AppKit"
+            "-framework Foundation"
+            "-framework Security"
+            "-framework CoreFoundation"
+        )
+        target_link_libraries(
+            aivm_test_host_open_default PRIVATE
+            "-framework AppKit"
+            "-framework Foundation"
+            "-framework Security"
+            "-framework CoreFoundation"
+        )
+        target_link_libraries(
+            aivm_test_process_lifecycle_stress PRIVATE
+            "-framework AppKit"
+            "-framework Foundation"
+            "-framework Security"
+            "-framework CoreFoundation"
+        )
+    endif()
 
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
