@@ -208,6 +208,15 @@ int main(void)
     if (expect(return_type == AIVM_VAL_INT) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_validate("sys.host.openUrl", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(120U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
     int_arg[0] = aivm_value_int(1);
     if (expect(aivm_syscall_contract_validate("sys.time.nowUnixMs", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
