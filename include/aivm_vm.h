@@ -80,11 +80,21 @@ typedef struct {
 } AivmParContext;
 
 enum {
-    AIVM_VM_STACK_CAPACITY = 1024,
+    AIVM_VM_STACK_CAPACITY = 4096,
+    AIVM_VM_STACK_INITIAL_CAPACITY = 1024,
+    AIVM_VM_STACK_GROWTH_STEP = 512,
     AIVM_VM_CALLFRAME_CAPACITY = 2048,
-    AIVM_VM_LOCALS_CAPACITY = 1024,
+    AIVM_VM_CALLFRAME_INITIAL_CAPACITY = 256,
+    AIVM_VM_CALLFRAME_GROWTH_STEP = 256,
+    AIVM_VM_LOCALS_CAPACITY = 4096,
+    AIVM_VM_LOCALS_INITIAL_CAPACITY = 1024,
+    AIVM_VM_LOCALS_GROWTH_STEP = 512,
     AIVM_VM_STRING_ARENA_CAPACITY = 65536,
-    AIVM_VM_BYTES_ARENA_CAPACITY = 32768,
+    AIVM_VM_STRING_ARENA_INITIAL_CAPACITY = 8192,
+    AIVM_VM_STRING_ARENA_GROWTH_STEP = 8192,
+    AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
+    AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
+    AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 256,
     AIVM_VM_NODE_ATTR_CAPACITY = 1024,
@@ -110,16 +120,21 @@ typedef struct {
 
     AivmValue stack[AIVM_VM_STACK_CAPACITY];
     size_t stack_count;
+    size_t stack_limit;
 
     AivmCallFrame call_frames[AIVM_VM_CALLFRAME_CAPACITY];
     size_t call_frame_count;
+    size_t call_frame_limit;
 
     AivmValue locals[AIVM_VM_LOCALS_CAPACITY];
     size_t locals_count;
+    size_t locals_limit;
     char string_arena[AIVM_VM_STRING_ARENA_CAPACITY];
     size_t string_arena_used;
+    size_t string_arena_limit;
     uint8_t bytes_arena[AIVM_VM_BYTES_ARENA_CAPACITY];
     size_t bytes_arena_used;
+    size_t bytes_arena_limit;
     const AivmSyscallBinding* syscall_bindings;
     size_t syscall_binding_count;
     const char* const* process_argv;

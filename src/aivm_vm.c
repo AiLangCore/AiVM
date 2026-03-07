@@ -107,6 +107,74 @@ static void add_counter_saturating(size_t* counter, size_t delta)
     *counter += delta;
 }
 
+static size_t grow_limit(size_t current, size_t step, size_t max_value)
+{
+    size_t next;
+    if (current >= max_value) {
+        return max_value;
+    }
+    next = current + step;
+    if (next < current || next > max_value) {
+        return max_value;
+    }
+    return next;
+}
+
+static int ensure_stack_capacity(AivmVm* vm, size_t needed)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    while (needed > vm->stack_limit && vm->stack_limit < AIVM_VM_STACK_CAPACITY) {
+        vm->stack_limit = grow_limit(vm->stack_limit, AIVM_VM_STACK_GROWTH_STEP, AIVM_VM_STACK_CAPACITY);
+    }
+    return needed <= vm->stack_limit;
+}
+
+static int ensure_call_frame_capacity(AivmVm* vm, size_t needed)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    while (needed > vm->call_frame_limit && vm->call_frame_limit < AIVM_VM_CALLFRAME_CAPACITY) {
+        vm->call_frame_limit = grow_limit(vm->call_frame_limit, AIVM_VM_CALLFRAME_GROWTH_STEP, AIVM_VM_CALLFRAME_CAPACITY);
+    }
+    return needed <= vm->call_frame_limit;
+}
+
+static int ensure_locals_capacity(AivmVm* vm, size_t needed)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    while (needed > vm->locals_limit && vm->locals_limit < AIVM_VM_LOCALS_CAPACITY) {
+        vm->locals_limit = grow_limit(vm->locals_limit, AIVM_VM_LOCALS_GROWTH_STEP, AIVM_VM_LOCALS_CAPACITY);
+    }
+    return needed <= vm->locals_limit;
+}
+
+static int ensure_string_arena_capacity(AivmVm* vm, size_t needed)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    while (needed > vm->string_arena_limit && vm->string_arena_limit < AIVM_VM_STRING_ARENA_CAPACITY) {
+        vm->string_arena_limit = grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, AIVM_VM_STRING_ARENA_CAPACITY);
+    }
+    return needed <= vm->string_arena_limit;
+}
+
+static int ensure_bytes_arena_capacity(AivmVm* vm, size_t needed)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    while (needed > vm->bytes_arena_limit && vm->bytes_arena_limit < AIVM_VM_BYTES_ARENA_CAPACITY) {
+        vm->bytes_arena_limit = grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, AIVM_VM_BYTES_ARENA_CAPACITY);
+    }
+    return needed <= vm->bytes_arena_limit;
+}
+
 static int pointer_in_string_arena(const AivmVm* vm, const char* text)
 {
     if (vm == NULL || text == NULL || vm->string_arena_used == 0U) {
@@ -256,7 +324,7 @@ static char* arena_alloc(AivmVm* vm, size_t size)
     if (vm == NULL) {
         return NULL;
     }
-    if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
+    if (vm->string_arena_used + size > vm->string_arena_limit) {
         if (!compact_string_arena(vm)) {
             increment_counter_saturating(&vm->string_arena_pressure_count);
             if (vm->status != AIVM_VM_STATUS_ERROR) {
@@ -265,7 +333,8 @@ static char* arena_alloc(AivmVm* vm, size_t size)
             return NULL;
         }
     }
-    if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
+    if (vm->string_arena_used + size > vm->string_arena_limit &&
+        !ensure_string_arena_capacity(vm, vm->string_arena_used + size)) {
         increment_counter_saturating(&vm->string_arena_pressure_count);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return NULL;
@@ -285,7 +354,8 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
     if (vm == NULL) {
         return NULL;
     }
-    if (vm->bytes_arena_used + size > AIVM_VM_BYTES_ARENA_CAPACITY) {
+    if (vm->bytes_arena_used + size > vm->bytes_arena_limit &&
+        !ensure_bytes_arena_capacity(vm, vm->bytes_arena_used + size)) {
         increment_counter_saturating(&vm->bytes_arena_pressure_count);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         return NULL;
@@ -1784,11 +1854,16 @@ void aivm_reset_state(AivmVm* vm)
     vm->error = AIVM_VM_ERR_NONE;
     vm->error_detail = NULL;
     vm->stack_count = 0U;
+    vm->stack_limit = AIVM_VM_STACK_INITIAL_CAPACITY;
     vm->call_frame_count = 0U;
+    vm->call_frame_limit = AIVM_VM_CALLFRAME_INITIAL_CAPACITY;
     vm->locals_count = 0U;
+    vm->locals_limit = AIVM_VM_LOCALS_INITIAL_CAPACITY;
     vm->string_arena_used = 0U;
+    vm->string_arena_limit = AIVM_VM_STRING_ARENA_INITIAL_CAPACITY;
     vm->string_arena[0] = '\0';
     vm->bytes_arena_used = 0U;
+    vm->bytes_arena_limit = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
     vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
@@ -1881,7 +1956,7 @@ int aivm_stack_push(AivmVm* vm, AivmValue value)
         return 0;
     }
 
-    if (vm->stack_count >= AIVM_VM_STACK_CAPACITY) {
+    if (!ensure_stack_capacity(vm, vm->stack_count + 1U)) {
         set_vm_error(vm, AIVM_VM_ERR_STACK_OVERFLOW, "Stack overflow.");
         return 0;
     }
@@ -1913,7 +1988,7 @@ int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_
         return 0;
     }
 
-    if (vm->call_frame_count >= AIVM_VM_CALLFRAME_CAPACITY) {
+    if (!ensure_call_frame_capacity(vm, vm->call_frame_count + 1U)) {
         set_vm_error(vm, AIVM_VM_ERR_FRAME_OVERFLOW, "Call-frame overflow.");
         return 0;
     }
@@ -1957,6 +2032,10 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
         return 0;
     }
     absolute_index = base + index;
+    if (!ensure_locals_capacity(vm, absolute_index + 1U)) {
+        set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, "Invalid local slot.");
+        return 0;
+    }
     vm->locals[absolute_index] = value;
     if (absolute_index >= vm->locals_count) {
         vm->locals_count = absolute_index + 1U;
