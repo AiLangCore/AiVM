@@ -60,7 +60,7 @@ int main(void)
     CHECK(listen(listener, 4) == 0);
     CHECK(getsockname(listener, (struct sockaddr*)&addr, &addr_len) == 0);
 
-    args[0] = aivm_value_string("127.0.0.1");
+    args[0] = aivm_value_string("localhost");
     args[1] = aivm_value_int((int64_t)ntohs(addr.sin_port));
     status = native_syscall_net_start_op("sys.net.tcp.connectStart", args, 2U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
