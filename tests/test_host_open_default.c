@@ -19,18 +19,18 @@ int main(void)
     AivmSyscallStatus status;
 
     args[0] = aivm_value_string("https://example.com/maps?q=test");
-    status = native_syscall_host_open_url("sys.host.openUrl", args, 1U, &result);
+    status = native_syscall_host_open_default("sys.host.openDefault", args, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 1);
     CHECK(strcmp(g_native_open_url_test_scratch, "https://example.com/maps?q=test") == 0);
 
     args[0] = aivm_value_string("ftp://example.com/");
-    status = native_syscall_host_open_url("sys.host.openUrl", args, 1U, &result);
+    status = native_syscall_host_open_default("sys.host.openDefault", args, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
 
     args[0] = aivm_value_string("file:///tmp/nope");
-    status = native_syscall_host_open_url("sys.host.openUrl", args, 1U, &result);
+    status = native_syscall_host_open_default("sys.host.openDefault", args, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
 
