@@ -607,7 +607,11 @@ static int test_reset_clears_pressure_counters_after_string_failure(void)
     };
 
     aivm_init(&vm, &program);
+    memset(vm.string_arena, 'x', AIVM_VM_STRING_ARENA_CAPACITY - 1U);
+    vm.string_arena[AIVM_VM_STRING_ARENA_CAPACITY - 1U] = '\0';
     vm.string_arena_used = AIVM_VM_STRING_ARENA_CAPACITY;
+    vm.stack_count = 1U;
+    vm.stack[0] = aivm_value_string(vm.string_arena);
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;

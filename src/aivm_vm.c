@@ -69,6 +69,12 @@ static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
 static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value);
 static int is_syscall_target_string(const char* text);
 static const char* find_syscall_suffix_target(const char* text);
+static int mark_live_node_handles(
+    AivmVm* vm,
+    uint8_t* live,
+    const int64_t* extra_handles,
+    size_t extra_handle_count);
+static int compact_string_arena(AivmVm* vm);
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -99,6 +105,84 @@ static void add_counter_saturating(size_t* counter, size_t delta)
         return;
     }
     *counter += delta;
+}
+
+static int pointer_in_string_arena(const AivmVm* vm, const char* text)
+{
+    if (vm == NULL || text == NULL || vm->string_arena_used == 0U) {
+        return 0;
+    }
+    return text >= vm->string_arena &&
+           text < (vm->string_arena + vm->string_arena_used);
+}
+
+static char* compact_lookup_or_copy_string(
+    const char* text,
+    char* new_arena,
+    size_t* new_used)
+{
+    size_t offset = 0U;
+    size_t length;
+    char* output;
+    if (text == NULL || new_arena == NULL || new_used == NULL) {
+        return NULL;
+    }
+    while (offset < *new_used) {
+        char* candidate = &new_arena[offset];
+        size_t candidate_length = strlen(candidate);
+        if (strcmp(candidate, text) == 0) {
+            return candidate;
+        }
+        offset += candidate_length;
+        if (offset < *new_used) {
+            offset += 1U;
+        }
+    }
+    length = strlen(text);
+    if (*new_used + length + 1U > AIVM_VM_STRING_ARENA_CAPACITY) {
+        return NULL;
+    }
+    output = &new_arena[*new_used];
+    memcpy(output, text, length + 1U);
+    *new_used += length + 1U;
+    return output;
+}
+
+static int compact_relocate_string_ptr(
+    AivmVm* vm,
+    const char** slot,
+    char* new_arena,
+    size_t* new_used)
+{
+    char* relocated;
+    if (vm == NULL || slot == NULL || *slot == NULL) {
+        return 1;
+    }
+    if (!pointer_in_string_arena(vm, *slot)) {
+        return 1;
+    }
+    relocated = compact_lookup_or_copy_string(*slot, new_arena, new_used);
+    if (relocated == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        return 0;
+    }
+    *slot = relocated;
+    return 1;
+}
+
+static int compact_relocate_value_string(
+    AivmVm* vm,
+    AivmValue* value,
+    char* new_arena,
+    size_t* new_used)
+{
+    if (vm == NULL || value == NULL) {
+        return 0;
+    }
+    if (value->type != AIVM_VAL_STRING || value->string_value == NULL) {
+        return 1;
+    }
+    return compact_relocate_string_ptr(vm, &value->string_value, new_arena, new_used);
 }
 
 static int operand_to_index(AivmVm* vm, int64_t operand, size_t* out_index)
@@ -171,6 +255,15 @@ static char* arena_alloc(AivmVm* vm, size_t size)
     char* start;
     if (vm == NULL) {
         return NULL;
+    }
+    if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
+        if (!compact_string_arena(vm)) {
+            increment_counter_saturating(&vm->string_arena_pressure_count);
+            if (vm->status != AIVM_VM_STATUS_ERROR) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+            }
+            return NULL;
+        }
     }
     if (vm->string_arena_used + size > AIVM_VM_STRING_ARENA_CAPACITY) {
         increment_counter_saturating(&vm->string_arena_pressure_count);
@@ -1149,6 +1242,77 @@ static int mark_live_node_handles(
     }
 
     #undef ENQUEUE_HANDLE
+    return 1;
+}
+
+static int compact_string_arena(AivmVm* vm)
+{
+    uint8_t live[AIVM_VM_NODE_CAPACITY];
+    char new_arena[AIVM_VM_STRING_ARENA_CAPACITY];
+    size_t new_used = 0U;
+    size_t i;
+
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->string_arena_used == 0U) {
+        return 1;
+    }
+
+    memset(live, 0, sizeof(live));
+    memset(new_arena, 0, sizeof(new_arena));
+    if (!mark_live_node_handles(vm, live, NULL, 0U)) {
+        return 0;
+    }
+
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (!compact_relocate_value_string(vm, &vm->stack[i], new_arena, &new_used)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (!compact_relocate_value_string(vm, &vm->locals[i], new_arena, &new_used)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (!compact_relocate_value_string(vm, &vm->completed_tasks[i].result, new_arena, &new_used)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (!compact_relocate_value_string(vm, &vm->par_values[i], new_arena, &new_used)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->node_count; i += 1U) {
+        size_t attr_i;
+        AivmNodeRecord* node;
+        if (live[i] == 0U) {
+            continue;
+        }
+        node = &vm->nodes[i];
+        if (!compact_relocate_string_ptr(vm, &node->kind, new_arena, &new_used) ||
+            !compact_relocate_string_ptr(vm, &node->id, new_arena, &new_used)) {
+            return 0;
+        }
+        for (attr_i = 0U; attr_i < node->attr_count; attr_i += 1U) {
+            AivmNodeAttr* attr = &vm->node_attrs[node->attr_start + attr_i];
+            if (!compact_relocate_string_ptr(vm, &attr->key, new_arena, &new_used)) {
+                return 0;
+            }
+            if ((attr->kind == AIVM_NODE_ATTR_IDENTIFIER || attr->kind == AIVM_NODE_ATTR_STRING) &&
+                !compact_relocate_string_ptr(vm, &attr->string_value, new_arena, &new_used)) {
+                return 0;
+            }
+        }
+    }
+
+    memcpy(vm->string_arena, new_arena, new_used);
+    vm->string_arena_used = new_used;
+    if (new_used < AIVM_VM_STRING_ARENA_CAPACITY) {
+        vm->string_arena[new_used] = '\0';
+    }
     return 1;
 }
 
