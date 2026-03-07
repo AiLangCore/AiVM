@@ -35,6 +35,7 @@ int main(void)
     AivmValue two_bytes_args[2];
     AivmValue str_pair_args[2];
     AivmValue process_spawn_args[4];
+    AivmValue image_decode_args[2];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
 
     draw_rect_args[0] = aivm_value_int(0);
@@ -215,6 +216,17 @@ int main(void)
         return 1;
     }
     if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    image_decode_args[0] = aivm_value_bytes(raw_bytes, 3U);
+    image_decode_args[1] = aivm_value_string("image/png");
+    if (expect(aivm_syscall_contract_validate("sys.image.decodeToRgbaBase64", image_decode_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(121U, image_decode_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
         return 1;
     }
     int_arg[0] = aivm_value_int(1);

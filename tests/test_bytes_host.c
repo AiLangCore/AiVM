@@ -21,6 +21,7 @@ int main(void)
     const uint8_t invalid_utf8_raw[2] = { 0xC0U, 0xAFU };
     const uint8_t truncated_utf8_raw[2] = { 0xE2U, 0x82U };
     const uint8_t out_of_range_utf8_raw[4] = { 0xF4U, 0x90U, 0x80U, 0x80U };
+    const char* png_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2P4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
     AivmValue one_arg[1];
     AivmValue two_args[2];
     AivmValue three_args[3];
@@ -129,6 +130,26 @@ int main(void)
     one_arg[0] = aivm_value_bytes(utf8_raw, NATIVE_BYTES_SCRATCH_CAPACITY + 1U);
     status = native_syscall_bytes_to_utf8_string("sys.bytes.toUtf8String", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    {
+        size_t png_len = 0U;
+        size_t rgba_len = 0U;
+        CHECK(native_bytes_from_base64(png_base64, NULL, 0U, &png_len) == 1);
+        CHECK(png_len > 0U && png_len < NATIVE_BYTES_SCRATCH_CAPACITY);
+        CHECK(native_bytes_from_base64(png_base64, g_native_bytes_scratch, png_len, &png_len) == 1);
+        two_args[0] = aivm_value_bytes(g_native_bytes_scratch, png_len);
+        two_args[1] = aivm_value_string("image/png");
+        status = native_syscall_image_decode_to_rgba_base64("sys.image.decodeToRgbaBase64", two_args, 2U, &result);
+#ifdef __APPLE__
+        CHECK(status == AIVM_SYSCALL_OK);
+        CHECK(result.type == AIVM_VAL_STRING);
+        CHECK(result.string_value != NULL && strlen(result.string_value) > 0U);
+        CHECK(native_bytes_from_base64(result.string_value, NULL, 0U, &rgba_len) == 1);
+        CHECK(rgba_len == 4U);
+#else
+        CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+#endif
+    }
 
     two_args[0] = aivm_value_string("echo");
     two_args[1] = aivm_value_string("worker-ok");
