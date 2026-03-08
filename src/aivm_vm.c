@@ -1111,6 +1111,31 @@ static size_t append_frame_local_previews(
     return used;
 }
 
+static size_t append_frame_return_previews(AivmVm* vm, char* buffer, size_t capacity, size_t used)
+{
+    size_t i;
+    if (vm == NULL || buffer == NULL || capacity == 0U || used >= capacity) {
+        return used;
+    }
+    for (i = 0U; i < vm->call_frame_count && i < 3U && used + 1U < capacity; i += 1U) {
+        size_t frame_index = vm->call_frame_count - 1U - i;
+        int wrote = snprintf(
+            buffer + used,
+            capacity - used,
+            " ret%llu=%llu",
+            (unsigned long long)i,
+            (unsigned long long)vm->call_frames[frame_index].return_instruction_pointer);
+        if (wrote <= 0) {
+            break;
+        }
+        if ((size_t)wrote >= capacity - used) {
+            return capacity - 1U;
+        }
+        used += (size_t)wrote;
+    }
+    return used;
+}
+
 static const char* syscall_contract_failure_detail_with_args(
     AivmVm* vm,
     const char* target,
@@ -1179,6 +1204,11 @@ static const char* syscall_contract_failure_detail_with_args(
                 args[i]);
         }
     }
+    used = append_frame_return_previews(
+        vm,
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
+        used);
     if (vm->call_frame_count > 0U) {
         used = append_frame_local_previews(
             vm,
