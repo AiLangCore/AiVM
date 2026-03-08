@@ -1759,11 +1759,20 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
 {
     AivmVm vm;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 2 },
         { .opcode = AIVM_OP_CONST, .operand_int = 3 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 }
+        { .opcode = AIVM_OP_CALL, .operand_int = 5 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
+        { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
@@ -1776,7 +1785,7 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 5U,
+        .instruction_count = 14U,
         .constants = constants,
         .constant_count = 4U,
         .format_version = 0U,
@@ -1796,6 +1805,9 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
         return 1;
     }
     if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.str.substring") != NULL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "local0=string(\"abcde\")") != NULL) != 0) {
         return 1;
     }
     return 0;
