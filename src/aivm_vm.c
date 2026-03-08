@@ -2804,7 +2804,6 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (!call_sys_with_arity(vm, arg_count, &result)) {
-                vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
             if (!aivm_stack_push(vm, result)) {
@@ -2841,7 +2840,6 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (!call_sys_with_arity(vm, arg_count, &result)) {
-                vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
             if (!push_completed_task(vm, result)) {

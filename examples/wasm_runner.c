@@ -18,6 +18,204 @@ static const char* g_wasm_syscall_error_message = NULL;
 static const char* g_wasm_syscall_error_code = NULL;
 static char g_wasm_syscall_error_message_buf[256];
 static AivmVm* g_wasm_active_vm = NULL;
+enum {
+    WASM_BYTES_SCRATCH_CAPACITY = 1 << 20,
+    WASM_STRING_SCRATCH_CAPACITY = (1 << 21)
+};
+static uint8_t g_wasm_bytes_scratch[WASM_BYTES_SCRATCH_CAPACITY];
+static char g_wasm_string_scratch[WASM_STRING_SCRATCH_CAPACITY];
+
+static int wasm_base64_decode_char(char ch)
+{
+    if (ch >= 'A' && ch <= 'Z') {
+        return (int)(ch - 'A');
+    }
+    if (ch >= 'a' && ch <= 'z') {
+        return 26 + (int)(ch - 'a');
+    }
+    if (ch >= '0' && ch <= '9') {
+        return 52 + (int)(ch - '0');
+    }
+    if (ch == '+') {
+        return 62;
+    }
+    if (ch == '/') {
+        return 63;
+    }
+    return -1;
+}
+
+static int wasm_bytes_to_base64(const uint8_t* input, size_t input_length, char* output, size_t output_capacity)
+{
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t encoded_length;
+    size_t i;
+    size_t out_index = 0U;
+
+    if (output == NULL) {
+        return 0;
+    }
+    encoded_length = ((input_length + 2U) / 3U) * 4U;
+    if (output_capacity < encoded_length + 1U) {
+        return 0;
+    }
+    for (i = 0U; i < input_length; i += 3U) {
+        uint32_t chunk = ((uint32_t)input[i]) << 16U;
+        size_t remaining = input_length - i;
+        chunk |= (remaining > 1U) ? (((uint32_t)input[i + 1U]) << 8U) : 0U;
+        chunk |= (remaining > 2U) ? ((uint32_t)input[i + 2U]) : 0U;
+        output[out_index++] = table[(chunk >> 18U) & 0x3fU];
+        output[out_index++] = table[(chunk >> 12U) & 0x3fU];
+        output[out_index++] = (remaining > 1U) ? table[(chunk >> 6U) & 0x3fU] : '=';
+        output[out_index++] = (remaining > 2U) ? table[chunk & 0x3fU] : '=';
+    }
+    output[out_index] = '\0';
+    return 1;
+}
+
+static int wasm_bytes_from_base64(const char* input, uint8_t* output, size_t output_capacity, size_t* out_length)
+{
+    size_t input_length = 0U;
+    size_t i;
+    size_t produced = 0U;
+
+    if (input == NULL || out_length == NULL) {
+        return 0;
+    }
+    while (input[input_length] != '\0') {
+        input_length += 1U;
+    }
+    if ((input_length % 4U) != 0U) {
+        return 0;
+    }
+    for (i = 0U; i < input_length; i += 4U) {
+        int c0 = wasm_base64_decode_char(input[i]);
+        int c1 = wasm_base64_decode_char(input[i + 1U]);
+        int c2 = (input[i + 2U] == '=') ? -2 : wasm_base64_decode_char(input[i + 2U]);
+        int c3 = (input[i + 3U] == '=') ? -2 : wasm_base64_decode_char(input[i + 3U]);
+        uint32_t chunk;
+        if (c0 < 0 || c1 < 0 || c2 == -1 || c3 == -1) {
+            return 0;
+        }
+        chunk = ((uint32_t)c0 << 18U) | ((uint32_t)c1 << 12U);
+        if (c2 >= 0) {
+            chunk |= ((uint32_t)c2 << 6U);
+        }
+        if (c3 >= 0) {
+            chunk |= (uint32_t)c3;
+        }
+        if (produced < output_capacity && output != NULL) {
+            output[produced] = (uint8_t)((chunk >> 16U) & 0xffU);
+        }
+        produced += 1U;
+        if (c2 >= 0) {
+            if (produced <= output_capacity && output != NULL) {
+                output[produced - 1U] = (uint8_t)((chunk >> 8U) & 0xffU);
+            }
+            produced += 1U;
+        }
+        if (c3 >= 0) {
+            if (produced <= output_capacity && output != NULL) {
+                output[produced - 1U] = (uint8_t)(chunk & 0xffU);
+            }
+            produced += 1U;
+        }
+    }
+    if (output == NULL) {
+        *out_length = produced;
+        return 1;
+    }
+    if (produced > output_capacity) {
+        return 0;
+    }
+    *out_length = produced;
+    return 1;
+}
+
+static int native_syscall_bytes_from_utf8_string(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    size_t length = 0U;
+    (void)target;
+    if (args == NULL || result == NULL || arg_count != 1U ||
+        args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    while (args[0].string_value[length] != '\0') {
+        length += 1U;
+    }
+    *result = aivm_value_bytes((const uint8_t*)args[0].string_value, length);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_bytes_to_utf8_string(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    size_t i;
+    (void)target;
+    if (args == NULL || result == NULL || arg_count != 1U ||
+        args[0].type != AIVM_VAL_BYTES ||
+        (args[0].bytes_value.length > 0U && args[0].bytes_value.data == NULL) ||
+        args[0].bytes_value.length + 1U > WASM_STRING_SCRATCH_CAPACITY) {
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    for (i = 0U; i < args[0].bytes_value.length; i += 1U) {
+        g_wasm_string_scratch[i] = (char)args[0].bytes_value.data[i];
+    }
+    g_wasm_string_scratch[args[0].bytes_value.length] = '\0';
+    *result = aivm_value_string(g_wasm_string_scratch);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_bytes_to_base64(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL || result == NULL || arg_count != 1U ||
+        args[0].type != AIVM_VAL_BYTES ||
+        (args[0].bytes_value.length > 0U && args[0].bytes_value.data == NULL)) {
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (!wasm_bytes_to_base64(
+            args[0].bytes_value.data,
+            args[0].bytes_value.length,
+            g_wasm_string_scratch,
+            sizeof(g_wasm_string_scratch))) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_string(g_wasm_string_scratch);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_bytes_from_base64(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    size_t output_length = 0U;
+    (void)target;
+    if (args == NULL || result == NULL || arg_count != 1U ||
+        args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (!wasm_bytes_from_base64(args[0].string_value, NULL, 0U, &output_length) ||
+        output_length > sizeof(g_wasm_bytes_scratch) ||
+        !wasm_bytes_from_base64(args[0].string_value, g_wasm_bytes_scratch, sizeof(g_wasm_bytes_scratch), &output_length)) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(g_wasm_bytes_scratch, output_length);
+    return AIVM_SYSCALL_OK;
+}
 
 static const char* opcode_name(AivmOpcode opcode)
 {
@@ -88,7 +286,10 @@ static void print_vm_failure(const AivmProgram* program, const AivmVm* vm, const
     size_t typed_len = 0U;
     if (vm != NULL) {
         pc = vm->instruction_pointer;
-        display_pc = (pc == 0U) ? 0U : (pc - 1U);
+        display_pc = pc;
+        if (program != NULL && program->instruction_count > 0U && display_pc >= program->instruction_count) {
+            display_pc = program->instruction_count - 1U;
+        }
         detail = aivm_vm_error_detail(vm);
         if (detail == NULL || detail[0] == '\0') {
             detail = "none";
@@ -122,7 +323,7 @@ static void print_vm_failure(const AivmProgram* program, const AivmVm* vm, const
             program != NULL &&
             program->instructions != NULL &&
             program->instruction_count > 0U) {
-            size_t cursor = display_pc;
+            size_t cursor = (pc == 0U) ? 0U : (pc - 1U);
             if (cursor >= program->instruction_count) {
                 cursor = program->instruction_count - 1U;
             }
@@ -231,18 +432,45 @@ static int native_syscall_unavailable(
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
 
-static int has_binding_target(const AivmSyscallBinding* bindings, size_t binding_count, const char* target)
+static int set_binding_handler(
+    AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* target,
+    AivmSyscallHandler handler)
 {
     size_t index;
-    if (bindings == NULL || target == NULL) {
+    if (bindings == NULL || target == NULL || handler == NULL) {
         return 0;
     }
     for (index = 0U; index < binding_count; index += 1U) {
         if (bindings[index].target != NULL && strcmp(bindings[index].target, target) == 0) {
+            bindings[index].handler = handler;
             return 1;
         }
     }
     return 0;
+}
+
+static int ensure_binding_handler(
+    AivmSyscallBinding* bindings,
+    size_t* binding_count,
+    size_t binding_capacity,
+    const char* target,
+    AivmSyscallHandler handler)
+{
+    if (bindings == NULL || binding_count == NULL || target == NULL || handler == NULL) {
+        return 0;
+    }
+    if (set_binding_handler(bindings, *binding_count, target, handler)) {
+        return 1;
+    }
+    if (*binding_count >= binding_capacity) {
+        return 0;
+    }
+    bindings[*binding_count].target = target;
+    bindings[*binding_count].handler = handler;
+    *binding_count += 1U;
+    return 1;
 }
 
 static int read_binary_file(const char* path, unsigned char** out_bytes, size_t* out_size)
@@ -1760,6 +1988,14 @@ int main(int argc, char** argv)
             strcmp(contract->target, "io.print") == 0 ||
             strcmp(contract->target, "io.write") == 0) {
             bindings[binding_count].handler = native_syscall_stdout_write_line;
+        } else if (strcmp(contract->target, "sys.bytes.fromUtf8String") == 0) {
+            bindings[binding_count].handler = native_syscall_bytes_from_utf8_string;
+        } else if (strcmp(contract->target, "sys.bytes.toUtf8String") == 0) {
+            bindings[binding_count].handler = native_syscall_bytes_to_utf8_string;
+        } else if (strcmp(contract->target, "sys.bytes.toBase64") == 0) {
+            bindings[binding_count].handler = native_syscall_bytes_to_base64;
+        } else if (strcmp(contract->target, "sys.bytes.fromBase64") == 0) {
+            bindings[binding_count].handler = native_syscall_bytes_from_base64;
         } else if (strcmp(contract->target, "sys.process.args") == 0 ||
                    strcmp(contract->target, "sys.process_argv") == 0) {
             bindings[binding_count].handler = native_syscall_process_argv;
@@ -1800,14 +2036,16 @@ int main(int argc, char** argv)
         }
         binding_count += 1U;
     }
-    if (!has_binding_target(bindings, binding_count, "sys.image.decodeToRgbaBase64")) {
-        if (binding_count >= (sizeof(bindings) / sizeof(bindings[0]))) {
-            fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm syscall binding overflow.\" nodeId=syscall)\n");
-            return 2;
-        }
-        bindings[binding_count].target = "sys.image.decodeToRgbaBase64";
-        bindings[binding_count].handler = native_syscall_unavailable;
-        binding_count += 1U;
+    if (!ensure_binding_handler(bindings, &binding_count, sizeof(bindings) / sizeof(bindings[0]), "sys.bytes.fromUtf8String", native_syscall_bytes_from_utf8_string) ||
+        !ensure_binding_handler(bindings, &binding_count, sizeof(bindings) / sizeof(bindings[0]), "sys.bytes.toUtf8String", native_syscall_bytes_to_utf8_string) ||
+        !ensure_binding_handler(bindings, &binding_count, sizeof(bindings) / sizeof(bindings[0]), "sys.bytes.toBase64", native_syscall_bytes_to_base64) ||
+        !ensure_binding_handler(bindings, &binding_count, sizeof(bindings) / sizeof(bindings[0]), "sys.bytes.fromBase64", native_syscall_bytes_from_base64)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm bytes syscall binding missing.\" nodeId=syscall)\n");
+        return 2;
+    }
+    if (!ensure_binding_handler(bindings, &binding_count, sizeof(bindings) / sizeof(bindings[0]), "sys.image.decodeToRgbaBase64", native_syscall_unavailable)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm image decode binding missing.\" nodeId=syscall)\n");
+        return 2;
     }
 
     g_wasm_active_vm = &vm;
