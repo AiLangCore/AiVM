@@ -1072,22 +1072,30 @@ static size_t append_vm_value_preview(char* buffer, size_t capacity, size_t used
     return used + (size_t)wrote;
 }
 
-static size_t append_current_frame_local_previews(AivmVm* vm, char* buffer, size_t capacity, size_t used)
+static size_t append_frame_local_previews(
+    AivmVm* vm,
+    size_t frame_index,
+    const char* prefix,
+    char* buffer,
+    size_t capacity,
+    size_t used)
 {
     size_t base = 0U;
     size_t i;
     size_t max_locals = 3U;
-    if (vm == NULL || buffer == NULL || capacity == 0U || used >= capacity) {
+    if (vm == NULL || buffer == NULL || capacity == 0U || used >= capacity || prefix == NULL) {
         return used;
     }
-    if (vm->call_frame_count > 0U) {
-        base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
+    if (vm->call_frame_count == 0U || frame_index >= vm->call_frame_count) {
+        return used;
     }
+    base = vm->call_frames[frame_index].locals_base;
     for (i = 0U; i < max_locals && (base + i) < vm->locals_count && used + 1U < capacity; i += 1U) {
         int wrote = snprintf(
             buffer + used,
             capacity - used,
-            " local%llu=%s",
+            " %s%llu=%s",
+            prefix,
             (unsigned long long)i,
             vm_value_type_name(vm->locals[base + i].type));
         if (wrote <= 0) {
@@ -1171,11 +1179,24 @@ static const char* syscall_contract_failure_detail_with_args(
                 args[i]);
         }
     }
-    used = append_current_frame_local_previews(
-        vm,
-        vm->error_detail_storage,
-        sizeof(vm->error_detail_storage),
-        used);
+    if (vm->call_frame_count > 0U) {
+        used = append_frame_local_previews(
+            vm,
+            vm->call_frame_count - 1U,
+            "local",
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            used);
+    }
+    if (vm->call_frame_count > 1U) {
+        used = append_frame_local_previews(
+            vm,
+            vm->call_frame_count - 2U,
+            "callerLocal",
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            used);
+    }
     return vm->error_detail_storage;
 }
 
