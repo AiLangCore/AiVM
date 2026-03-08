@@ -865,7 +865,28 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                 }
             }
             if (!recovered) {
-                set_vm_error(vm, AIVM_VM_ERR_SYSCALL, "AIVMS003: Syscall target was not found.");
+                const char* raw_target_text = NULL;
+                if (target_value.type == AIVM_VAL_STRING && target_value.string_value != NULL) {
+                    raw_target_text = target_value.string_value;
+                } else if (target_value.type == AIVM_VAL_INT) {
+                    (void)snprintf(
+                        vm->error_detail_storage,
+                        sizeof(vm->error_detail_storage),
+                        "AIVMS003: Syscall target was not found. rawTargetType=%s rawTargetInt=%lld argCount=%llu",
+                        vm_value_type_name(target_value.type),
+                        (long long)target_value.int_value,
+                        (unsigned long long)effective_arg_count);
+                    set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+                    return 0;
+                }
+                (void)snprintf(
+                    vm->error_detail_storage,
+                    sizeof(vm->error_detail_storage),
+                    "AIVMS003: Syscall target was not found. rawTargetType=%s rawTarget=%s argCount=%llu",
+                    vm_value_type_name(target_value.type),
+                    raw_target_text == NULL ? "<non-string>" : raw_target_text,
+                    (unsigned long long)effective_arg_count);
+                set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
                 return 0;
             }
         }
@@ -961,7 +982,18 @@ static const char* syscall_contract_failure_detail_with_args(
     if (vm == NULL) {
         return syscall_contract_failure_detail(contract_status);
     }
-    if (contract_status != AIVM_CONTRACT_ERR_ARG_TYPE || target == NULL) {
+    if (target == NULL) {
+        return syscall_contract_failure_detail(contract_status);
+    }
+    if (contract_status == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "AIVMS004/AIVMC001: Syscall target was not found. target=%s",
+            target);
+        return vm->error_detail_storage;
+    }
+    if (contract_status != AIVM_CONTRACT_ERR_ARG_TYPE) {
         return syscall_contract_failure_detail(contract_status);
     }
     contract = aivm_syscall_contract_find_by_target(target);

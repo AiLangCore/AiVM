@@ -1675,7 +1675,7 @@ static int test_call_sys_failure_sets_vm_error(void)
     if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC001: Syscall target was not found.") == 0) != 0) {
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC001: Syscall target was not found. target=sys.missing") == 0) != 0) {
         return 1;
     }
     return 0;
