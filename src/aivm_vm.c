@@ -69,6 +69,12 @@ static const char* syscall_contract_failure_detail_with_args(
     const AivmValue* args,
     size_t arg_count,
     AivmContractStatus contract_status);
+static const char* syscall_not_found_detail_with_recovery(
+    AivmVm* vm,
+    AivmValue raw_target_value,
+    const char* recovered_target,
+    const AivmValue* args,
+    size_t arg_count);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
 static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
@@ -781,6 +787,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
 {
     AivmValue args[AIVM_VM_MAX_SYSCALL_ARGS];
     AivmValue target_value;
+    AivmValue raw_target_value;
     size_t effective_arg_count = arg_count;
     AivmSyscallStatus syscall_status;
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
@@ -802,6 +809,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     if (!aivm_stack_pop(vm, &target_value)) {
         return 0;
     }
+    raw_target_value = target_value;
     if (target_value.type != AIVM_VAL_STRING || target_value.string_value == NULL) {
         (void)snprintf(
             vm->error_detail_storage,
@@ -938,6 +946,18 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                     contract_status));
             return 0;
         }
+        if (syscall_status == AIVM_SYSCALL_ERR_NOT_FOUND) {
+            set_vm_error(
+                vm,
+                AIVM_VM_ERR_SYSCALL,
+                syscall_not_found_detail_with_recovery(
+                    vm,
+                    raw_target_value,
+                    target_value.string_value,
+                    args,
+                    effective_arg_count));
+            return 0;
+        }
         set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_failure_detail(syscall_status, contract_status));
         return 0;
     }
@@ -946,6 +966,47 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         return 0;
     }
     return 1;
+}
+
+static const char* syscall_not_found_detail_with_recovery(
+    AivmVm* vm,
+    AivmValue raw_target_value,
+    const char* recovered_target,
+    const AivmValue* args,
+    size_t arg_count)
+{
+    const char* raw_target_text = "<non-string>";
+    const char* recovered_text = recovered_target == NULL ? "<null>" : recovered_target;
+    const char* arg0 = "void";
+    const char* arg1 = "void";
+    const char* arg2 = "void";
+    if (vm == NULL) {
+        return "AIVMS003: Syscall target was not found.";
+    }
+    if (raw_target_value.type == AIVM_VAL_STRING && raw_target_value.string_value != NULL) {
+        raw_target_text = raw_target_value.string_value;
+    }
+    if (arg_count > 0U) {
+        arg0 = vm_value_type_name(args[0].type);
+    }
+    if (arg_count > 1U) {
+        arg1 = vm_value_type_name(args[1].type);
+    }
+    if (arg_count > 2U) {
+        arg2 = vm_value_type_name(args[2].type);
+    }
+    (void)snprintf(
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
+        "AIVMS003: Syscall target was not found. rawTargetType=%s rawTarget=%s recoveredTarget=%s argCount=%llu arg0=%s arg1=%s arg2=%s",
+        vm_value_type_name(raw_target_value.type),
+        raw_target_text,
+        recovered_text,
+        (unsigned long long)arg_count,
+        arg0,
+        arg1,
+        arg2);
+    return vm->error_detail_storage;
 }
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status)
