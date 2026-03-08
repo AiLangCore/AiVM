@@ -1197,6 +1197,15 @@ static const char* syscall_contract_failure_detail_with_args(
             sizeof(vm->error_detail_storage),
             used);
     }
+    if (vm->call_frame_count > 2U) {
+        used = append_frame_local_previews(
+            vm,
+            vm->call_frame_count - 3U,
+            "caller2Local",
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            used);
+    }
     return vm->error_detail_storage;
 }
 
