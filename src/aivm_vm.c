@@ -2462,7 +2462,20 @@ void aivm_step(AivmVm* vm)
                 }
             } else if (vm->call_frame_count > 0U) {
                 AivmCallFrame* frame = &vm->call_frames[vm->call_frame_count - 1U];
-                frame->frame_base = frame_base;
+                size_t caller_frame_base = frame->frame_base;
+                if (frame_base < caller_frame_base || vm->stack_count < frame_base + arg_count) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Tail call frame compaction failed.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                if (frame_base != caller_frame_base && arg_count > 0U) {
+                    memmove(
+                        &vm->stack[caller_frame_base],
+                        &vm->stack[frame_base],
+                        sizeof(AivmValue) * arg_count);
+                }
+                vm->stack_count = caller_frame_base + arg_count;
+                frame->frame_base = caller_frame_base;
                 vm->locals_count = frame->locals_base;
             }
             vm->instruction_pointer = target;
