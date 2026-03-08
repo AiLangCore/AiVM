@@ -7,6 +7,7 @@
 
 static int g_create_window_calls = 0;
 static int g_draw_image_calls = 0;
+static int g_poll_event_calls = 0;
 static int64_t g_last_draw_handle = 0;
 static int g_last_draw_x = 0;
 static int g_last_draw_y = 0;
@@ -111,9 +112,13 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
 {
     (void)handle;
+    g_poll_event_calls += 1;
     if (out_event != NULL) {
         memset(out_event, 0, sizeof(*out_event));
-        (void)snprintf(out_event->type, sizeof(out_event->type), "none");
+        (void)snprintf(out_event->type, sizeof(out_event->type), "click");
+        (void)snprintf(out_event->target_id, sizeof(out_event->target_id), "start_button");
+        out_event->x = 12;
+        out_event->y = 34;
     }
     return 1;
 }
@@ -139,15 +144,23 @@ int native_host_ui_get_window_size(int64_t handle, int* out_width, int* out_heig
 
 int main(void)
 {
+    AivmProgram program;
     AivmValue create_args[3];
     AivmValue draw_args[6];
+    AivmValue poll_args[1];
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
+    AivmVm vm;
+    const AivmNodeRecord* node = NULL;
 
     create_args[0] = aivm_value_string("Image Test");
     create_args[1] = aivm_value_int(64);
     create_args[2] = aivm_value_int(64);
+    memset(&program, 0, sizeof(program));
+    aivm_program_clear(&program);
+    aivm_init(&vm, &program);
+    g_native_active_vm = &vm;
     status = native_syscall_ui_create_window("sys.ui.createWindow", create_args, 3U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_INT);
@@ -183,6 +196,20 @@ int main(void)
     draw_args[5] = aivm_value_string("AQID");
     status = native_syscall_ui_draw_image("sys.ui.drawImage", draw_args, 6U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_INVALID);
+
+    poll_args[0] = aivm_value_int(handle);
+    status = native_syscall_ui_poll_event("sys.ui.pollEvent", poll_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_NODE);
+    CHECK(g_poll_event_calls == 1);
+    CHECK(result.node_handle > 0);
+    CHECK((size_t)(result.node_handle - 1) < vm.node_count);
+    node = &vm.nodes[(size_t)(result.node_handle - 1)];
+    CHECK(node->attr_count >= 6U);
+    CHECK(strcmp(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_TYPE].string_value, "click") == 0);
+    CHECK(strcmp(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_TARGET_ID].string_value, "start_button") == 0);
+    CHECK(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_X].int_value == 12);
+    CHECK(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_Y].int_value == 34);
 
     return 0;
 }
