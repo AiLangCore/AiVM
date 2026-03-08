@@ -1038,6 +1038,40 @@ static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContract
     }
 }
 
+static size_t append_vm_value_preview(char* buffer, size_t capacity, size_t used, AivmValue value)
+{
+    int wrote = 0;
+    if (buffer == NULL || capacity == 0U || used >= capacity) {
+        return used;
+    }
+    if (value.type == AIVM_VAL_INT) {
+        wrote = snprintf(
+            buffer + used,
+            capacity - used,
+            "(%lld)",
+            (long long)value.int_value);
+    } else if (value.type == AIVM_VAL_BOOL) {
+        wrote = snprintf(
+            buffer + used,
+            capacity - used,
+            "(%s)",
+            value.bool_value ? "true" : "false");
+    } else if (value.type == AIVM_VAL_STRING && value.string_value != NULL) {
+        wrote = snprintf(
+            buffer + used,
+            capacity - used,
+            "(\"%.24s\")",
+            value.string_value);
+    }
+    if (wrote <= 0) {
+        return used;
+    }
+    if ((size_t)wrote >= capacity - used) {
+        return capacity - 1U;
+    }
+    return used + (size_t)wrote;
+}
+
 static const char* syscall_contract_failure_detail_with_args(
     AivmVm* vm,
     const char* target,
@@ -1098,6 +1132,13 @@ static const char* syscall_contract_failure_detail_with_args(
             break;
         }
         used += (size_t)wrote;
+        if (i < arg_count) {
+            used = append_vm_value_preview(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                used,
+                args[i]);
+        }
     }
     return vm->error_detail_storage;
 }
