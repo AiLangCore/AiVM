@@ -1792,7 +1792,10 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
     if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC003: Syscall argument type was invalid.") == 0) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC003: Syscall argument type was invalid.") != NULL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.str.substring") != NULL) != 0) {
         return 1;
     }
     return 0;

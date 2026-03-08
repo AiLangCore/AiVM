@@ -63,6 +63,12 @@ static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmV
 
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
+static const char* syscall_contract_failure_detail_with_args(
+    AivmVm* vm,
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
 static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
@@ -899,6 +905,18 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
             set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
             return 0;
         }
+        if (syscall_status == AIVM_SYSCALL_ERR_CONTRACT) {
+            set_vm_error(
+                vm,
+                AIVM_VM_ERR_SYSCALL,
+                syscall_contract_failure_detail_with_args(
+                    vm,
+                    target_value.string_value,
+                    args,
+                    effective_arg_count,
+                    contract_status));
+            return 0;
+        }
         set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_failure_detail(syscall_status, contract_status));
         return 0;
     }
@@ -927,6 +945,59 @@ static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContract
         default:
             return "AIVMS999: Unknown syscall dispatch status.";
     }
+}
+
+static const char* syscall_contract_failure_detail_with_args(
+    AivmVm* vm,
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmContractStatus contract_status)
+{
+    const AivmSyscallContract* contract;
+    size_t i;
+    size_t used = 0U;
+
+    if (vm == NULL) {
+        return syscall_contract_failure_detail(contract_status);
+    }
+    if (contract_status != AIVM_CONTRACT_ERR_ARG_TYPE || target == NULL) {
+        return syscall_contract_failure_detail(contract_status);
+    }
+    contract = aivm_syscall_contract_find_by_target(target);
+    if (contract == NULL) {
+        return syscall_contract_failure_detail(contract_status);
+    }
+
+    used = (size_t)snprintf(
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
+        "AIVMS004/AIVMC003: Syscall argument type was invalid. target=%s",
+        target);
+    if (used >= sizeof(vm->error_detail_storage)) {
+        used = sizeof(vm->error_detail_storage) - 1U;
+    }
+
+    for (i = 0U; i < contract->arg_count && used + 1U < sizeof(vm->error_detail_storage); i += 1U) {
+        const char* expected = vm_value_type_name(contract->arg_types[i]);
+        const char* actual = (i < arg_count) ? vm_value_type_name(args[i].type) : "missing";
+        int wrote = snprintf(
+            vm->error_detail_storage + used,
+            sizeof(vm->error_detail_storage) - used,
+            " arg%llu=%s->%s",
+            (unsigned long long)i,
+            actual,
+            expected);
+        if (wrote <= 0) {
+            break;
+        }
+        if ((size_t)wrote >= sizeof(vm->error_detail_storage) - used) {
+            used = sizeof(vm->error_detail_storage) - 1U;
+            break;
+        }
+        used += (size_t)wrote;
+    }
+    return vm->error_detail_storage;
 }
 
 static const char* syscall_contract_failure_detail(AivmContractStatus status)
