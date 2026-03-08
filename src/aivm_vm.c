@@ -791,6 +791,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     size_t effective_arg_count = arg_count;
     AivmSyscallStatus syscall_status;
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
+    int allow_positional_recovery = 0;
     size_t i;
 
     if (vm == NULL || out_result == NULL) {
@@ -822,28 +823,36 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     }
     if (!is_syscall_target_string(target_value.string_value)) {
         int recovered = 0;
-        for (i = 0U; i < effective_arg_count; i += 1U) {
-            if (args[i].type == AIVM_VAL_STRING && is_syscall_target_string(args[i].string_value)) {
-                size_t j;
-                target_value = args[i];
-                for (j = i; j + 1U < effective_arg_count; j += 1U) {
-                    args[j] = args[j + 1U];
+        allow_positional_recovery =
+            raw_target_value.type != AIVM_VAL_STRING ||
+            raw_target_value.string_value == NULL;
+        if (allow_positional_recovery) {
+            for (i = 0U; i < effective_arg_count; i += 1U) {
+                if (args[i].type == AIVM_VAL_STRING && is_syscall_target_string(args[i].string_value)) {
+                    size_t j;
+                    target_value = args[i];
+                    for (j = i; j + 1U < effective_arg_count; j += 1U) {
+                        args[j] = args[j + 1U];
+                    }
+                    effective_arg_count -= 1U;
+                    recovered = 1;
+                    break;
                 }
-                effective_arg_count -= 1U;
-                recovered = 1;
-                break;
             }
-        }
-        if (!recovered &&
-            vm->stack_count > 0U &&
-            vm->stack[vm->stack_count - 1U].type == AIVM_VAL_STRING &&
-            is_syscall_target_string(vm->stack[vm->stack_count - 1U].string_value)) {
-            target_value = vm->stack[vm->stack_count - 1U];
-            vm->stack_count -= 1U;
-            recovered = 1;
+            if (!recovered &&
+                vm->stack_count > 0U &&
+                vm->stack[vm->stack_count - 1U].type == AIVM_VAL_STRING &&
+                is_syscall_target_string(vm->stack[vm->stack_count - 1U].string_value)) {
+                target_value = vm->stack[vm->stack_count - 1U];
+                vm->stack_count -= 1U;
+                recovered = 1;
+            }
         }
         if (!recovered) {
             if (effective_arg_count == 1U &&
+                raw_target_value.type == AIVM_VAL_STRING &&
+                raw_target_value.string_value != NULL &&
+                strncmp(raw_target_value.string_value, "sys", 3U) == 0 &&
                 args[0].type == AIVM_VAL_STRING &&
                 args[0].string_value != NULL) {
                 const char* suffix_target = find_syscall_suffix_target(args[0].string_value);

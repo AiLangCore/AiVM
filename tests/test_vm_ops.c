@@ -1843,6 +1843,42 @@ static int test_call_sys_missing_binding_sets_not_found_error(void)
     return 0;
 }
 
+static int test_call_sys_does_not_recover_non_syscall_string_target_from_args(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "not_a_syscall" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init_with_syscalls(&vm, &program, NULL, 0U);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "rawTarget=not_a_syscall") != NULL) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
 {
     AivmVm vm;
@@ -3813,6 +3849,9 @@ int main(void)
         return 1;
     }
     if (test_call_sys_missing_binding_sets_not_found_error() != 0) {
+        return 1;
+    }
+    if (test_call_sys_does_not_recover_non_syscall_string_target_from_args() != 0) {
         return 1;
     }
     if (test_call_sys_debug_task_reclaim_stats_intrinsic() != 0) {
