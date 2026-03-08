@@ -67,8 +67,12 @@ int main(void)
     CHECK(result.type == AIVM_VAL_INT);
     connect_op = result.int_value;
     CHECK(connect_op > 0);
-
     one_arg[0] = aivm_value_int(connect_op);
+    status = native_syscall_net_async_result_int("sys.net.async.resultInt", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == 0);
+
     connection = -1;
     for (i = 0; i < 1000; i += 1) {
         if (accepted == NATIVE_INVALID_SOCKET) {
