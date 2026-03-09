@@ -78,6 +78,22 @@ int main(void)
         if (accepted == NATIVE_INVALID_SOCKET) {
             accepted = accept(listener, NULL, NULL);
         }
+        status = native_syscall_net_async_result_int("sys.net.async.resultInt", one_arg, 1U, &result);
+        CHECK(status == AIVM_SYSCALL_OK);
+        CHECK(result.type == AIVM_VAL_INT);
+        if (result.int_value > 0) {
+            connection = result.int_value;
+            break;
+        }
+        CHECK(result.int_value == 0);
+        test_sleep_ms(1);
+    }
+    CHECK(connection > 0);
+
+    for (i = 0; i < 1000; i += 1) {
+        if (accepted == NATIVE_INVALID_SOCKET) {
+            accepted = accept(listener, NULL, NULL);
+        }
         status = native_syscall_net_async_poll("sys.net.async.poll", one_arg, 1U, &result);
         CHECK(status == AIVM_SYSCALL_OK);
         CHECK(result.type == AIVM_VAL_INT);
@@ -88,12 +104,6 @@ int main(void)
         test_sleep_ms(1);
     }
     CHECK(result.int_value == 1);
-
-    status = native_syscall_net_async_result_int("sys.net.async.resultInt", one_arg, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_OK);
-    CHECK(result.type == AIVM_VAL_INT);
-    connection = result.int_value;
-    CHECK(connection > 0);
     for (i = 0; i < 1000 && accepted == NATIVE_INVALID_SOCKET; i += 1) {
         accepted = accept(listener, NULL, NULL);
         if (accepted != NATIVE_INVALID_SOCKET) {
