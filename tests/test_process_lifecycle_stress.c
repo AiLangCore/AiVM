@@ -4,6 +4,7 @@
 #undef main
 
 #include <stdio.h>
+#include <string.h>
 
 #define CHECK(cond) \
     do { \
@@ -163,6 +164,83 @@ static int interleaved_fail_and_cancel_cleanup_stress(void)
     return 0;
 }
 
+static int bytes_contains(const uint8_t* haystack, size_t haystack_len, const char* needle)
+{
+    size_t needle_len;
+    size_t i;
+    if (haystack == NULL || needle == NULL) {
+        return 0;
+    }
+    needle_len = strlen(needle);
+    if (needle_len == 0U) {
+        return 1;
+    }
+    if (haystack_len < needle_len) {
+        return 0;
+    }
+    for (i = 0U; i + needle_len <= haystack_len; i += 1U) {
+        if (memcmp(haystack + i, needle, needle_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int spawn_uses_args_node_contract(void)
+{
+    AivmProgram program;
+    AivmVm vm;
+    const char* argv_values[2];
+    AivmValue spawn_args[4];
+    AivmValue read_args[1];
+    AivmValue wait_args[1];
+    AivmValue result;
+    AivmSyscallStatus status;
+    int64_t handle;
+
+    aivm_program_clear(&program);
+    argv_values[0] = "hello";
+    argv_values[1] = "world";
+    aivm_init_with_syscalls_and_argv(&vm, &program, NULL, 0U, argv_values, 2U);
+    g_native_active_vm = &vm;
+
+#ifdef _WIN32
+    spawn_args[0] = aivm_value_string("cmd.exe");
+#else
+    spawn_args[0] = aivm_value_string("/bin/echo");
+#endif
+    spawn_args[1] = aivm_value_node(vm.process_argv_node_handle);
+    spawn_args[2] = aivm_value_string("");
+    spawn_args[3] = aivm_value_node(0);
+
+    status = native_syscall_process_spawn("sys.process.spawn", spawn_args, 4U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value > 0);
+    handle = result.int_value;
+
+    wait_args[0] = aivm_value_int(handle);
+    status = native_syscall_process_wait("sys.process.wait", wait_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == 0);
+
+    read_args[0] = aivm_value_int(handle);
+    status = native_syscall_process_stdout_read("sys.process.stdout.read", read_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BYTES);
+    CHECK(result.bytes_value.data != NULL);
+#ifdef _WIN32
+    CHECK(result.bytes_value.length >= 11U);
+    CHECK(bytes_contains(result.bytes_value.data, result.bytes_value.length, "hello world"));
+#else
+    CHECK(result.bytes_value.length == 12U);
+    CHECK(memcmp(result.bytes_value.data, "hello world\n", 12U) == 0);
+#endif
+    g_native_active_vm = NULL;
+    return 0;
+}
+
 int main(void)
 {
     int i;
@@ -182,6 +260,9 @@ int main(void)
         return 1;
     }
     if (interleaved_fail_and_cancel_cleanup_stress() != 0) {
+        return 1;
+    }
+    if (spawn_uses_args_node_contract() != 0) {
         return 1;
     }
 
