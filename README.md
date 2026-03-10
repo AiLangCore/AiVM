@@ -72,7 +72,7 @@ Local host integration shape:
 From repository root:
 
 ```bash
-./scripts/test-aivm-c.sh
+./test-aivm-c.sh
 ```
 
 Optional environment variables:
