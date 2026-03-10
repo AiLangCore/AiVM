@@ -106,6 +106,16 @@ int main(void)
         4, 0, 0, 0,   /* len */
         0x00, 0x01, 0x7f, 0xff
     };
+    static const uint8_t constants_section_with_null[29] = {
+        'A', 'I', 'B', 'C',
+        1, 0, 0, 0,
+        0, 0, 0, 0,
+        1, 0, 0, 0,
+        2, 0, 0, 0,   /* constants */
+        5, 0, 0, 0,   /* section size */
+        1, 0, 0, 0,   /* constant count */
+        6             /* null */
+    };
     static const uint8_t section_limit_exceeded[16] = {
         'A', 'I', 'B', 'C',
         1, 0, 0, 0,
@@ -325,6 +335,17 @@ int main(void)
         return 1;
     }
     if (expect(program.constants[0].bytes_value.data[3] == 0xffU) != 0) {
+        return 1;
+    }
+
+    result = aivm_program_load_aibc1(constants_section_with_null, sizeof(constants_section_with_null), &program);
+    if (expect(result.status == AIVM_PROGRAM_OK) != 0) {
+        return 1;
+    }
+    if (expect(program.constant_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(program.constants[0].type == AIVM_VAL_NULL) != 0) {
         return 1;
     }
 

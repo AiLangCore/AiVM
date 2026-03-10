@@ -12,8 +12,11 @@ int main(void)
     AivmValue void_value;
     AivmValue unknown_value;
     AivmValue int_value;
+    AivmValue number_value;
     AivmValue true_value;
     AivmValue false_value;
+    AivmValue null_a;
+    AivmValue null_b;
     AivmValue string_a;
     AivmValue string_b;
     AivmValue bytes_a;
@@ -42,9 +45,15 @@ int main(void)
     if (expect(int_value.int_value == 42) != 0) {
         return 1;
     }
+    number_value = aivm_value_number(42);
+    if (expect(number_value.type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
 
     true_value = aivm_value_bool(7);
     false_value = aivm_value_bool(0);
+    null_a = aivm_value_null();
+    null_b = aivm_value_null();
     if (expect(true_value.bool_value == 1) != 0) {
         return 1;
     }
@@ -65,6 +74,12 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(true_value, false_value) == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(null_a, null_b) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(null_a, void_value) == 0) != 0) {
         return 1;
     }
     if (expect(aivm_value_equals(string_a, string_b) == 1) != 0) {

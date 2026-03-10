@@ -47,11 +47,24 @@ AivmValue aivm_value_int(int64_t input)
     return value;
 }
 
+AivmValue aivm_value_number(int64_t input)
+{
+    return aivm_value_int(input);
+}
+
 AivmValue aivm_value_bool(int input)
 {
     AivmValue value;
     value.type = AIVM_VAL_BOOL;
     value.bool_value = (input != 0) ? 1 : 0;
+    return value;
+}
+
+AivmValue aivm_value_null(void)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_NULL;
+    value.int_value = 0;
     return value;
 }
 
@@ -95,6 +108,9 @@ int aivm_value_equals(AivmValue left, AivmValue right)
 
         case AIVM_VAL_BOOL:
             return left.bool_value == right.bool_value ? 1 : 0;
+
+        case AIVM_VAL_NULL:
+            return 1;
 
         case AIVM_VAL_STRING:
             return aivm_cstring_equals(left.string_value, right.string_value);

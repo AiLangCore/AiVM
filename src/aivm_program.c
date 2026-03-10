@@ -276,6 +276,8 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     out_program->constant_storage[constant_index] =
                         aivm_value_bool(bytes[constant_cursor] != 0U ? 1 : 0);
                     constant_cursor += 1U;
+                } else if (kind == 6U) {
+                    out_program->constant_storage[constant_index] = aivm_value_null();
                 } else if (kind == 3U) {
                     uint32_t string_length;
                     if (constant_cursor + 4U > section_payload_start + section_size) {

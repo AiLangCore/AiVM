@@ -20,6 +20,7 @@ static const char* vm_value_type_name(AivmValueType type)
         case AIVM_VAL_VOID: return "void";
         case AIVM_VAL_INT: return "int";
         case AIVM_VAL_BOOL: return "bool";
+        case AIVM_VAL_NULL: return "null";
         case AIVM_VAL_STRING: return "string";
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
@@ -2116,6 +2117,10 @@ static int create_runtime_node_from_value(AivmVm* vm, AivmValue value, int64_t* 
         attrs[0].kind = AIVM_NODE_ATTR_BOOL;
         attrs[0].bool_value = value.bool_value != 0 ? 1 : 0;
         attr_count = 1U;
+    } else if (value.type == AIVM_VAL_NULL) {
+        node_kind = "Null";
+        node_id = "runtime_null";
+        attr_count = 0U;
     } else if (value.type == AIVM_VAL_BYTES) {
         node_kind = "Lit";
         node_id = "runtime_bytes";
@@ -2867,6 +2872,14 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (value.type == AIVM_VAL_VOID) {
+                if (!push_string_copy(vm, "null")) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                vm->instruction_pointer += 1U;
+                break;
+            }
+            if (value.type == AIVM_VAL_NULL) {
                 if (!push_string_copy(vm, "null")) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
