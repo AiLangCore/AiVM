@@ -164,6 +164,7 @@ static int interleaved_fail_and_cancel_cleanup_stress(void)
     return 0;
 }
 
+#ifdef _WIN32
 static int bytes_contains(const uint8_t* haystack, size_t haystack_len, const char* needle)
 {
     size_t needle_len;
@@ -185,6 +186,7 @@ static int bytes_contains(const uint8_t* haystack, size_t haystack_len, const ch
     }
     return 0;
 }
+#endif
 
 static int spawn_uses_args_node_contract(void)
 {
