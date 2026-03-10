@@ -5,6 +5,11 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 #define CHECK(cond) \
     do { \
@@ -14,14 +19,29 @@
         } \
     } while (0)
 
+static void test_sleep_ms(unsigned int milliseconds)
+{
+#ifdef _WIN32
+    Sleep(milliseconds);
+#else
+    usleep((useconds_t)milliseconds * 1000U);
+#endif
+}
+
 static int spawn_and_wait_zero_exit(void)
 {
+    AivmProgram program;
+    AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue wait_args[1];
     AivmValue poll_args[1];
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
+
+    aivm_program_clear(&program);
+    aivm_init_with_syscalls(&vm, &program, NULL, 0U);
+    g_native_active_vm = &vm;
 
 #ifdef _WIN32
     spawn_args[0] = aivm_value_string("cmd /c exit 0");
@@ -50,17 +70,24 @@ static int spawn_and_wait_zero_exit(void)
     CHECK(result.type == AIVM_VAL_INT);
     CHECK(result.int_value == -1);
 
+    g_native_active_vm = NULL;
     return 0;
 }
 
 static int spawn_kill_wait_nonzero_exit(void)
 {
+    AivmProgram program;
+    AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue poll_args[1];
     AivmValue kill_args[1];
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
+
+    aivm_program_clear(&program);
+    aivm_init_with_syscalls(&vm, &program, NULL, 0U);
+    g_native_active_vm = &vm;
 
 #ifdef _WIN32
     spawn_args[0] = aivm_value_string("cmd /c ping -n 4 127.0.0.1 >NUL");
@@ -99,17 +126,24 @@ static int spawn_kill_wait_nonzero_exit(void)
     CHECK(result.type == AIVM_VAL_INT);
     CHECK(result.int_value == -1);
 
+    g_native_active_vm = NULL;
     return 0;
 }
 
 static int spawn_and_wait_nonzero_exit(void)
 {
+    AivmProgram program;
+    AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue wait_args[1];
     AivmValue poll_args[1];
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
+
+    aivm_program_clear(&program);
+    aivm_init_with_syscalls(&vm, &program, NULL, 0U);
+    g_native_active_vm = &vm;
 
 #ifdef _WIN32
     spawn_args[0] = aivm_value_string("cmd /c exit 7");
@@ -138,6 +172,7 @@ static int spawn_and_wait_nonzero_exit(void)
     CHECK(result.type == AIVM_VAL_INT);
     CHECK(result.int_value == -1);
 
+    g_native_active_vm = NULL;
     return 0;
 }
 
@@ -196,9 +231,11 @@ static int spawn_uses_args_node_contract(void)
     AivmValue spawn_args[4];
     AivmValue read_args[1];
     AivmValue wait_args[1];
+    AivmValue poll_args[1];
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
+    int spin;
 
     aivm_program_clear(&program);
     argv_values[0] = "hello";
@@ -221,11 +258,17 @@ static int spawn_uses_args_node_contract(void)
     CHECK(result.int_value > 0);
     handle = result.int_value;
 
-    wait_args[0] = aivm_value_int(handle);
-    status = native_syscall_process_wait("sys.process.wait", wait_args, 1U, &result);
-    CHECK(status == AIVM_SYSCALL_OK);
-    CHECK(result.type == AIVM_VAL_INT);
-    CHECK(result.int_value == 0);
+    poll_args[0] = aivm_value_int(handle);
+    for (spin = 0; spin < 200; spin += 1) {
+        status = native_syscall_process_poll("sys.process.poll", poll_args, 1U, &result);
+        CHECK(status == AIVM_SYSCALL_OK);
+        CHECK(result.type == AIVM_VAL_INT);
+        if (result.int_value == 1) {
+            break;
+        }
+        test_sleep_ms(1U);
+    }
+    CHECK(result.int_value == 1);
 
     read_args[0] = aivm_value_int(handle);
     status = native_syscall_process_stdout_read("sys.process.stdout.read", read_args, 1U, &result);
@@ -239,6 +282,13 @@ static int spawn_uses_args_node_contract(void)
     CHECK(result.bytes_value.length == 12U);
     CHECK(memcmp(result.bytes_value.data, "hello world\n", 12U) == 0);
 #endif
+
+    wait_args[0] = aivm_value_int(handle);
+    status = native_syscall_process_wait("sys.process.wait", wait_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == 0);
+
     g_native_active_vm = NULL;
     return 0;
 }
