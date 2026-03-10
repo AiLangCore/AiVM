@@ -1,0 +1,133 @@
+Program#p1 {
+  Let#l1(name=intLt) {
+    Fn#f1(params=a,b) {
+      Block#b1 {
+        If#if1 {
+          Eq#eq1 { Var#v1(name=a) Var#v2(name=b) }
+          Block#b2 { Return#r1 { Lit#i1(value=false) } }
+          Block#b3 {
+            If#if2 {
+              Eq#eq2 { Var#v3(name=a) Lit#i2(value=0) }
+              Block#b4 { Return#r2 { Lit#i3(value=true) } }
+              Block#b5 {
+                If#if3 {
+                  Eq#eq3 { Var#v4(name=b) Lit#i4(value=0) }
+                  Block#b6 { Return#r3 { Lit#i5(value=false) } }
+                  Block#b7 {
+                    Return#r4 {
+                      Call#c1(target=intLt) {
+                        Add#a1 { Var#v5(name=a) Lit#i6(value=-1) }
+                        Add#a2 { Var#v6(name=b) Lit#i7(value=-1) }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Let#l2(name=strLen) {
+    Fn#f2(params=textValue) {
+      Block#b8 {
+        If#if4 {
+          Eq#eq4 { Var#v7(name=textValue) Lit#s1(value="") }
+          Block#b9 { Return#r5 { Lit#i8(value=0) } }
+          Block#b10 {
+            Return#r6 {
+              Add#a3 {
+                Lit#i9(value=1)
+                Call#c2(target=strLen) {
+                  Call#c3(target=sys.str.remove) {
+                    Var#v8(name=textValue)
+                    Lit#i10(value=0)
+                    Lit#i11(value=1)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Let#l3(name=findFrom) {
+    Fn#f3(params=text,pattern,index) {
+      Block#b11 {
+        Return#r7 {
+          Call#c4(target=sys.str.find) {
+            Var#v9(name=text)
+            Var#v10(name=pattern)
+            Var#v11(name=index)
+          }
+        }
+      }
+    }
+  }
+
+  Let#l4(name=findNotFound) {
+    Fn#f4(params=index) {
+      Block#b12 { Return#r8 { Eq#eq5 { Var#v12(name=index) Lit#i12(value=-1) } } }
+    }
+  }
+
+  Let#l5(name=contains) {
+    Fn#f5(params=text,pattern) {
+      Block#b13 {
+        Let#l6(name=found) {
+          Call#c5(target=findFrom) {
+            Var#v13(name=text)
+            Var#v14(name=pattern)
+            Lit#i13(value=0)
+          }
+        }
+        If#if5 {
+          Call#c6(target=findNotFound) { Var#v15(name=found) }
+          Block#b14 { Return#r9 { Lit#i14(value=false) } }
+          Block#b15 { Return#r10 { Lit#i15(value=true) } }
+        }
+      }
+    }
+  }
+
+  Let#l7(name=traceNetLine) {
+    Fn#f6(params=debugLive,phase,detailA,detailB) {
+      Block#b16 { Return#r11 { Lit#i16(value=0) } }
+    }
+  }
+
+  Let#l8(name=start) {
+    Fn#f7(params=args) {
+      Block#b17 {
+        Let#l9(name=geo) {
+          Lit#s2(value="{\"results\":[{\"id\":4691930,\"name\":\"Fort Worth\",\"admin1\":\"Texas\"}],\"generationtime_ms\":0.29492378}")
+        }
+        Call#c7(target=traceNetLine) {
+          Lit#i17(value=false)
+          Lit#s3(value="geo.response")
+          ToString#t1 { Call#c8(target=strLen) { Var#v16(name=geo) } }
+          ToString#t2 { Call#c9(target=contains) { Var#v17(name=geo) Lit#s4(value="\"results\":") } }
+        }
+        Call#c10(target=io.print) {
+          StrConcat#sc1 {
+            Lit#s5(value="hasName=")
+            ToString#t3 { Call#c11(target=contains) { Var#v18(name=geo) Lit#s6(value="\"name\":\"") } }
+          }
+        }
+        Call#c12(target=io.print) {
+          StrConcat#sc2 {
+            Lit#s7(value="hasAdmin=")
+            ToString#t4 { Call#c13(target=contains) { Var#v19(name=geo) Lit#s8(value="\"admin1\":\"") } }
+          }
+        }
+        Return#r12 { Lit#i18(value=0) }
+      }
+    }
+  }
+
+  Export#e1(name=start)
+}

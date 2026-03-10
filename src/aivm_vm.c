@@ -1,5 +1,6 @@
 #include "aivm_vm.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "sys/aivm_syscall_contracts.h"
 
@@ -431,6 +432,8 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     size_t length = 0U;
     size_t i;
     char* output;
+    char* source_copy = NULL;
+    const char* source = input;
     if (vm == NULL || input == NULL) {
         return NULL;
     }
@@ -441,14 +444,24 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     while (input[length] != '\0') {
         length += 1U;
     }
+    if (pointer_in_string_arena(vm, input)) {
+        source_copy = (char*)malloc(length + 1U);
+        if (source_copy == NULL) {
+            return NULL;
+        }
+        memcpy(source_copy, input, length + 1U);
+        source = source_copy;
+    }
     output = arena_alloc(vm, length + 1U);
     if (output == NULL) {
+        free(source_copy);
         return NULL;
     }
     for (i = 0U; i < length; i += 1U) {
-        output[i] = input[i];
+        output[i] = source[i];
     }
     output[length] = '\0';
+    free(source_copy);
     return output;
 }
 
@@ -456,6 +469,8 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
 {
     char* output;
     size_t i;
+    char* source_copy = NULL;
+    const char* source = input;
     if (vm == NULL || input == NULL) {
         return NULL;
     }
@@ -463,14 +478,27 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
     if (output != NULL) {
         return output;
     }
+    if (pointer_in_string_arena(vm, input)) {
+        source_copy = (char*)malloc(length + 1U);
+        if (source_copy == NULL) {
+            return NULL;
+        }
+        if (length > 0U) {
+            memcpy(source_copy, input, length);
+        }
+        source_copy[length] = '\0';
+        source = source_copy;
+    }
     output = arena_alloc(vm, length + 1U);
     if (output == NULL) {
+        free(source_copy);
         return NULL;
     }
     for (i = 0U; i < length; i += 1U) {
-        output[i] = input[i];
+        output[i] = source[i];
     }
     output[length] = '\0';
+    free(source_copy);
     return output;
 }
 
@@ -485,6 +513,10 @@ static char* copy_string_splice_to_arena(
     size_t total_length;
     char* output;
     size_t i;
+    char* prefix_copy = NULL;
+    char* suffix_copy = NULL;
+    const char* prefix_source = prefix;
+    const char* suffix_source = suffix;
     if (vm == NULL || prefix == NULL || suffix == NULL) {
         return NULL;
     }
@@ -502,17 +534,44 @@ static char* copy_string_splice_to_arena(
             offset += 1U;
         }
     }
+    if (pointer_in_string_arena(vm, prefix)) {
+        prefix_copy = (char*)malloc(prefix_length + 1U);
+        if (prefix_copy == NULL) {
+            return NULL;
+        }
+        if (prefix_length > 0U) {
+            memcpy(prefix_copy, prefix, prefix_length);
+        }
+        prefix_copy[prefix_length] = '\0';
+        prefix_source = prefix_copy;
+    }
+    if (pointer_in_string_arena(vm, suffix)) {
+        suffix_copy = (char*)malloc(suffix_length + 1U);
+        if (suffix_copy == NULL) {
+            free(prefix_copy);
+            return NULL;
+        }
+        if (suffix_length > 0U) {
+            memcpy(suffix_copy, suffix, suffix_length);
+        }
+        suffix_copy[suffix_length] = '\0';
+        suffix_source = suffix_copy;
+    }
     output = arena_alloc(vm, total_length + 1U);
     if (output == NULL) {
+        free(prefix_copy);
+        free(suffix_copy);
         return NULL;
     }
     for (i = 0U; i < prefix_length; i += 1U) {
-        output[i] = prefix[i];
+        output[i] = prefix_source[i];
     }
     for (i = 0U; i < suffix_length; i += 1U) {
-        output[prefix_length + i] = suffix[i];
+        output[prefix_length + i] = suffix_source[i];
     }
     output[total_length] = '\0';
+    free(prefix_copy);
+    free(suffix_copy);
     return output;
 }
 
