@@ -2158,14 +2158,16 @@ static int test_async_call_rejects_invalid_call_target_layout(void)
     AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 7 },
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 8 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
         { .opcode = AIVM_OP_RET, .operand_int = 0 }
     };
     AivmProgram program;
-    aivm_program_init(&program, &instructions[0], 6U);
+    aivm_program_init(&program, &instructions[0], 8U);
     aivm_init(&vm, &program);
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {

@@ -23,9 +23,11 @@ int main(void)
     };
     static const AivmInstruction bad_call_layout_instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 7 },
-        { .opcode = AIVM_OP_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 8 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 4 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
         { .opcode = AIVM_OP_RET, .operand_int = 0 }
     };
@@ -38,7 +40,7 @@ int main(void)
     };
     static const AivmProgram bad_call_layout_program = {
         .instructions = bad_call_layout_instructions,
-        .instruction_count = 6U,
+        .instruction_count = 8U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U

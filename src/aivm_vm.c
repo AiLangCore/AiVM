@@ -14,6 +14,27 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
     vm->error_detail = detail;
 }
 
+static int size_add_checked(size_t a, size_t b, size_t* out)
+{
+    if (out == NULL) {
+        return 0;
+    }
+    if (a > ((size_t)-1 - b)) {
+        return 0;
+    }
+    *out = a + b;
+    return 1;
+}
+
+static int size_sub_checked(size_t a, size_t b, size_t* out)
+{
+    if (out == NULL || a < b) {
+        return 0;
+    }
+    *out = a - b;
+    return 1;
+}
+
 static void set_vm_local_out_of_range_error(
     AivmVm* vm,
     const char* op_name,
@@ -123,15 +144,25 @@ static int validate_vm_return_restore(
     const AivmCallFrame* frame,
     size_t pre_restore_stack_count)
 {
+    size_t max_stack_count = 0U;
+    size_t extra_stack_values = 0U;
     if (vm == NULL || frame == NULL) {
         return 0;
     }
-    if (pre_restore_stack_count > frame->frame_base + 1U) {
+    if (!size_add_checked(frame->frame_base, 1U, &max_stack_count)) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Return restore size arithmetic overflow.");
+        return 0;
+    }
+    if (pre_restore_stack_count > max_stack_count) {
+        if (!size_sub_checked(pre_restore_stack_count, max_stack_count, &extra_stack_values)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Return restore size arithmetic overflow.");
+            return 0;
+        }
         (void)snprintf(
             vm->error_detail_storage,
             sizeof(vm->error_detail_storage),
             "Return restore invalid. extraStackValues=%llu frameBase=%llu stackCount=%llu localsBase=%llu frameCount=%llu pc=%llu",
-            (unsigned long long)(pre_restore_stack_count - frame->frame_base - 1U),
+            (unsigned long long)extra_stack_values,
             (unsigned long long)frame->frame_base,
             (unsigned long long)pre_restore_stack_count,
             (unsigned long long)frame->locals_base,
@@ -266,8 +297,7 @@ static size_t grow_limit(size_t current, size_t step, size_t max_value)
     if (current >= max_value) {
         return max_value;
     }
-    next = current + step;
-    if (next < current || next > max_value) {
+    if (!size_add_checked(current, step, &next) || next > max_value) {
         return max_value;
     }
     return next;
@@ -360,12 +390,13 @@ static char* compact_lookup_or_copy_string(
         }
     }
     length = strlen(text);
-    if (*new_used + length + 1U > AIVM_VM_STRING_ARENA_CAPACITY) {
+    if (!size_add_checked(*new_used, length + 1U, &offset) ||
+        offset > AIVM_VM_STRING_ARENA_CAPACITY) {
         return NULL;
     }
     output = &new_arena[*new_used];
     memcpy(output, text, length + 1U);
-    *new_used += length + 1U;
+    *new_used = offset;
     return output;
 }
 
@@ -1575,6 +1606,8 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
     size_t frame_base;
     size_t return_ip;
     size_t pre_restore_stack_count = 0U;
+    size_t max_stack_count = 0U;
+    size_t extra_stack_values = 0U;
     AivmValue result = aivm_value_void();
 
     if (vm == NULL || out_result == NULL) {
@@ -1628,12 +1661,20 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
     if (vm->stack_count > frame_base) {
         result = vm->stack[vm->stack_count - 1U];
     }
-    if (pre_restore_stack_count > frame_base + 1U) {
+    if (!size_add_checked(frame_base, 1U, &max_stack_count)) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Async return restore size arithmetic overflow.");
+        return 0;
+    }
+    if (pre_restore_stack_count > max_stack_count) {
+        if (!size_sub_checked(pre_restore_stack_count, max_stack_count, &extra_stack_values)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Async return restore size arithmetic overflow.");
+            return 0;
+        }
         (void)snprintf(
             vm->error_detail_storage,
             sizeof(vm->error_detail_storage),
             "Async return restore invalid. extraStackValues=%llu frameBase=%llu stackCount=%llu frameCount=%llu pc=%llu",
-            (unsigned long long)(pre_restore_stack_count - frame_base - 1U),
+            (unsigned long long)extra_stack_values,
             (unsigned long long)frame_base,
             (unsigned long long)pre_restore_stack_count,
             (unsigned long long)vm->call_frame_count,
@@ -2570,6 +2611,7 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
 {
     size_t base = 0U;
     size_t absolute_index;
+    size_t needed = 0U;
     if (vm == NULL) {
         return 0;
     }
@@ -2584,8 +2626,9 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
         set_vm_local_out_of_range_error(vm, "store", index, base);
         return 0;
     }
-    absolute_index = base + index;
-    if (!ensure_locals_capacity(vm, absolute_index + 1U)) {
+    if (!size_add_checked(base, index, &absolute_index) ||
+        !size_add_checked(absolute_index, 1U, &needed) ||
+        !ensure_locals_capacity(vm, needed)) {
         set_vm_local_out_of_range_error(vm, "store", index, base);
         return 0;
     }
@@ -2619,7 +2662,9 @@ int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
     if (base >= AIVM_VM_LOCALS_CAPACITY || index >= (AIVM_VM_LOCALS_CAPACITY - base)) {
         return 0;
     }
-    absolute_index = base + index;
+    if (!size_add_checked(base, index, &absolute_index)) {
+        return 0;
+    }
     if (absolute_index >= vm->locals_count) {
         return 0;
     }
@@ -2649,11 +2694,12 @@ static int validate_call_target_layout(
     size_t arg_count)
 {
     size_t i;
-    uint8_t seen[64];
+    size_t seen[64];
+    size_t seen_count = 0U;
     if (vm == NULL || program == NULL || program->instructions == NULL) {
         return 0;
     }
-    if (arg_count > sizeof(seen)) {
+    if (arg_count > (sizeof(seen) / sizeof(seen[0]))) {
         (void)snprintf(
             vm->error_detail_storage,
             sizeof(vm->error_detail_storage),
@@ -2663,9 +2709,9 @@ static int validate_call_target_layout(
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
         return 0;
     }
-    memset(seen, 0, sizeof(seen));
     for (i = 0U; i < arg_count; i += 1U) {
         size_t local_index = 0U;
+        size_t j;
         const AivmInstruction* instruction = &program->instructions[target + i];
         if (instruction->opcode != AIVM_OP_STORE_LOCAL) {
             (void)snprintf(
@@ -2681,19 +2727,22 @@ static int validate_call_target_layout(
         if (!operand_to_index(vm, instruction->operand_int, &local_index)) {
             return 0;
         }
-        if (local_index >= arg_count || seen[local_index] != 0U) {
-            (void)snprintf(
-                vm->error_detail_storage,
-                sizeof(vm->error_detail_storage),
-                "Call target local layout invalid. target=%llu arg=%llu local=%llu argCount=%llu",
-                (unsigned long long)target,
-                (unsigned long long)i,
-                (unsigned long long)local_index,
-                (unsigned long long)arg_count);
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
-            return 0;
+        for (j = 0U; j < seen_count; j += 1U) {
+            if (seen[j] == local_index) {
+                (void)snprintf(
+                    vm->error_detail_storage,
+                    sizeof(vm->error_detail_storage),
+                    "Call target local layout invalid. target=%llu arg=%llu duplicateLocal=%llu argCount=%llu",
+                    (unsigned long long)target,
+                    (unsigned long long)i,
+                    (unsigned long long)local_index,
+                    (unsigned long long)arg_count);
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+                return 0;
+            }
         }
-        seen[local_index] = 1U;
+        seen[seen_count] = local_index;
+        seen_count += 1U;
     }
     return 1;
 }
