@@ -1675,10 +1675,10 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
         if (!is_task_handle_pinned(vm, vm->completed_tasks[index].handle)) {
             break;
         }
-        vm->task_reclaim_skip_pinned_count += 1U;
+        increment_counter_saturating(&vm->task_reclaim_skip_pinned_count);
     }
     if (index >= vm->completed_task_count) {
-        vm->task_reclaim_exhausted_count += 1U;
+        increment_counter_saturating(&vm->task_reclaim_exhausted_count);
         return 0;
     }
     if (size_add_checked(index, 1U, &next_index) &&
@@ -1691,7 +1691,7 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
             move_count * sizeof(AivmCompletedTask));
     }
     vm->completed_task_count -= 1U;
-    vm->task_reclaim_count += 1U;
+    increment_counter_saturating(&vm->task_reclaim_count);
     return 1;
 }
 
@@ -2633,7 +2633,9 @@ static int initialize_process_argv_node(AivmVm* vm)
         if (!create_node_record(vm, "Lit", node_id, &value_attr, 1U, NULL, 0U, &child_handles[i])) {
             return 0;
         }
-        if (child_handles[i] != (int64_t)(i + 2U)) {
+        if (!size_add_checked(i, 2U, &child_handle_index) ||
+            child_handle_index > (size_t)INT64_MAX ||
+            child_handles[i] != (int64_t)child_handle_index) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv child handle invariant violated.");
             return 0;
         }
