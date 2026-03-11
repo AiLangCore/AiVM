@@ -969,12 +969,16 @@ static size_t utf8_rune_count(const char* text)
 {
     size_t byte_index = 0U;
     size_t count = 0U;
+    size_t next_count;
     if (text == NULL) {
         return 0U;
     }
     while (text[byte_index] != '\0') {
         byte_index = utf8_next_index(text, byte_index);
-        count += 1U;
+        if (!size_add_checked(count, 1U, &next_count)) {
+            return (size_t)-1;
+        }
+        count = next_count;
     }
     return count;
 }
@@ -983,12 +987,16 @@ static size_t utf8_byte_offset_for_rune(const char* text, size_t rune_index)
 {
     size_t byte_index = 0U;
     size_t current_rune = 0U;
+    size_t next_rune;
     if (text == NULL) {
         return 0U;
     }
     while (text[byte_index] != '\0' && current_rune < rune_index) {
         byte_index = utf8_next_index(text, byte_index);
-        current_rune += 1U;
+        if (!size_add_checked(current_rune, 1U, &next_rune)) {
+            return byte_index;
+        }
+        current_rune = next_rune;
     }
     return byte_index;
 }
@@ -1059,10 +1067,17 @@ static int push_remove_by_runes(AivmVm* vm, const char* text, int64_t start, int
     }
 
     while (text[input_length] != '\0') {
-        input_length += 1U;
+        if (!size_add_checked(input_length, 1U, &input_length)) {
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "substring input length overflow.");
+            return 0;
+        }
     }
 
     rune_count = utf8_rune_count(text);
+    if (rune_count == (size_t)-1) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "substring rune count overflow.");
+        return 0;
+    }
     start_rune = clamp_rune_index(start, rune_count);
     end_rune = clamp_rune_index(start + length, rune_count);
     if (end_rune < start_rune) {
