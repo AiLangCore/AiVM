@@ -3039,6 +3039,7 @@ static int validate_call_target_layout(
     size_t i;
     size_t seen[64];
     size_t seen_count = 0U;
+    size_t next_seen_count;
     if (vm == NULL || program == NULL || program->instructions == NULL) {
         return 0;
     }
@@ -3054,8 +3055,15 @@ static int validate_call_target_layout(
     }
     for (i = 0U; i < arg_count; i += 1U) {
         size_t local_index = 0U;
+        size_t instruction_index = 0U;
         size_t j;
-        const AivmInstruction* instruction = &program->instructions[target + i];
+        const AivmInstruction* instruction;
+        if (!size_add_checked(target, i, &instruction_index) ||
+            instruction_index >= program->instruction_count) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call target layout exceeded instruction range.");
+            return 0;
+        }
+        instruction = &program->instructions[instruction_index];
         if (instruction->opcode != AIVM_OP_STORE_LOCAL) {
             (void)snprintf(
                 vm->error_detail_storage,
@@ -3085,7 +3093,11 @@ static int validate_call_target_layout(
             }
         }
         seen[seen_count] = local_index;
-        seen_count += 1U;
+        if (!size_add_checked(seen_count, 1U, &next_seen_count)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call target local layout count overflow.");
+            return 0;
+        }
+        seen_count = next_seen_count;
     }
     return 1;
 }
