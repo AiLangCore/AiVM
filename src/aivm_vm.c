@@ -2639,11 +2639,13 @@ void aivm_halt(AivmVm* vm)
 
 int aivm_stack_push(AivmVm* vm, AivmValue value)
 {
+    size_t needed = 0U;
     if (vm == NULL) {
         return 0;
     }
 
-    if (!ensure_stack_capacity(vm, vm->stack_count + 1U)) {
+    if (!size_add_checked(vm->stack_count, 1U, &needed) ||
+        !ensure_stack_capacity(vm, needed)) {
         set_vm_error(vm, AIVM_VM_ERR_STACK_OVERFLOW, "Stack overflow.");
         return 0;
     }
@@ -2671,6 +2673,7 @@ int aivm_stack_pop(AivmVm* vm, AivmValue* out_value)
 
 int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_base)
 {
+    size_t needed = 0U;
     if (vm == NULL) {
         return 0;
     }
@@ -2682,7 +2685,8 @@ int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_
         return 0;
     }
 
-    if (!ensure_call_frame_capacity(vm, vm->call_frame_count + 1U)) {
+    if (!size_add_checked(vm->call_frame_count, 1U, &needed) ||
+        !ensure_call_frame_capacity(vm, needed)) {
         set_vm_error(vm, AIVM_VM_ERR_FRAME_OVERFLOW, "Call-frame overflow.");
         return 0;
     }
@@ -2743,7 +2747,7 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
     }
     vm->locals[absolute_index] = value;
     if (absolute_index >= vm->locals_count) {
-        vm->locals_count = absolute_index + 1U;
+        vm->locals_count = needed;
     }
     return 1;
 }
