@@ -118,6 +118,34 @@ static int validate_vm_frame_record(
     return 1;
 }
 
+static int validate_vm_return_restore(
+    AivmVm* vm,
+    const AivmCallFrame* frame,
+    size_t pre_restore_stack_count)
+{
+    if (vm == NULL || frame == NULL) {
+        return 0;
+    }
+    if (pre_restore_stack_count > frame->frame_base + 1U) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "Return restore invalid. extraStackValues=%llu frameBase=%llu stackCount=%llu localsBase=%llu frameCount=%llu pc=%llu",
+            (unsigned long long)(pre_restore_stack_count - frame->frame_base - 1U),
+            (unsigned long long)frame->frame_base,
+            (unsigned long long)pre_restore_stack_count,
+            (unsigned long long)frame->locals_base,
+            (unsigned long long)vm->call_frame_count,
+            (unsigned long long)vm->instruction_pointer);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    if (!validate_vm_call_local_state(vm, "return-restore")) {
+        return 0;
+    }
+    return 1;
+}
+
 static const char* vm_value_type_name(AivmValueType type)
 {
     switch (type) {
@@ -2793,6 +2821,7 @@ void aivm_step(AivmVm* vm)
             AivmCallFrame frame;
             AivmValue return_value = aivm_value_void();
             int has_return_value = 0;
+            size_t pre_restore_stack_count = 0U;
             if (vm->call_frame_count == 0U) {
                 aivm_halt(vm);
                 break;
@@ -2811,12 +2840,17 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            pre_restore_stack_count = vm->stack_count;
             if (vm->stack_count > frame.frame_base) {
                 return_value = vm->stack[vm->stack_count - 1U];
                 has_return_value = 1;
             }
             vm->stack_count = frame.frame_base;
             vm->locals_count = frame.locals_base;
+            if (!validate_vm_return_restore(vm, &frame, pre_restore_stack_count)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
             if (has_return_value != 0) {
                 if (!aivm_stack_push(vm, return_value)) {
                     vm->instruction_pointer = vm->program->instruction_count;

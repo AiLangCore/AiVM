@@ -404,10 +404,9 @@ static int test_call_ret_roundtrip(void)
     return 0;
 }
 
-static int test_call_ret_collapses_callee_stack_to_single_return(void)
+static int test_call_ret_rejects_extra_callee_stack_values(void)
 {
     AivmVm vm;
-    AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 11 },
         { .opcode = AIVM_OP_CALL, .operand_int = 3 },
@@ -427,28 +426,16 @@ static int test_call_ret_collapses_callee_stack_to_single_return(void)
     aivm_init(&vm, &program);
     aivm_run(&vm);
 
-    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
-    if (expect(vm.stack_count == 2U) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
         return 1;
     }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "Return restore invalid.") != NULL) != 0) {
         return 1;
     }
-    if (expect(out.type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(out.int_value == 8) != 0) {
-        return 1;
-    }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
-        return 1;
-    }
-    if (expect(out.type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(out.int_value == 11) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "extraStackValues=1") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -1888,7 +1875,7 @@ static int test_call_sys_does_not_recover_non_syscall_string_target_from_args(vo
     return 0;
 }
 
-static int test_tail_call_compacts_stack_to_caller_frame_base(void)
+static int test_nested_call_preserves_argument_without_tail_call_reuse(void)
 {
     AivmVm vm;
     AivmValue out;
@@ -1897,23 +1884,16 @@ static int test_tail_call_compacts_stack_to_caller_frame_base(void)
         { .opcode = AIVM_OP_CALL, .operand_int = 3 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
         { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 99 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
-        { .opcode = AIVM_OP_CALL, .operand_int = 9 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 7 },
         { .opcode = AIVM_OP_RETURN, .operand_int = 0 },
         { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
         { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
-        { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
-    };
-    static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "stale" }
+        { .opcode = AIVM_OP_RETURN, .operand_int = 0 },
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 12U,
-        .constants = constants,
-        .constant_count = 1U,
+        .instruction_count = 10U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -3821,7 +3801,7 @@ int main(void)
     if (test_call_ret_roundtrip() != 0) {
         return 1;
     }
-    if (test_call_ret_collapses_callee_stack_to_single_return() != 0) {
+    if (test_call_ret_rejects_extra_callee_stack_values() != 0) {
         return 1;
     }
     if (test_top_level_ret_halts() != 0) {
@@ -3914,7 +3894,7 @@ int main(void)
     if (test_call_sys_does_not_recover_non_syscall_string_target_from_args() != 0) {
         return 1;
     }
-    if (test_tail_call_compacts_stack_to_caller_frame_base() != 0) {
+    if (test_nested_call_preserves_argument_without_tail_call_reuse() != 0) {
         return 1;
     }
     if (test_call_sys_debug_task_reclaim_stats_intrinsic() != 0) {
