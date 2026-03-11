@@ -840,14 +840,22 @@ static int push_escaped_string(AivmVm* vm, const char* input)
     while (input[length] != '\0') {
         char ch = input[length];
         if (ch == '\\' || ch == '"' || ch == '\n' || ch == '\r' || ch == '\t') {
-            escaped_length += 2U;
+            if (!size_add_checked(escaped_length, 2U, &escaped_length)) {
+                return 0;
+            }
         } else {
-            escaped_length += 1U;
+            if (!size_add_checked(escaped_length, 1U, &escaped_length)) {
+                return 0;
+            }
         }
         length += 1U;
     }
 
-    output = arena_alloc(vm, escaped_length + 1U);
+    if (!size_add_checked(escaped_length, 1U, &escaped_length)) {
+        return 0;
+    }
+
+    output = arena_alloc(vm, escaped_length);
     if (output == NULL) {
         return 0;
     }
@@ -1102,12 +1110,16 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                     size_t raw_len = 0U;
                     size_t prefix_len = (size_t)(suffix_target - args[0].string_value);
                     size_t out_len;
+                    size_t bytes_needed;
                     char* merged;
                     while (target_value.string_value[raw_len] != '\0') {
                         raw_len += 1U;
                     }
-                    out_len = raw_len + prefix_len;
-                    merged = arena_alloc(vm, out_len + 1U);
+                    if (!size_add_checked(raw_len, prefix_len, &out_len) ||
+                        !size_add_checked(out_len, 1U, &bytes_needed)) {
+                        return 0;
+                    }
+                    merged = arena_alloc(vm, bytes_needed);
                     if (merged == NULL) {
                         return 0;
                     }
@@ -3216,13 +3228,22 @@ void aivm_step(AivmVm* vm)
             if (value.type == AIVM_VAL_BYTES) {
                 static const char hex[] = "0123456789abcdef";
                 size_t i;
-                size_t out_len = 2U + (value.bytes_value.length * 2U);
+                size_t body_len = 0U;
+                size_t out_len = 0U;
+                size_t bytes_needed = 0U;
                 if (value.bytes_value.length > 0U && value.bytes_value.data == NULL) {
                     set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "TO_STRING bytes data must be non-null.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
-                bytes_output = arena_alloc(vm, out_len + 1U);
+                if (!size_add_checked(value.bytes_value.length, value.bytes_value.length, &body_len) ||
+                    !size_add_checked(2U, body_len, &out_len) ||
+                    !size_add_checked(out_len, 1U, &bytes_needed)) {
+                    set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "TO_STRING bytes size arithmetic overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                bytes_output = arena_alloc(vm, bytes_needed);
                 if (bytes_output == NULL) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
