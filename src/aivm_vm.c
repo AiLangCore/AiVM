@@ -2227,6 +2227,9 @@ static int create_node_record(
     int64_t remapped_children[AIVM_VM_NODE_CHILD_CAPACITY];
     const int64_t* effective_children = children;
     int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
+    size_t needed_attr_count = 0U;
+    size_t needed_child_count = 0U;
+    size_t needed_node_count = 0U;
     size_t i;
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
@@ -2244,9 +2247,16 @@ static int create_node_record(
         }
         vm->node_allocations_since_gc = 0U;
     }
-    if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
-        vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-        vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+    if (!size_add_checked(vm->node_attr_count, attr_count, &needed_attr_count) ||
+        !size_add_checked(vm->node_child_count, child_count, &needed_child_count) ||
+        !size_add_checked(vm->node_count, 1U, &needed_node_count)) {
+        increment_counter_saturating(&vm->node_arena_pressure_count);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
+        return 0;
+    }
+    if (needed_node_count > AIVM_VM_NODE_CAPACITY ||
+        needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+        needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
         if (!compact_node_arenas_with_map(vm, effective_children, child_count, handle_map)) {
             return 0;
         }
@@ -2258,9 +2268,12 @@ static int create_node_record(
             effective_children = remapped_children;
         }
         vm->node_allocations_since_gc = 0U;
-        if (vm->node_count >= AIVM_VM_NODE_CAPACITY ||
-            vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-            vm->node_child_count + child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+        if (!size_add_checked(vm->node_attr_count, attr_count, &needed_attr_count) ||
+            !size_add_checked(vm->node_child_count, child_count, &needed_child_count) ||
+            !size_add_checked(vm->node_count, 1U, &needed_node_count) ||
+            needed_node_count > AIVM_VM_NODE_CAPACITY ||
+            needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+            needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
             increment_counter_saturating(&vm->node_arena_pressure_count);
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             return 0;
@@ -2302,9 +2315,9 @@ static int create_node_record(
         vm->node_children[vm->node_child_count + i] = effective_children[i];
     }
 
-    vm->node_attr_count += attr_count;
-    vm->node_child_count += child_count;
-    vm->node_count += 1U;
+    vm->node_attr_count = needed_attr_count;
+    vm->node_child_count = needed_child_count;
+    vm->node_count = needed_node_count;
     if (vm->node_count > vm->node_high_water) {
         vm->node_high_water = vm->node_count;
     }
@@ -3837,6 +3850,7 @@ void aivm_step(AivmVm* vm)
             int64_t new_children[AIVM_VM_NODE_CHILD_CAPACITY];
             AivmNodeAttr attrs[AIVM_VM_NODE_ATTR_CAPACITY];
             int64_t handle;
+            size_t needed_child_count = 0U;
             size_t i;
             if (!aivm_stack_pop(vm, &child_value) || !aivm_stack_pop(vm, &node_value)) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -3856,7 +3870,8 @@ void aivm_step(AivmVm* vm)
             }
             (void)child_node;
             if (base_node->attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-                base_node->child_count + 1U > AIVM_VM_NODE_CHILD_CAPACITY) {
+                !size_add_checked(base_node->child_count, 1U, &needed_child_count) ||
+                needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD exceeded VM node capacity.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
