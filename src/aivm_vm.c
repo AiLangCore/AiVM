@@ -271,11 +271,14 @@ static int create_node_record(
 
 static void increment_counter_saturating(size_t* counter)
 {
+    size_t next_value;
     if (counter == NULL) {
         return;
     }
-    if (*counter < (size_t)-1) {
-        *counter += 1U;
+    if (size_add_checked(*counter, 1U, &next_value)) {
+        *counter = next_value;
+    } else {
+        *counter = (size_t)-1;
     }
 }
 
@@ -2480,7 +2483,9 @@ static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value)
         uint64_t digit = value % 10U;
         value /= 10U;
         temp[count] = (char)('0' + (char)digit);
-        count += 1U;
+        if (!size_add_checked(count, 1U, &count)) {
+            return 0U;
+        }
     } while (value != 0U && count < sizeof(temp));
 
     if (!size_add_checked(count, 1U, &i) || i > capacity) {
