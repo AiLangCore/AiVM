@@ -912,6 +912,8 @@ static int push_escaped_string(AivmVm* vm, const char* input)
     size_t escaped_length = 0U;
     size_t i;
     size_t out_index = 0U;
+    size_t next_length;
+    size_t next_out_index;
     char* output;
 
     if (vm == NULL || input == NULL) {
@@ -929,7 +931,10 @@ static int push_escaped_string(AivmVm* vm, const char* input)
                 return 0;
             }
         }
-        length += 1U;
+        if (!size_add_checked(length, 1U, &next_length)) {
+            return 0;
+        }
+        length = next_length;
     }
 
     if (!size_add_checked(escaped_length, 1U, &escaped_length)) {
@@ -944,22 +949,66 @@ static int push_escaped_string(AivmVm* vm, const char* input)
     for (i = 0U; i < length; i += 1U) {
         char ch = input[i];
         if (ch == '\\') {
-            output[out_index++] = '\\';
-            output[out_index++] = '\\';
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         } else if (ch == '"') {
-            output[out_index++] = '\\';
-            output[out_index++] = '"';
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
+            output[out_index] = '"';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         } else if (ch == '\n') {
-            output[out_index++] = '\\';
-            output[out_index++] = 'n';
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
+            output[out_index] = 'n';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         } else if (ch == '\r') {
-            output[out_index++] = '\\';
-            output[out_index++] = 'r';
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
+            output[out_index] = 'r';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         } else if (ch == '\t') {
-            output[out_index++] = '\\';
-            output[out_index++] = 't';
+            output[out_index] = '\\';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
+            output[out_index] = 't';
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         } else {
-            output[out_index++] = ch;
+            output[out_index] = ch;
+            if (!size_add_checked(out_index, 1U, &next_out_index)) {
+                return 0;
+            }
+            out_index = next_out_index;
         }
     }
 
