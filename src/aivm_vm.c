@@ -681,6 +681,27 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
     return output;
 }
 
+static char* alloc_temp_string_copy(const char* input, size_t length)
+{
+    char* copy = NULL;
+    size_t bytes_needed = 0U;
+    if (input == NULL) {
+        return NULL;
+    }
+    if (!size_add_checked(length, 1U, &bytes_needed)) {
+        return NULL;
+    }
+    copy = (char*)malloc(bytes_needed);
+    if (copy == NULL) {
+        return NULL;
+    }
+    if (length > 0U) {
+        memcpy(copy, input, length);
+    }
+    copy[length] = '\0';
+    return copy;
+}
+
 static char* copy_string_splice_to_arena(
     AivmVm* vm,
     const char* prefix,
@@ -718,26 +739,18 @@ static char* copy_string_splice_to_arena(
         }
     }
     if (pointer_in_string_arena(vm, prefix)) {
-        prefix_copy = (char*)malloc(prefix_length + 1U);
+        prefix_copy = alloc_temp_string_copy(prefix, prefix_length);
         if (prefix_copy == NULL) {
             return NULL;
         }
-        if (prefix_length > 0U) {
-            memcpy(prefix_copy, prefix, prefix_length);
-        }
-        prefix_copy[prefix_length] = '\0';
         prefix_source = prefix_copy;
     }
     if (pointer_in_string_arena(vm, suffix)) {
-        suffix_copy = (char*)malloc(suffix_length + 1U);
+        suffix_copy = alloc_temp_string_copy(suffix, suffix_length);
         if (suffix_copy == NULL) {
             free(prefix_copy);
             return NULL;
         }
-        if (suffix_length > 0U) {
-            memcpy(suffix_copy, suffix, suffix_length);
-        }
-        suffix_copy[suffix_length] = '\0';
         suffix_source = suffix_copy;
     }
     output = arena_alloc(vm, bytes_needed);
