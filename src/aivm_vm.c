@@ -784,6 +784,7 @@ static char* copy_string_splice_to_arena(
     size_t suffix_length)
 {
     size_t offset = 0U;
+    size_t next_offset;
     size_t total_length;
     size_t bytes_needed = 0U;
     char* output;
@@ -807,9 +808,14 @@ static char* copy_string_splice_to_arena(
             memcmp(candidate + prefix_length, suffix, suffix_length) == 0) {
             return candidate;
         }
-        offset += candidate_length;
+        if (!size_add_checked(offset, candidate_length, &offset)) {
+            return NULL;
+        }
         if (offset < vm->string_arena_used) {
-            offset += 1U;
+            if (!size_add_checked(offset, 1U, &next_offset)) {
+                return NULL;
+            }
+            offset = next_offset;
         }
     }
     prefix_source = snapshot_arena_backed_string(vm, prefix, prefix_length, &prefix_copy);
@@ -1258,12 +1264,16 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                     char* raw_source_copy = NULL;
                     char* arg_source_copy = NULL;
                     size_t raw_len = 0U;
+                    size_t next_raw_len;
                     size_t prefix_len = (size_t)(suffix_target - args[0].string_value);
                     size_t out_len;
                     size_t bytes_needed;
                     char* merged;
                     while (target_value.string_value[raw_len] != '\0') {
-                        raw_len += 1U;
+                        if (!size_add_checked(raw_len, 1U, &next_raw_len)) {
+                            return 0;
+                        }
+                        raw_len = next_raw_len;
                     }
                     raw_source = snapshot_arena_backed_string(vm, target_value.string_value, raw_len, &raw_source_copy);
                     if (raw_source == NULL) {
