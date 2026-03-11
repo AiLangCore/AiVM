@@ -14,6 +14,29 @@ static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
     vm->error_detail = detail;
 }
 
+static void set_vm_local_out_of_range_error(
+    AivmVm* vm,
+    const char* op_name,
+    size_t local_index,
+    size_t locals_base)
+{
+    char detail[256];
+    if (vm == NULL) {
+        return;
+    }
+    (void)snprintf(
+        detail,
+        sizeof(detail),
+        "Invalid local slot. op=%s index=%llu base=%llu localsCount=%llu frameCount=%llu pc=%llu",
+        (op_name == NULL || op_name[0] == '\0') ? "local" : op_name,
+        (unsigned long long)local_index,
+        (unsigned long long)locals_base,
+        (unsigned long long)vm->locals_count,
+        (unsigned long long)vm->call_frame_count,
+        (unsigned long long)vm->instruction_pointer);
+    set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, detail);
+}
+
 static const char* vm_value_type_name(AivmValueType type)
 {
     switch (type) {
@@ -2402,12 +2425,12 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
         base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
     }
     if (base >= AIVM_VM_LOCALS_CAPACITY || index >= (AIVM_VM_LOCALS_CAPACITY - base)) {
-        set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, "Invalid local slot.");
+        set_vm_local_out_of_range_error(vm, "store", index, base);
         return 0;
     }
     absolute_index = base + index;
     if (!ensure_locals_capacity(vm, absolute_index + 1U)) {
-        set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, "Invalid local slot.");
+        set_vm_local_out_of_range_error(vm, "store", index, base);
         return 0;
     }
     vm->locals[absolute_index] = value;
@@ -2543,7 +2566,11 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (!aivm_local_get(vm, local_index, &local_value)) {
-                set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, "Invalid local slot.");
+                size_t locals_base = 0U;
+                if (vm->call_frame_count > 0U) {
+                    locals_base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
+                }
+                set_vm_local_out_of_range_error(vm, "load", local_index, locals_base);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

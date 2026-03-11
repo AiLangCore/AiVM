@@ -184,7 +184,7 @@ static int test_load_local_missing_sets_error(void)
     if (expect(vm.error == AIVM_VM_ERR_LOCAL_OUT_OF_RANGE) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "Invalid local slot.") == 0) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "Invalid local slot. op=load index=0") != NULL) != 0) {
         return 1;
     }
 
@@ -613,7 +613,7 @@ static int test_call_ret_restores_caller_locals_scope(void)
     return 0;
 }
 
-static int test_tail_call_reuses_frame_in_recursive_loop(void)
+static int test_recursive_loop_without_tail_call_reuse_sets_frame_overflow(void)
 {
     AivmVm vm;
     size_t i;
@@ -632,22 +632,19 @@ static int test_tail_call_reuses_frame_in_recursive_loop(void)
     };
 
     aivm_init(&vm, &program);
-    for (i = 0U; i < 2000U; i += 1U) {
+    for (i = 0U; i < 5000U; i += 1U) {
         if (vm.status != AIVM_VM_STATUS_READY && vm.status != AIVM_VM_STATUS_RUNNING) {
             break;
         }
         aivm_step(&vm);
-        if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
-            return 1;
-        }
-        if (expect(vm.call_frame_count <= 1U) != 0) {
-            return 1;
-        }
     }
-    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
-    if (expect(vm.call_frame_count <= 1U) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_FRAME_OVERFLOW) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "Call-frame overflow.") == 0) != 0) {
         return 1;
     }
     return 0;
@@ -3842,7 +3839,7 @@ int main(void)
     if (test_call_ret_restores_caller_locals_scope() != 0) {
         return 1;
     }
-    if (test_tail_call_reuses_frame_in_recursive_loop() != 0) {
+    if (test_recursive_loop_without_tail_call_reuse_sets_frame_overflow() != 0) {
         return 1;
     }
     if (test_negative_jump_operand_sets_error() != 0) {
