@@ -1964,13 +1964,18 @@ static int mark_live_node_handles(
             if (__h > 0 && __h <= (int64_t)vm->node_count) { \
                 size_t __idx = (size_t)(__h - 1); \
                 if (live[__idx] == 0U) { \
+                    size_t __next_queue_write; \
                     if (queue_write >= AIVM_VM_NODE_CAPACITY) { \
                         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue capacity exceeded."); \
                         return 0; \
                     } \
+                    if (!size_add_checked(queue_write, 1U, &__next_queue_write)) { \
+                        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue overflow."); \
+                        return 0; \
+                    } \
                     live[__idx] = 1U; \
                     queue[queue_write] = __h; \
-                    queue_write += 1U; \
+                    queue_write = __next_queue_write; \
                 } \
             } \
         } while (0)
@@ -2016,13 +2021,22 @@ static int mark_live_node_handles(
         const AivmNodeRecord* node;
         int64_t handle = queue[queue_read];
         size_t child_index;
-        queue_read += 1U;
+        if (!size_add_checked(queue_read, 1U, &queue_read)) {
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue overflow.");
+            return 0;
+        }
         if (!lookup_node(vm, handle, &node)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid node handle during GC mark.");
             return 0;
         }
         for (child_index = 0U; child_index < node->child_count; child_index += 1U) {
-            ENQUEUE_HANDLE(vm->node_children[node->child_start + child_index]);
+            size_t child_slot;
+            if (!size_add_checked(node->child_start, child_index, &child_slot) ||
+                child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child slot during GC mark.");
+                return 0;
+            }
+            ENQUEUE_HANDLE(vm->node_children[child_slot]);
         }
     }
 
