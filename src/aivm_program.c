@@ -40,38 +40,59 @@ static int64_t read_i64_le(const uint8_t* bytes, size_t offset)
     return (int64_t)combined;
 }
 
-static void write_string_constant(
+static int write_string_constant(
     AivmProgram* program,
     uint32_t constant_index,
     const uint8_t* bytes,
     size_t length)
 {
     size_t base_offset = program->string_storage_used;
+    size_t needed_storage = 0U;
     size_t i;
+
+    if (program == NULL || bytes == NULL) {
+        return 0;
+    }
+    if (!size_add_checked(base_offset, length, &needed_storage) ||
+        !size_add_checked(needed_storage, 1U, &needed_storage) ||
+        needed_storage > AIVM_PROGRAM_MAX_STRING_BYTES) {
+        return 0;
+    }
 
     for (i = 0U; i < length; i += 1U) {
         program->string_storage[base_offset + i] = (char)bytes[i];
     }
     program->string_storage[base_offset + length] = '\0';
-    program->string_storage_used += (length + 1U);
+    program->string_storage_used = needed_storage;
     program->constant_storage[constant_index] =
         aivm_value_string(&program->string_storage[base_offset]);
+    return 1;
 }
 
-static void write_bytes_constant(
+static int write_bytes_constant(
     AivmProgram* program,
     uint32_t constant_index,
     const uint8_t* bytes,
     size_t length)
 {
     size_t base_offset = program->bytes_storage_used;
+    size_t needed_storage = 0U;
     size_t i;
+
+    if (program == NULL || (length > 0U && bytes == NULL)) {
+        return 0;
+    }
+    if (!size_add_checked(base_offset, length, &needed_storage) ||
+        needed_storage > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
+        return 0;
+    }
     for (i = 0U; i < length; i += 1U) {
         program->bytes_storage[base_offset + i] = bytes[i];
     }
-    program->bytes_storage_used += length;
+    program->bytes_storage_used = needed_storage;
     program->constant_storage[constant_index] =
         aivm_value_bytes(&program->bytes_storage[base_offset], length);
+    return 1;
 }
 
 void aivm_program_clear(AivmProgram* program)
@@ -335,11 +356,15 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                         return result;
                     }
 
-                    write_string_constant(
-                        out_program,
-                        constant_index,
-                        &bytes[constant_cursor],
-                        (size_t)string_length);
+                    if (!write_string_constant(
+                            out_program,
+                            constant_index,
+                            &bytes[constant_cursor],
+                            (size_t)string_length)) {
+                        result.status = AIVM_PROGRAM_ERR_STRING_LIMIT;
+                        result.error_offset = constant_cursor;
+                        return result;
+                    }
                     constant_cursor += (size_t)string_length;
                 } else if (kind == 4U) {
                     out_program->constant_storage[constant_index] = aivm_value_void();
@@ -366,11 +391,15 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                         result.error_offset = constant_cursor;
                         return result;
                     }
-                    write_bytes_constant(
-                        out_program,
-                        constant_index,
-                        &bytes[constant_cursor],
-                        (size_t)bytes_length);
+                    if (!write_bytes_constant(
+                            out_program,
+                            constant_index,
+                            &bytes[constant_cursor],
+                            (size_t)bytes_length)) {
+                        result.status = AIVM_PROGRAM_ERR_STRING_LIMIT;
+                        result.error_offset = constant_cursor;
+                        return result;
+                    }
                     constant_cursor += (size_t)bytes_length;
                 } else {
                     result.status = AIVM_PROGRAM_ERR_INVALID_CONSTANT;
