@@ -2204,7 +2204,14 @@ static int compact_string_arena(AivmVm* vm)
             return 0;
         }
         for (attr_i = 0U; attr_i < node->attr_count; attr_i += 1U) {
-            AivmNodeAttr* attr = &vm->node_attrs[node->attr_start + attr_i];
+            size_t attr_slot = 0U;
+            AivmNodeAttr* attr;
+            if (!size_add_checked(node->attr_start, attr_i, &attr_slot) ||
+                attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during string compaction.");
+                return 0;
+            }
+            attr = &vm->node_attrs[attr_slot];
             if (!compact_relocate_string_ptr(vm, &attr->key, new_arena, &new_used)) {
                 return 0;
             }
@@ -2314,15 +2321,34 @@ static int compact_node_arenas_with_map(
         }
 
         for (attr_i = 0U; attr_i < old_node->attr_count; attr_i += 1U) {
-            new_attrs[new_attr_count + attr_i] = vm->node_attrs[old_node->attr_start + attr_i];
+            size_t new_attr_slot = 0U;
+            size_t old_attr_slot = 0U;
+            if (!size_add_checked(new_attr_count, attr_i, &new_attr_slot) ||
+                !size_add_checked(old_node->attr_start, attr_i, &old_attr_slot) ||
+                new_attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY ||
+                old_attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during node GC.");
+                return 0;
+            }
+            new_attrs[new_attr_slot] = vm->node_attrs[old_attr_slot];
         }
         for (child_i = 0U; child_i < old_node->child_count; child_i += 1U) {
-            int64_t old_child = vm->node_children[old_node->child_start + child_i];
+            size_t old_child_slot = 0U;
+            size_t new_child_slot = 0U;
+            int64_t old_child;
+            if (!size_add_checked(old_node->child_start, child_i, &old_child_slot) ||
+                !size_add_checked(new_child_count, child_i, &new_child_slot) ||
+                old_child_slot >= AIVM_VM_NODE_CHILD_CAPACITY ||
+                new_child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node child slot overflow during node GC.");
+                return 0;
+            }
+            old_child = vm->node_children[old_child_slot];
             if (old_child <= 0 || old_child > (int64_t)AIVM_VM_NODE_CAPACITY || handle_map[old_child] <= 0) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling child handle during node GC.");
                 return 0;
             }
-            new_children[new_child_count + child_i] = handle_map[old_child];
+            new_children[new_child_slot] = handle_map[old_child];
         }
         if (!size_add_checked(new_attr_count, old_node->attr_count, &new_attr_count) ||
             !size_add_checked(new_child_count, old_node->child_count, &new_child_count)) {
@@ -3476,7 +3502,17 @@ void aivm_step(AivmVm* vm)
                 output[i] = left.string_value[i];
             }
             for (i = 0U; i < right_length; i += 1U) {
-                output[left_length + i] = right.string_value[i];
+                size_t output_slot = 0U;
+                if (!size_add_checked(left_length, i, &output_slot) ||
+                    output_slot >= total_length) {
+                    set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat output slot overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                output[output_slot] = right.string_value[i];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             output[left_length + right_length] = '\0';
 
@@ -3602,8 +3638,22 @@ void aivm_step(AivmVm* vm)
                 bytes_output[1] = 'x';
                 for (i = 0U; i < value.bytes_value.length; i += 1U) {
                     uint8_t b = value.bytes_value.data[i];
-                    bytes_output[2U + (i * 2U)] = hex[(b >> 4U) & 0x0fU];
-                    bytes_output[2U + (i * 2U) + 1U] = hex[b & 0x0fU];
+                    size_t body_offset = 0U;
+                    size_t high_slot = 0U;
+                    size_t low_slot = 0U;
+                    if (!size_add_checked(i, i, &body_offset) ||
+                        !size_add_checked(2U, body_offset, &high_slot) ||
+                        !size_add_checked(high_slot, 1U, &low_slot) ||
+                        low_slot >= out_len) {
+                        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "TO_STRING bytes output slot overflow.");
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                    bytes_output[high_slot] = hex[(b >> 4U) & 0x0fU];
+                    bytes_output[low_slot] = hex[b & 0x0fU];
+                }
+                if (vm->instruction_pointer == vm->program->instruction_count) {
+                    break;
                 }
                 bytes_output[out_len] = '\0';
                 if (!aivm_stack_push(vm, aivm_value_string(bytes_output))) {
