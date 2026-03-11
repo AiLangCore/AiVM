@@ -93,6 +93,31 @@ static int validate_vm_call_local_state(AivmVm* vm, const char* op_name)
     return 1;
 }
 
+static int validate_vm_frame_record(
+    AivmVm* vm,
+    const AivmCallFrame* frame,
+    const char* op_name)
+{
+    if (vm == NULL || frame == NULL) {
+        return 0;
+    }
+    if (frame->frame_base > vm->stack_count || frame->locals_base > vm->locals_count) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "VM frame record invalid. op=%s frameBase=%llu localsBase=%llu stackCount=%llu localsCount=%llu frameCount=%llu",
+            (op_name == NULL || op_name[0] == '\0') ? "frame" : op_name,
+            (unsigned long long)frame->frame_base,
+            (unsigned long long)frame->locals_base,
+            (unsigned long long)vm->stack_count,
+            (unsigned long long)vm->locals_count,
+            (unsigned long long)vm->call_frame_count);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    return 1;
+}
+
 static const char* vm_value_type_name(AivmValueType type)
 {
     switch (type) {
@@ -2476,6 +2501,9 @@ int aivm_frame_pop(AivmVm* vm, AivmCallFrame* out_frame)
 
     vm->call_frame_count -= 1U;
     *out_frame = vm->call_frames[vm->call_frame_count];
+    if (!validate_vm_frame_record(vm, out_frame, "frame-pop")) {
+        return 0;
+    }
     return 1;
 }
 

@@ -145,5 +145,20 @@ int main(void)
         return 1;
     }
 
+    aivm_reset_state(&vm);
+    if (expect(aivm_frame_push(&vm, 1U, 0U) == 1) != 0) {
+        return 1;
+    }
+    vm.call_frames[0].frame_base = 5U;
+    if (expect(aivm_frame_pop(&vm, &frame) == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "VM frame invariant failed. op=frame-pop") != NULL) != 0) {
+        return 1;
+    }
+
     return 0;
 }
