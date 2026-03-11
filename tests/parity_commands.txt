@@ -68,3 +68,4 @@ parity_vm_c_execute_src_await_edge_invalid|./tools/airun run src/AiVM.Core/nativ
 parity_vm_c_execute_src_par_join_edge_invalid|./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.out; exit 3|3
 parity_vm_c_execute_src_par_cancel_edge_noop|./tools/airun run src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos --vm=c|printf ''|0
 parity_null_literal|./tools/airun run src/AiVM.Core/native/tests/parity_cases/null_literal.aos --no-cache|cat src/AiVM.Core/native/tests/parity_cases/null_literal.out; exit 3|3
+parity_bytes_from_utf8_string_runtime|./tools/airun run src/AiVM.Core/native/tests/parity_cases/bytes_from_utf8_string_runtime.aos --no-cache|cat src/AiVM.Core/native/tests/parity_cases/bytes_from_utf8_string_runtime.out; exit 3|3

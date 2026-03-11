@@ -1,0 +1,9 @@
+Program#bytes_from_utf8_runtime_p1 {
+  Import#bytes_from_utf8_runtime_i1(path="./src/std/bytes.aos")
+
+  Call#bytes_from_utf8_runtime_c1(target=toBase64) {
+    Call#bytes_from_utf8_runtime_c2(target=fromUtf8String) {
+      Lit#bytes_from_utf8_runtime_s1(value="hello")
+    }
+  }
+}
