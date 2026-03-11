@@ -2127,6 +2127,59 @@ static int test_async_call_task_handle_overflow_sets_error(void)
     return 0;
 }
 
+static int test_async_call_rejects_extra_callee_stack_values(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 6 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 5U);
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "Return restore invalid.") != NULL) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_async_call_rejects_invalid_call_target_layout(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 7 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 6U);
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "Call target local layout invalid.") != NULL) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_async_call_reclaims_oldest_task_slot_when_full(void)
 {
     AivmVm vm;
@@ -3913,6 +3966,12 @@ int main(void)
         return 1;
     }
     if (test_async_call_task_handle_overflow_sets_error() != 0) {
+        return 1;
+    }
+    if (test_async_call_rejects_extra_callee_stack_values() != 0) {
+        return 1;
+    }
+    if (test_async_call_rejects_invalid_call_target_layout() != 0) {
         return 1;
     }
     if (test_async_call_reclaims_oldest_task_slot_when_full() != 0) {

@@ -146,6 +146,13 @@ static int validate_vm_return_restore(
     return 1;
 }
 
+static size_t infer_call_arg_count(const AivmProgram* program, size_t target);
+static int validate_call_target_layout(
+    AivmVm* vm,
+    const AivmProgram* program,
+    size_t target,
+    size_t arg_count);
+
 static const char* vm_value_type_name(AivmValueType type)
 {
     switch (type) {
@@ -1564,8 +1571,10 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
 static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* out_result)
 {
     size_t baseline_frame_count;
+    size_t arg_count;
     size_t frame_base;
     size_t return_ip;
+    size_t pre_restore_stack_count = 0U;
     AivmValue result = aivm_value_void();
 
     if (vm == NULL || out_result == NULL) {
@@ -1575,9 +1584,17 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid function index.");
         return 0;
     }
+    arg_count = infer_call_arg_count(vm->program, target);
+    if (arg_count > vm->stack_count) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call argument count exceeds stack depth.");
+        return 0;
+    }
+    if (!validate_call_target_layout(vm, vm->program, target, arg_count)) {
+        return 0;
+    }
 
     baseline_frame_count = vm->call_frame_count;
-    frame_base = vm->stack_count;
+    frame_base = vm->stack_count - arg_count;
     return_ip = vm->instruction_pointer + 1U;
 
     if (!aivm_frame_push(vm, return_ip, frame_base)) {
@@ -1607,10 +1624,24 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
         return 0;
     }
 
+    pre_restore_stack_count = vm->stack_count;
     if (vm->stack_count > frame_base) {
         result = vm->stack[vm->stack_count - 1U];
-        vm->stack_count = frame_base;
     }
+    if (pre_restore_stack_count > frame_base + 1U) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "Async return restore invalid. extraStackValues=%llu frameBase=%llu stackCount=%llu frameCount=%llu pc=%llu",
+            (unsigned long long)(pre_restore_stack_count - frame_base - 1U),
+            (unsigned long long)frame_base,
+            (unsigned long long)pre_restore_stack_count,
+            (unsigned long long)vm->call_frame_count,
+            (unsigned long long)vm->instruction_pointer);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    vm->stack_count = frame_base;
     *out_result = result;
     return 1;
 }
