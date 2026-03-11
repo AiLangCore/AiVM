@@ -505,10 +505,16 @@ static const char* find_syscall_suffix_target(const char* text)
 static char* arena_alloc(AivmVm* vm, size_t size)
 {
     char* start;
+    size_t needed = 0U;
     if (vm == NULL) {
         return NULL;
     }
-    if (vm->string_arena_used + size > vm->string_arena_limit) {
+    if (!size_add_checked(vm->string_arena_used, size, &needed)) {
+        increment_counter_saturating(&vm->string_arena_pressure_count);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        return NULL;
+    }
+    if (needed > vm->string_arena_limit) {
         if (!compact_string_arena(vm)) {
             increment_counter_saturating(&vm->string_arena_pressure_count);
             if (vm->status != AIVM_VM_STATUS_ERROR) {
@@ -516,16 +522,21 @@ static char* arena_alloc(AivmVm* vm, size_t size)
             }
             return NULL;
         }
+        if (!size_add_checked(vm->string_arena_used, size, &needed)) {
+            increment_counter_saturating(&vm->string_arena_pressure_count);
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+            return NULL;
+        }
     }
-    if (vm->string_arena_used + size > vm->string_arena_limit &&
-        !ensure_string_arena_capacity(vm, vm->string_arena_used + size)) {
+    if (needed > vm->string_arena_limit &&
+        !ensure_string_arena_capacity(vm, needed)) {
         increment_counter_saturating(&vm->string_arena_pressure_count);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return NULL;
     }
 
     start = &vm->string_arena[vm->string_arena_used];
-    vm->string_arena_used += size;
+    vm->string_arena_used = needed;
     if (vm->string_arena_used > vm->string_arena_high_water) {
         vm->string_arena_high_water = vm->string_arena_used;
     }
@@ -535,17 +546,23 @@ static char* arena_alloc(AivmVm* vm, size_t size)
 static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
 {
     uint8_t* start;
+    size_t needed = 0U;
     if (vm == NULL) {
         return NULL;
     }
-    if (vm->bytes_arena_used + size > vm->bytes_arena_limit &&
-        !ensure_bytes_arena_capacity(vm, vm->bytes_arena_used + size)) {
+    if (!size_add_checked(vm->bytes_arena_used, size, &needed)) {
+        increment_counter_saturating(&vm->bytes_arena_pressure_count);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
+        return NULL;
+    }
+    if (needed > vm->bytes_arena_limit &&
+        !ensure_bytes_arena_capacity(vm, needed)) {
         increment_counter_saturating(&vm->bytes_arena_pressure_count);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         return NULL;
     }
     start = &vm->bytes_arena[vm->bytes_arena_used];
-    vm->bytes_arena_used += size;
+    vm->bytes_arena_used = needed;
     if (vm->bytes_arena_used > vm->bytes_arena_high_water) {
         vm->bytes_arena_high_water = vm->bytes_arena_used;
     }
