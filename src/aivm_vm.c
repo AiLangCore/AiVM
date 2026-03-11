@@ -1409,6 +1409,7 @@ static size_t append_frame_local_previews(
     size_t base = 0U;
     size_t i;
     size_t max_locals = 3U;
+    size_t limit = 0U;
     if (vm == NULL || buffer == NULL || capacity == 0U || used >= capacity || prefix == NULL) {
         return used;
     }
@@ -1416,7 +1417,10 @@ static size_t append_frame_local_previews(
         return used;
     }
     base = vm->call_frames[frame_index].locals_base;
-    for (i = 0U; i < max_locals && (base + i) < vm->locals_count && used + 1U < capacity; i += 1U) {
+    if (!size_add_checked(used, 1U, &limit)) {
+        return used;
+    }
+    for (i = 0U; i < max_locals && (base + i) < vm->locals_count && limit < capacity; i += 1U) {
         int wrote = snprintf(
             buffer + used,
             capacity - used,
@@ -1431,8 +1435,13 @@ static size_t append_frame_local_previews(
             used = capacity - 1U;
             break;
         }
-        used += (size_t)wrote;
+        if (!size_add_checked(used, (size_t)wrote, &used)) {
+            return capacity - 1U;
+        }
         used = append_vm_value_preview(buffer, capacity, used, vm->locals[base + i]);
+        if (!size_add_checked(used, 1U, &limit)) {
+            break;
+        }
     }
     return used;
 }
@@ -1440,10 +1449,14 @@ static size_t append_frame_local_previews(
 static size_t append_frame_return_previews(AivmVm* vm, char* buffer, size_t capacity, size_t used)
 {
     size_t i;
+    size_t limit = 0U;
     if (vm == NULL || buffer == NULL || capacity == 0U || used >= capacity) {
         return used;
     }
-    for (i = 0U; i < vm->call_frame_count && i < 3U && used + 1U < capacity; i += 1U) {
+    if (!size_add_checked(used, 1U, &limit)) {
+        return used;
+    }
+    for (i = 0U; i < vm->call_frame_count && i < 3U && limit < capacity; i += 1U) {
         size_t frame_index = vm->call_frame_count - 1U - i;
         int wrote = snprintf(
             buffer + used,
@@ -1457,7 +1470,12 @@ static size_t append_frame_return_previews(AivmVm* vm, char* buffer, size_t capa
         if ((size_t)wrote >= capacity - used) {
             return capacity - 1U;
         }
-        used += (size_t)wrote;
+        if (!size_add_checked(used, (size_t)wrote, &used)) {
+            return capacity - 1U;
+        }
+        if (!size_add_checked(used, 1U, &limit)) {
+            break;
+        }
     }
     return used;
 }
@@ -1504,9 +1522,14 @@ static const char* syscall_contract_failure_detail_with_args(
         used = sizeof(vm->error_detail_storage) - 1U;
     }
 
-    for (i = 0U; i < contract->arg_count && used + 1U < sizeof(vm->error_detail_storage); i += 1U) {
+    for (i = 0U; i < contract->arg_count; i += 1U) {
         const char* expected = vm_value_type_name(contract->arg_types[i]);
         const char* actual = (i < arg_count) ? vm_value_type_name(args[i].type) : "missing";
+        size_t limit = 0U;
+        if (!size_add_checked(used, 1U, &limit) ||
+            limit >= sizeof(vm->error_detail_storage)) {
+            break;
+        }
         int wrote = snprintf(
             vm->error_detail_storage + used,
             sizeof(vm->error_detail_storage) - used,
@@ -1521,7 +1544,10 @@ static const char* syscall_contract_failure_detail_with_args(
             used = sizeof(vm->error_detail_storage) - 1U;
             break;
         }
-        used += (size_t)wrote;
+        if (!size_add_checked(used, (size_t)wrote, &used)) {
+            used = sizeof(vm->error_detail_storage) - 1U;
+            break;
+        }
         if (i < arg_count) {
             used = append_vm_value_preview(
                 vm->error_detail_storage,
