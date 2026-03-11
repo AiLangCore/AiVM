@@ -475,12 +475,16 @@ static const char* find_syscall_suffix_target(const char* text)
 {
     size_t i;
     size_t len;
+    size_t next_len;
     if (text == NULL) {
         return NULL;
     }
     len = 0U;
     while (text[len] != '\0') {
-        len += 1U;
+        if (!size_add_checked(len, 1U, &next_len)) {
+            return NULL;
+        }
+        len = next_len;
     }
     if (len < 4U) {
         return NULL;
@@ -488,6 +492,7 @@ static const char* find_syscall_suffix_target(const char* text)
     for (i = len - 4U; ; ) {
         if (text[i] == 's' && text[i + 1U] == 'y' && text[i + 2U] == 's' && text[i + 3U] == '.') {
             size_t j = i + 4U;
+            size_t next_j;
             if (j < len) {
                 while (j < len) {
                     char ch = text[j];
@@ -497,7 +502,10 @@ static const char* find_syscall_suffix_target(const char* text)
                           ch == '.' || ch == '_')) {
                         break;
                     }
-                    j += 1U;
+                    if (!size_add_checked(j, 1U, &next_j)) {
+                        return NULL;
+                    }
+                    j = next_j;
                 }
                 if (j == len) {
                     return &text[i];
@@ -651,6 +659,7 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     size_t length = 0U;
     size_t bytes_needed = 0U;
     size_t i;
+    size_t next_length;
     char* output;
     char* source_copy = NULL;
     const char* source = input;
@@ -662,7 +671,10 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
         return output;
     }
     while (input[length] != '\0') {
-        length += 1U;
+        if (!size_add_checked(length, 1U, &next_length)) {
+            return NULL;
+        }
+        length = next_length;
     }
     if (!size_add_checked(length, 1U, &bytes_needed)) {
         return NULL;
