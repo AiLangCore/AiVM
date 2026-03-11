@@ -2407,7 +2407,15 @@ static int create_node_record(
 
     for (i = 0U; i < attr_count; i += 1U) {
         AivmNodeAttr attr = attrs[i];
-        AivmNodeAttr* out_attr = &vm->node_attrs[vm->node_attr_count + i];
+        size_t attr_slot = 0U;
+        AivmNodeAttr* out_attr;
+        if (!size_add_checked(vm->node_attr_count, i, &attr_slot) ||
+            attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+            increment_counter_saturating(&vm->node_arena_pressure_count);
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
+            return 0;
+        }
+        out_attr = &vm->node_attrs[attr_slot];
         out_attr->key = copy_string_to_arena(vm, attr.key);
         out_attr->kind = attr.kind;
         if (out_attr->key == NULL) {
@@ -2426,7 +2434,14 @@ static int create_node_record(
     }
 
     for (i = 0U; i < child_count; i += 1U) {
-        vm->node_children[vm->node_child_count + i] = effective_children[i];
+        size_t child_slot = 0U;
+        if (!size_add_checked(vm->node_child_count, i, &child_slot) ||
+            child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+            increment_counter_saturating(&vm->node_arena_pressure_count);
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
+            return 0;
+        }
+        vm->node_children[child_slot] = effective_children[i];
     }
 
     vm->node_attr_count = needed_attr_count;
