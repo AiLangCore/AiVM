@@ -2139,8 +2139,15 @@ static int compact_node_arenas_with_map(
 
     for (i = 0U; i < vm->node_count; i += 1U) {
         if (live[i] != 0U) {
-            handle_map[i + 1U] = (int64_t)(new_node_count + 1U);
-            new_node_count += 1U;
+            size_t old_handle_index;
+            size_t compacted_handle;
+            if (!size_add_checked(i, 1U, &old_handle_index) ||
+                !size_add_checked(new_node_count, 1U, &compacted_handle)) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction handle overflow.");
+                return 0;
+            }
+            handle_map[old_handle_index] = (int64_t)compacted_handle;
+            new_node_count = compacted_handle;
         }
     }
 
@@ -2154,15 +2161,34 @@ static int compact_node_arenas_with_map(
             continue;
         }
         old_node = &vm->nodes[i];
-        out_node = &new_nodes[handle_map[i + 1U] - 1U];
+        {
+            size_t old_handle_index;
+            int64_t compacted_handle;
+            if (!size_add_checked(i, 1U, &old_handle_index)) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction handle overflow.");
+                return 0;
+            }
+            compacted_handle = handle_map[old_handle_index];
+            if (compacted_handle <= 0) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling live node handle during node GC.");
+                return 0;
+            }
+            out_node = &new_nodes[(size_t)(compacted_handle - 1)];
+        }
         *out_node = *old_node;
         out_node->attr_start = new_attr_count;
         out_node->child_start = new_child_count;
 
-        if (new_attr_count + old_node->attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-            new_child_count + old_node->child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
-            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
-            return 0;
+        {
+            size_t needed_attr_count;
+            size_t needed_child_count;
+            if (!size_add_checked(new_attr_count, old_node->attr_count, &needed_attr_count) ||
+                !size_add_checked(new_child_count, old_node->child_count, &needed_child_count) ||
+                needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+                needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
+                return 0;
+            }
         }
 
         for (attr_i = 0U; attr_i < old_node->attr_count; attr_i += 1U) {
@@ -2176,8 +2202,11 @@ static int compact_node_arenas_with_map(
             }
             new_children[new_child_count + child_i] = handle_map[old_child];
         }
-        new_attr_count += old_node->attr_count;
-        new_child_count += old_node->child_count;
+        if (!size_add_checked(new_attr_count, old_node->attr_count, &new_attr_count) ||
+            !size_add_checked(new_child_count, old_node->child_count, &new_child_count)) {
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
+            return 0;
+        }
     }
 
     memcpy(vm->nodes, new_nodes, sizeof(new_nodes));
@@ -2398,8 +2427,11 @@ static int create_node_record(
     if (vm->node_child_count > vm->node_child_high_water) {
         vm->node_child_high_water = vm->node_child_count;
     }
-    if (vm->node_allocations_since_gc < (size_t)-1) {
-        vm->node_allocations_since_gc += 1U;
+    {
+        size_t updated_allocations_since_gc;
+        if (size_add_checked(vm->node_allocations_since_gc, 1U, &updated_allocations_since_gc)) {
+            vm->node_allocations_since_gc = updated_allocations_since_gc;
+        }
     }
     *out_handle = (int64_t)vm->node_count;
     return 1;
