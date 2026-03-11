@@ -1699,6 +1699,7 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
 {
     AivmCompletedTask* task;
     int64_t handle;
+    size_t needed = 0U;
     if (vm == NULL) {
         return 0;
     }
@@ -1715,6 +1716,11 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
 
     handle = vm->next_task_handle;
     vm->next_task_handle += 1;
+    if (!size_add_checked(vm->completed_task_count, 1U, &needed) ||
+        needed > AIVM_VM_TASK_CAPACITY) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
+        return 0;
+    }
     task = &vm->completed_tasks[vm->completed_task_count];
     task->state = AIVM_TASK_STATE_PENDING;
     task->handle = handle;
@@ -1722,7 +1728,7 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
     if (!transition_task_state(vm, task, AIVM_TASK_STATE_COMPLETED)) {
         return 0;
     }
-    vm->completed_task_count += 1U;
+    vm->completed_task_count = needed;
     return aivm_stack_push(vm, aivm_value_int(handle));
 }
 
@@ -3547,30 +3553,34 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_PAR_BEGIN: {
             size_t expected_count;
+            size_t needed_context_count = 0U;
             if (!operand_to_index(vm, instruction->operand_int, &expected_count)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (vm->par_context_count >= AIVM_VM_PAR_CONTEXT_CAPACITY) {
+            if (!size_add_checked(vm->par_context_count, 1U, &needed_context_count) ||
+                needed_context_count > AIVM_VM_PAR_CONTEXT_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "PAR_BEGIN exceeded context capacity.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
             vm->par_contexts[vm->par_context_count].expected_count = expected_count;
             vm->par_contexts[vm->par_context_count].start_index = vm->par_value_count;
-            vm->par_context_count += 1U;
+            vm->par_context_count = needed_context_count;
             vm->instruction_pointer += 1U;
             break;
         }
 
         case AIVM_OP_PAR_FORK: {
             AivmValue value;
+            size_t needed_value_count = 0U;
             if (vm->par_context_count == 0U) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "PAR_FORK requires active Par context.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (vm->par_value_count >= AIVM_VM_PAR_VALUE_CAPACITY) {
+            if (!size_add_checked(vm->par_value_count, 1U, &needed_value_count) ||
+                needed_value_count > AIVM_VM_PAR_VALUE_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "PAR_FORK exceeded value capacity.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -3580,7 +3590,7 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             vm->par_values[vm->par_value_count] = value;
-            vm->par_value_count += 1U;
+            vm->par_value_count = needed_value_count;
             vm->instruction_pointer += 1U;
             break;
         }
