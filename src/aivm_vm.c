@@ -2875,7 +2875,7 @@ int aivm_stack_push(AivmVm* vm, AivmValue value)
     }
 
     vm->stack[vm->stack_count] = value;
-    vm->stack_count += 1U;
+    vm->stack_count = needed;
     return 1;
 }
 
@@ -2918,7 +2918,7 @@ int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_
     vm->call_frames[vm->call_frame_count].return_instruction_pointer = return_instruction_pointer;
     vm->call_frames[vm->call_frame_count].frame_base = frame_base;
     vm->call_frames[vm->call_frame_count].locals_base = vm->locals_count;
-    vm->call_frame_count += 1U;
+    vm->call_frame_count = needed;
     return 1;
 }
 
@@ -3894,6 +3894,7 @@ void aivm_step(AivmVm* vm)
         case AIVM_OP_STR_UTF8_BYTE_COUNT: {
             AivmValue value;
             int64_t count = 0;
+            int64_t next_count = 0;
             if (!aivm_stack_pop(vm, &value)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -3904,7 +3905,16 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             while (value.string_value[count] != '\0') {
-                count += 1;
+                if (count == INT64_MAX) {
+                    set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "STR_UTF8_BYTE_COUNT overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                next_count = count + 1;
+                count = next_count;
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             if (!aivm_stack_push(vm, aivm_value_int(count))) {
                 vm->instruction_pointer = vm->program->instruction_count;
