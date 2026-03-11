@@ -2611,6 +2611,62 @@ static size_t infer_call_arg_count(const AivmProgram* program, size_t target)
     return count;
 }
 
+static int validate_call_target_layout(
+    AivmVm* vm,
+    const AivmProgram* program,
+    size_t target,
+    size_t arg_count)
+{
+    size_t i;
+    uint8_t seen[64];
+    if (vm == NULL || program == NULL || program->instructions == NULL) {
+        return 0;
+    }
+    if (arg_count > sizeof(seen)) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "Call target layout invalid. target=%llu argCount=%llu exceeds checked layout window",
+            (unsigned long long)target,
+            (unsigned long long)arg_count);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    memset(seen, 0, sizeof(seen));
+    for (i = 0U; i < arg_count; i += 1U) {
+        size_t local_index = 0U;
+        const AivmInstruction* instruction = &program->instructions[target + i];
+        if (instruction->opcode != AIVM_OP_STORE_LOCAL) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "Call target layout invalid. target=%llu arg=%llu op=%d expected=STORE_LOCAL",
+                (unsigned long long)target,
+                (unsigned long long)i,
+                (int)instruction->opcode);
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+            return 0;
+        }
+        if (!operand_to_index(vm, instruction->operand_int, &local_index)) {
+            return 0;
+        }
+        if (local_index >= arg_count || seen[local_index] != 0U) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "Call target local layout invalid. target=%llu arg=%llu local=%llu argCount=%llu",
+                (unsigned long long)target,
+                (unsigned long long)i,
+                (unsigned long long)local_index,
+                (unsigned long long)arg_count);
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+            return 0;
+        }
+        seen[local_index] = 1U;
+    }
+    return 1;
+}
+
 void aivm_step(AivmVm* vm)
 {
     const AivmInstruction* instruction;
@@ -2804,6 +2860,10 @@ void aivm_step(AivmVm* vm)
             arg_count = infer_call_arg_count(vm->program, target);
             if (arg_count > vm->stack_count) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call argument count exceeds stack depth.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!validate_call_target_layout(vm, vm->program, target, arg_count)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

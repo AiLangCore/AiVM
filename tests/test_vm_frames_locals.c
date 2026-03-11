@@ -21,9 +21,24 @@ int main(void)
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 2 },
         { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
     };
+    static const AivmInstruction bad_call_layout_instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 7 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
     static const AivmProgram bad_return_program = {
         .instructions = bad_return_instructions,
         .instruction_count = 5U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmProgram bad_call_layout_program = {
+        .instructions = bad_call_layout_instructions,
+        .instruction_count = 6U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -183,6 +198,18 @@ int main(void)
         return 1;
     }
     if (expect(strstr(aivm_vm_error_detail(&vm), "Return restore invalid.") != NULL) != 0) {
+        return 1;
+    }
+
+    aivm_init(&vm, &bad_call_layout_program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "Call target local layout invalid.") != NULL) != 0) {
         return 1;
     }
 
