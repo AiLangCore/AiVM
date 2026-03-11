@@ -598,6 +598,14 @@ static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t 
     return NULL;
 }
 
+static char* alloc_temp_string_copy(const char* input, size_t length);
+
+static const char* snapshot_arena_backed_string(
+    AivmVm* vm,
+    const char* input,
+    size_t length,
+    char** out_temp_copy);
+
 static char* copy_string_to_arena(AivmVm* vm, const char* input)
 {
     size_t length = 0U;
@@ -619,13 +627,9 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     if (!size_add_checked(length, 1U, &bytes_needed)) {
         return NULL;
     }
-    if (pointer_in_string_arena(vm, input)) {
-        source_copy = (char*)malloc(bytes_needed);
-        if (source_copy == NULL) {
-            return NULL;
-        }
-        memcpy(source_copy, input, bytes_needed);
-        source = source_copy;
+    source = snapshot_arena_backed_string(vm, input, length, &source_copy);
+    if (source == NULL) {
+        return NULL;
     }
     output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
@@ -657,16 +661,9 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
     if (!size_add_checked(length, 1U, &bytes_needed)) {
         return NULL;
     }
-    if (pointer_in_string_arena(vm, input)) {
-        source_copy = (char*)malloc(bytes_needed);
-        if (source_copy == NULL) {
-            return NULL;
-        }
-        if (length > 0U) {
-            memcpy(source_copy, input, length);
-        }
-        source_copy[length] = '\0';
-        source = source_copy;
+    source = snapshot_arena_backed_string(vm, input, length, &source_copy);
+    if (source == NULL) {
+        return NULL;
     }
     output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
@@ -700,6 +697,31 @@ static char* alloc_temp_string_copy(const char* input, size_t length)
     }
     copy[length] = '\0';
     return copy;
+}
+
+static const char* snapshot_arena_backed_string(
+    AivmVm* vm,
+    const char* input,
+    size_t length,
+    char** out_temp_copy)
+{
+    if (out_temp_copy != NULL) {
+        *out_temp_copy = NULL;
+    }
+    if (vm == NULL || input == NULL) {
+        return NULL;
+    }
+    if (!pointer_in_string_arena(vm, input)) {
+        return input;
+    }
+    if (out_temp_copy == NULL) {
+        return NULL;
+    }
+    *out_temp_copy = alloc_temp_string_copy(input, length);
+    if (*out_temp_copy == NULL) {
+        return NULL;
+    }
+    return *out_temp_copy;
 }
 
 static char* copy_string_splice_to_arena(
@@ -738,20 +760,14 @@ static char* copy_string_splice_to_arena(
             offset += 1U;
         }
     }
-    if (pointer_in_string_arena(vm, prefix)) {
-        prefix_copy = alloc_temp_string_copy(prefix, prefix_length);
-        if (prefix_copy == NULL) {
-            return NULL;
-        }
-        prefix_source = prefix_copy;
+    prefix_source = snapshot_arena_backed_string(vm, prefix, prefix_length, &prefix_copy);
+    if (prefix_source == NULL) {
+        return NULL;
     }
-    if (pointer_in_string_arena(vm, suffix)) {
-        suffix_copy = alloc_temp_string_copy(suffix, suffix_length);
-        if (suffix_copy == NULL) {
-            free(prefix_copy);
-            return NULL;
-        }
-        suffix_source = suffix_copy;
+    suffix_source = snapshot_arena_backed_string(vm, suffix, suffix_length, &suffix_copy);
+    if (suffix_source == NULL) {
+        free(prefix_copy);
+        return NULL;
     }
     output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
