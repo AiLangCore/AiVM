@@ -1637,6 +1637,8 @@ static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
 static int reclaim_oldest_completed_task_slot(AivmVm* vm)
 {
     size_t index;
+    size_t next_index = 0U;
+    size_t move_count = 0U;
     if (vm == NULL) {
         return 0;
     }
@@ -1653,11 +1655,14 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
         vm->task_reclaim_exhausted_count += 1U;
         return 0;
     }
-    if (index + 1U < vm->completed_task_count) {
+    if (size_add_checked(index, 1U, &next_index) &&
+        next_index < vm->completed_task_count &&
+        size_sub_checked(vm->completed_task_count, next_index, &move_count) &&
+        move_count > 0U) {
         memmove(
             &vm->completed_tasks[index],
-            &vm->completed_tasks[index + 1U],
-            (vm->completed_task_count - index - 1U) * sizeof(AivmCompletedTask));
+            &vm->completed_tasks[next_index],
+            move_count * sizeof(AivmCompletedTask));
     }
     vm->completed_task_count -= 1U;
     vm->task_reclaim_count += 1U;
@@ -1724,7 +1729,10 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
 
     baseline_frame_count = vm->call_frame_count;
     frame_base = vm->stack_count - arg_count;
-    return_ip = vm->instruction_pointer + 1U;
+    if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip)) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Return instruction pointer overflowed.");
+        return 0;
+    }
 
     if (!aivm_frame_push(vm, return_ip, frame_base)) {
         return 0;
@@ -3041,6 +3049,7 @@ void aivm_step(AivmVm* vm)
             size_t target;
             size_t arg_count = 0U;
             size_t frame_base = 0U;
+            size_t return_ip = 0U;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -3061,7 +3070,8 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             frame_base = vm->stack_count - arg_count;
-            if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, frame_base)) {
+            if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip) ||
+                !aivm_frame_push(vm, return_ip, frame_base)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
