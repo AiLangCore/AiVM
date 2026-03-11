@@ -3014,12 +3014,18 @@ static size_t infer_call_arg_count(const AivmProgram* program, size_t target)
 {
     size_t index = target;
     size_t count = 0U;
+    size_t next_index;
+    size_t next_count;
     if (program == NULL || program->instructions == NULL || target >= program->instruction_count) {
         return 0U;
     }
     while (index < program->instruction_count && program->instructions[index].opcode == AIVM_OP_STORE_LOCAL) {
-        count += 1U;
-        index += 1U;
+        if (!size_add_checked(count, 1U, &next_count) ||
+            !size_add_checked(index, 1U, &next_index)) {
+            return 0U;
+        }
+        count = next_count;
+        index = next_index;
     }
     return count;
 }
@@ -3399,6 +3405,7 @@ void aivm_step(AivmVm* vm)
             AivmValue left;
             size_t left_length = 0U;
             size_t right_length = 0U;
+            size_t next_length;
             size_t total_length = 0U;
             size_t bytes_needed = 0U;
             size_t i;
@@ -3418,10 +3425,26 @@ void aivm_step(AivmVm* vm)
             }
 
             while (left.string_value[left_length] != '\0') {
-                left_length += 1U;
+                if (!size_add_checked(left_length, 1U, &next_length)) {
+                    set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat left length overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                left_length = next_length;
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             while (right.string_value[right_length] != '\0') {
-                right_length += 1U;
+                if (!size_add_checked(right_length, 1U, &next_length)) {
+                    set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat right length overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                right_length = next_length;
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
 
             if (!size_add_checked(left_length, right_length, &total_length) ||
