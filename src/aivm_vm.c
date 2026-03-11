@@ -37,6 +37,62 @@ static void set_vm_local_out_of_range_error(
     set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, detail);
 }
 
+static int validate_vm_call_local_state(AivmVm* vm, const char* op_name)
+{
+    size_t active_locals_base = 0U;
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->stack_count > vm->stack_limit ||
+        vm->call_frame_count > vm->call_frame_limit ||
+        vm->locals_count > vm->locals_limit) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "VM state invariant failed. op=%s stackCount=%llu stackLimit=%llu frameCount=%llu frameLimit=%llu localsCount=%llu localsLimit=%llu",
+            (op_name == NULL || op_name[0] == '\0') ? "state" : op_name,
+            (unsigned long long)vm->stack_count,
+            (unsigned long long)vm->stack_limit,
+            (unsigned long long)vm->call_frame_count,
+            (unsigned long long)vm->call_frame_limit,
+            (unsigned long long)vm->locals_count,
+            (unsigned long long)vm->locals_limit);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    if (vm->call_frame_count > 0U) {
+        const AivmCallFrame* frame = &vm->call_frames[vm->call_frame_count - 1U];
+        if (frame->frame_base > vm->stack_count || frame->locals_base > vm->locals_count) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "VM frame invariant failed. op=%s frameBase=%llu localsBase=%llu stackCount=%llu localsCount=%llu frameCount=%llu",
+                (op_name == NULL || op_name[0] == '\0') ? "state" : op_name,
+                (unsigned long long)frame->frame_base,
+                (unsigned long long)frame->locals_base,
+                (unsigned long long)vm->stack_count,
+                (unsigned long long)vm->locals_count,
+                (unsigned long long)vm->call_frame_count);
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+            return 0;
+        }
+        active_locals_base = frame->locals_base;
+    }
+    if (active_locals_base > vm->locals_count) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "VM locals invariant failed. op=%s activeBase=%llu localsCount=%llu frameCount=%llu",
+            (op_name == NULL || op_name[0] == '\0') ? "state" : op_name,
+            (unsigned long long)active_locals_base,
+            (unsigned long long)vm->locals_count,
+            (unsigned long long)vm->call_frame_count);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
+    return 1;
+}
+
 static const char* vm_value_type_name(AivmValueType type)
 {
     switch (type) {
@@ -2384,6 +2440,13 @@ int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_
     if (vm == NULL) {
         return 0;
     }
+    if (!validate_vm_call_local_state(vm, "frame-push")) {
+        return 0;
+    }
+    if (frame_base > vm->stack_count) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call frame base exceeds stack depth.");
+        return 0;
+    }
 
     if (!ensure_call_frame_capacity(vm, vm->call_frame_count + 1U)) {
         set_vm_error(vm, AIVM_VM_ERR_FRAME_OVERFLOW, "Call-frame overflow.");
@@ -2402,6 +2465,9 @@ int aivm_frame_pop(AivmVm* vm, AivmCallFrame* out_frame)
     if (vm == NULL || out_frame == NULL) {
         return 0;
     }
+    if (!validate_vm_call_local_state(vm, "frame-pop")) {
+        return 0;
+    }
 
     if (vm->call_frame_count == 0U) {
         set_vm_error(vm, AIVM_VM_ERR_FRAME_UNDERFLOW, "Call-frame underflow.");
@@ -2418,6 +2484,9 @@ int aivm_local_set(AivmVm* vm, size_t index, AivmValue value)
     size_t base = 0U;
     size_t absolute_index;
     if (vm == NULL) {
+        return 0;
+    }
+    if (!validate_vm_call_local_state(vm, "local-set")) {
         return 0;
     }
 
@@ -2447,9 +2516,18 @@ int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
     if (vm == NULL || out_value == NULL) {
         return 0;
     }
+    if (((AivmVm*)vm)->stack_count > ((AivmVm*)vm)->stack_limit ||
+        ((AivmVm*)vm)->call_frame_count > ((AivmVm*)vm)->call_frame_limit ||
+        ((AivmVm*)vm)->locals_count > ((AivmVm*)vm)->locals_limit) {
+        return 0;
+    }
 
     if (vm->call_frame_count > 0U) {
         base = vm->call_frames[vm->call_frame_count - 1U].locals_base;
+        if (vm->call_frames[vm->call_frame_count - 1U].frame_base > vm->stack_count ||
+            base > vm->locals_count) {
+            return 0;
+        }
     }
     if (base >= AIVM_VM_LOCALS_CAPACITY || index >= (AIVM_VM_LOCALS_CAPACITY - base)) {
         return 0;
