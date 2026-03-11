@@ -2440,11 +2440,6 @@ int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value)
     return 1;
 }
 
-static int is_return_opcode(AivmOpcode opcode)
-{
-    return opcode == AIVM_OP_RET || opcode == AIVM_OP_RETURN;
-}
-
 static size_t infer_call_arg_count(const AivmProgram* program, size_t target)
 {
     size_t index = target;
@@ -2636,7 +2631,6 @@ void aivm_step(AivmVm* vm)
             size_t target;
             size_t arg_count = 0U;
             size_t frame_base = 0U;
-            int is_tail_call = 0;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -2653,31 +2647,9 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             frame_base = vm->stack_count - arg_count;
-            if ((vm->instruction_pointer + 1U) < vm->program->instruction_count) {
-                is_tail_call = is_return_opcode(vm->program->instructions[vm->instruction_pointer + 1U].opcode);
-            }
-            if (is_tail_call == 0) {
-                if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, frame_base)) {
-                    vm->instruction_pointer = vm->program->instruction_count;
-                    break;
-                }
-            } else if (vm->call_frame_count > 0U) {
-                AivmCallFrame* frame = &vm->call_frames[vm->call_frame_count - 1U];
-                size_t caller_frame_base = frame->frame_base;
-                if (frame_base < caller_frame_base || vm->stack_count < frame_base + arg_count) {
-                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Tail call frame compaction failed.");
-                    vm->instruction_pointer = vm->program->instruction_count;
-                    break;
-                }
-                if (frame_base != caller_frame_base && arg_count > 0U) {
-                    memmove(
-                        &vm->stack[caller_frame_base],
-                        &vm->stack[frame_base],
-                        sizeof(AivmValue) * arg_count);
-                }
-                vm->stack_count = caller_frame_base + arg_count;
-                frame->frame_base = caller_frame_base;
-                vm->locals_count = frame->locals_base;
+            if (!aivm_frame_push(vm, vm->instruction_pointer + 1U, frame_base)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
             }
             vm->instruction_pointer = target;
             break;

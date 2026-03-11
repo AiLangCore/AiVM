@@ -1,0 +1,49 @@
+Program#callret_p1 {
+  Let#callret_l1(name=pack) {
+    Fn#callret_f1(params=a,b,c,d,e,f,g,h,i,j,k,l) {
+      Block#callret_b1 {
+        Return#callret_r1 { Var#callret_v1(name=a) }
+      }
+    }
+  }
+
+  Let#callret_l2(name=forward) {
+    Fn#callret_f2(params=a,b,c,d,e,f,g,h,i,j,k,l) {
+      Block#callret_b2 {
+        Return#callret_r2 {
+          Call#callret_c1(target=pack) {
+            Var#callret_v2(name=a)
+            Var#callret_v3(name=b)
+            Var#callret_v4(name=c)
+            Var#callret_v5(name=d)
+            Var#callret_v6(name=e)
+            Var#callret_v7(name=f)
+            Var#callret_v8(name=g)
+            Var#callret_v9(name=h)
+            Var#callret_v10(name=i)
+            Var#callret_v11(name=j)
+            Var#callret_v12(name=k)
+            Var#callret_v13(name=l)
+          }
+        }
+      }
+    }
+  }
+
+  Call#callret_c2(target=io.print) {
+    Call#callret_c3(target=forward) {
+      Lit#callret_s1(value="alpha")
+      Lit#callret_s2(value="body-1")
+      Lit#callret_s3(value="body-2")
+      Lit#callret_s4(value="body-3")
+      Lit#callret_s5(value="body-4")
+      Lit#callret_s6(value="body-5")
+      Lit#callret_s7(value="body-6")
+      Lit#callret_s8(value="body-7")
+      Lit#callret_s9(value="body-8")
+      Lit#callret_s10(value="body-9")
+      Lit#callret_s11(value="body-10")
+      Lit#callret_s12(value="body-11")
+    }
+  }
+}
