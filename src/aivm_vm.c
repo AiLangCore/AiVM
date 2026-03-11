@@ -4027,10 +4027,30 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             for (i = 0U; i < base_node->attr_count; i += 1U) {
-                attrs[i] = vm->node_attrs[base_node->attr_start + i];
+                size_t attr_slot = 0U;
+                if (!size_add_checked(base_node->attr_start, i, &attr_slot) ||
+                    attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD attr slot was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                attrs[i] = vm->node_attrs[attr_slot];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             for (i = 0U; i < base_node->child_count; i += 1U) {
-                new_children[i] = vm->node_children[base_node->child_start + i];
+                size_t child_slot = 0U;
+                if (!size_add_checked(base_node->child_start, i, &child_slot) ||
+                    child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD child slot was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                new_children[i] = vm->node_children[child_slot];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             new_children[base_node->child_count] = child_handle;
             if (!create_node_record(
@@ -4040,7 +4060,7 @@ void aivm_step(AivmVm* vm)
                 attrs,
                 base_node->attr_count,
                 new_children,
-                base_node->child_count + 1U,
+                needed_child_count,
                 &handle)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
