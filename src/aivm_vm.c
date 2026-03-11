@@ -1153,6 +1153,11 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                 args[0].string_value != NULL) {
                 const char* suffix_target = find_syscall_suffix_target(args[0].string_value);
                 if (suffix_target != NULL && is_syscall_target_string(suffix_target)) {
+                    const char* raw_source = target_value.string_value;
+                    const char* arg_source = args[0].string_value;
+                    const char* suffix_source = suffix_target;
+                    char* raw_source_copy = NULL;
+                    char* arg_source_copy = NULL;
                     size_t raw_len = 0U;
                     size_t prefix_len = (size_t)(suffix_target - args[0].string_value);
                     size_t out_len;
@@ -1161,22 +1166,42 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                     while (target_value.string_value[raw_len] != '\0') {
                         raw_len += 1U;
                     }
+                    raw_source = snapshot_arena_backed_string(vm, target_value.string_value, raw_len, &raw_source_copy);
+                    if (raw_source == NULL) {
+                        return 0;
+                    }
+                    arg_source = snapshot_arena_backed_string(vm, args[0].string_value, prefix_len, &arg_source_copy);
+                    if (arg_source == NULL) {
+                        free(raw_source_copy);
+                        return 0;
+                    }
+                    suffix_source = arg_source + prefix_len;
                     if (!size_add_checked(raw_len, prefix_len, &out_len) ||
                         !size_add_checked(out_len, 1U, &bytes_needed)) {
+                        free(raw_source_copy);
+                        free(arg_source_copy);
                         return 0;
                     }
                     merged = arena_alloc(vm, bytes_needed);
                     if (merged == NULL) {
+                        free(raw_source_copy);
+                        free(arg_source_copy);
                         return 0;
                     }
                     if (raw_len > 0U) {
-                        memcpy(merged, target_value.string_value, raw_len);
+                        memcpy(merged, raw_source, raw_len);
                     }
                     if (prefix_len > 0U) {
-                        memcpy(merged + raw_len, args[0].string_value, prefix_len);
+                        memcpy(merged + raw_len, arg_source, prefix_len);
                     }
                     merged[out_len] = '\0';
                     args[0] = aivm_value_string(merged);
+                    suffix_target = copy_string_to_arena(vm, suffix_source);
+                    free(raw_source_copy);
+                    free(arg_source_copy);
+                    if (suffix_target == NULL) {
+                        return 0;
+                    }
                     target_value = aivm_value_string(suffix_target);
                     recovered = 1;
                 }
