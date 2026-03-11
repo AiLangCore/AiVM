@@ -1,5 +1,29 @@
 #include "aivm_program.h"
 
+static int size_add_checked(size_t a, size_t b, size_t* out)
+{
+    if (out == NULL) {
+        return 0;
+    }
+    if (a > ((size_t)-1) - b) {
+        return 0;
+    }
+    *out = a + b;
+    return 1;
+}
+
+static int size_mul_checked(size_t a, size_t b, size_t* out)
+{
+    if (out == NULL) {
+        return 0;
+    }
+    if (a != 0U && b > ((size_t)-1) / a) {
+        return 0;
+    }
+    *out = a * b;
+    return 1;
+}
+
 static uint32_t read_u32_le(const uint8_t* bytes, size_t offset)
 {
     return (uint32_t)bytes[offset] |
@@ -151,8 +175,9 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
         uint32_t section_type;
         uint32_t section_size;
         size_t section_payload_start;
+        size_t section_end;
 
-        if (cursor + 8U > byte_count) {
+        if (!size_add_checked(cursor, 8U, &section_end) || section_end > byte_count) {
             result.status = AIVM_PROGRAM_ERR_TRUNCATED;
             result.error_offset = cursor;
             return result;
@@ -163,7 +188,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
         cursor += 8U;
         section_payload_start = cursor;
 
-        if (cursor + (size_t)section_size > byte_count) {
+        if (!size_add_checked(cursor, (size_t)section_size, &section_end) || section_end > byte_count) {
             result.status = AIVM_PROGRAM_ERR_SECTION_OOB;
             result.error_offset = cursor;
             return result;
@@ -177,6 +202,8 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             uint32_t instruction_count;
             uint32_t instruction_index;
             size_t instruction_cursor;
+            size_t expected_instruction_bytes;
+            size_t expected_section_size;
 
             if (has_instruction_section != 0) {
                 result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
@@ -198,7 +225,9 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                 return result;
             }
 
-            if ((size_t)section_size != (size_t)(4U + (instruction_count * 12U))) {
+            if (!size_mul_checked((size_t)instruction_count, 12U, &expected_instruction_bytes) ||
+                !size_add_checked(4U, expected_instruction_bytes, &expected_section_size) ||
+                (size_t)section_size != expected_section_size) {
                 result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                 result.error_offset = section_payload_start;
                 return result;
@@ -249,7 +278,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             constant_cursor = section_payload_start + 4U;
             for (constant_index = 0U; constant_index < constant_count; constant_index += 1U) {
                 uint8_t kind;
-                if (constant_cursor >= section_payload_start + section_size) {
+                if (constant_cursor >= section_end) {
                     result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                     result.error_offset = constant_cursor;
                     return result;
@@ -259,7 +288,8 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                 constant_cursor += 1U;
 
                 if (kind == 1U) {
-                    if (constant_cursor + 8U > section_payload_start + section_size) {
+                    size_t next_cursor;
+                    if (!size_add_checked(constant_cursor, 8U, &next_cursor) || next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
@@ -268,7 +298,8 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                         aivm_value_int(read_i64_le(bytes, constant_cursor));
                     constant_cursor += 8U;
                 } else if (kind == 2U) {
-                    if (constant_cursor + 1U > section_payload_start + section_size) {
+                    size_t next_cursor;
+                    if (!size_add_checked(constant_cursor, 1U, &next_cursor) || next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
@@ -280,7 +311,9 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     out_program->constant_storage[constant_index] = aivm_value_null();
                 } else if (kind == 3U) {
                     uint32_t string_length;
-                    if (constant_cursor + 4U > section_payload_start + section_size) {
+                    size_t next_cursor;
+                    size_t needed_string_storage;
+                    if (!size_add_checked(constant_cursor, 4U, &next_cursor) || next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
@@ -288,12 +321,15 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     string_length = read_u32_le(bytes, constant_cursor);
                     constant_cursor += 4U;
 
-                    if (constant_cursor + (size_t)string_length > section_payload_start + section_size) {
+                    if (!size_add_checked(constant_cursor, (size_t)string_length, &next_cursor) ||
+                        next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
                     }
-                    if (out_program->string_storage_used + (size_t)string_length + 1U > AIVM_PROGRAM_MAX_STRING_BYTES) {
+                    if (!size_add_checked(out_program->string_storage_used, (size_t)string_length, &needed_string_storage) ||
+                        !size_add_checked(needed_string_storage, 1U, &needed_string_storage) ||
+                        needed_string_storage > AIVM_PROGRAM_MAX_STRING_BYTES) {
                         result.status = AIVM_PROGRAM_ERR_STRING_LIMIT;
                         result.error_offset = constant_cursor;
                         return result;
@@ -309,19 +345,23 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     out_program->constant_storage[constant_index] = aivm_value_void();
                 } else if (kind == 5U) {
                     uint32_t bytes_length;
-                    if (constant_cursor + 4U > section_payload_start + section_size) {
+                    size_t next_cursor;
+                    size_t needed_bytes_storage;
+                    if (!size_add_checked(constant_cursor, 4U, &next_cursor) || next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
                     }
                     bytes_length = read_u32_le(bytes, constant_cursor);
                     constant_cursor += 4U;
-                    if (constant_cursor + (size_t)bytes_length > section_payload_start + section_size) {
+                    if (!size_add_checked(constant_cursor, (size_t)bytes_length, &next_cursor) ||
+                        next_cursor > section_end) {
                         result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                         result.error_offset = constant_cursor;
                         return result;
                     }
-                    if (out_program->bytes_storage_used + (size_t)bytes_length > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
+                    if (!size_add_checked(out_program->bytes_storage_used, (size_t)bytes_length, &needed_bytes_storage) ||
+                        needed_bytes_storage > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
                         result.status = AIVM_PROGRAM_ERR_STRING_LIMIT;
                         result.error_offset = constant_cursor;
                         return result;
@@ -339,7 +379,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                 }
             }
 
-            if (constant_cursor != section_payload_start + section_size) {
+            if (constant_cursor != section_end) {
                 result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                 result.error_offset = constant_cursor;
                 return result;
@@ -349,7 +389,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             out_program->constant_count = (size_t)constant_count;
         }
 
-        cursor += (size_t)section_size;
+        cursor = section_end;
     }
 
     result.status = AIVM_PROGRAM_OK;
