@@ -378,6 +378,7 @@ static char* compact_lookup_or_copy_string(
     size_t offset = 0U;
     size_t length;
     char* output;
+    size_t next_offset;
     if (text == NULL || new_arena == NULL || new_used == NULL) {
         return NULL;
     }
@@ -387,9 +388,14 @@ static char* compact_lookup_or_copy_string(
         if (strcmp(candidate, text) == 0) {
             return candidate;
         }
-        offset += candidate_length;
+        if (!size_add_checked(offset, candidate_length, &offset)) {
+            return NULL;
+        }
         if (offset < *new_used) {
-            offset += 1U;
+            if (!size_add_checked(offset, 1U, &next_offset)) {
+                return NULL;
+            }
+            offset = next_offset;
         }
     }
     length = strlen(text);
@@ -576,6 +582,7 @@ static uint8_t* bytes_arena_alloc(AivmVm* vm, size_t size)
 static char* lookup_string_in_arena(AivmVm* vm, const char* input)
 {
     size_t offset = 0U;
+    size_t next_offset;
     if (vm == NULL || input == NULL) {
         return NULL;
     }
@@ -590,10 +597,16 @@ static char* lookup_string_in_arena(AivmVm* vm, const char* input)
             return (char*)candidate;
         }
         while (offset < vm->string_arena_used && vm->string_arena[offset] != '\0') {
-            offset += 1U;
+            if (!size_add_checked(offset, 1U, &next_offset)) {
+                return NULL;
+            }
+            offset = next_offset;
         }
         if (offset < vm->string_arena_used) {
-            offset += 1U;
+            if (!size_add_checked(offset, 1U, &next_offset)) {
+                return NULL;
+            }
+            offset = next_offset;
         }
     }
     return NULL;
@@ -602,6 +615,7 @@ static char* lookup_string_in_arena(AivmVm* vm, const char* input)
 static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t length)
 {
     size_t offset = 0U;
+    size_t next_offset;
     if (vm == NULL || input == NULL) {
         return NULL;
     }
@@ -611,9 +625,14 @@ static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t 
         if (candidate_length == length && memcmp(candidate, input, length) == 0) {
             return candidate;
         }
-        offset += candidate_length;
+        if (!size_add_checked(offset, candidate_length, &offset)) {
+            return NULL;
+        }
         if (offset < vm->string_arena_used) {
-            offset += 1U;
+            if (!size_add_checked(offset, 1U, &next_offset)) {
+                return NULL;
+            }
+            offset = next_offset;
         }
     }
     return NULL;
