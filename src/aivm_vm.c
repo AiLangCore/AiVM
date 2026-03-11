@@ -601,6 +601,7 @@ static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t 
 static char* copy_string_to_arena(AivmVm* vm, const char* input)
 {
     size_t length = 0U;
+    size_t bytes_needed = 0U;
     size_t i;
     char* output;
     char* source_copy = NULL;
@@ -615,15 +616,18 @@ static char* copy_string_to_arena(AivmVm* vm, const char* input)
     while (input[length] != '\0') {
         length += 1U;
     }
+    if (!size_add_checked(length, 1U, &bytes_needed)) {
+        return NULL;
+    }
     if (pointer_in_string_arena(vm, input)) {
-        source_copy = (char*)malloc(length + 1U);
+        source_copy = (char*)malloc(bytes_needed);
         if (source_copy == NULL) {
             return NULL;
         }
-        memcpy(source_copy, input, length + 1U);
+        memcpy(source_copy, input, bytes_needed);
         source = source_copy;
     }
-    output = arena_alloc(vm, length + 1U);
+    output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
         free(source_copy);
         return NULL;
@@ -640,6 +644,7 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
 {
     char* output;
     size_t i;
+    size_t bytes_needed = 0U;
     char* source_copy = NULL;
     const char* source = input;
     if (vm == NULL || input == NULL) {
@@ -649,8 +654,11 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
     if (output != NULL) {
         return output;
     }
+    if (!size_add_checked(length, 1U, &bytes_needed)) {
+        return NULL;
+    }
     if (pointer_in_string_arena(vm, input)) {
-        source_copy = (char*)malloc(length + 1U);
+        source_copy = (char*)malloc(bytes_needed);
         if (source_copy == NULL) {
             return NULL;
         }
@@ -660,7 +668,7 @@ static char* copy_string_range_to_arena(AivmVm* vm, const char* input, size_t le
         source_copy[length] = '\0';
         source = source_copy;
     }
-    output = arena_alloc(vm, length + 1U);
+    output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
         free(source_copy);
         return NULL;
@@ -682,6 +690,7 @@ static char* copy_string_splice_to_arena(
 {
     size_t offset = 0U;
     size_t total_length;
+    size_t bytes_needed = 0U;
     char* output;
     size_t i;
     char* prefix_copy = NULL;
@@ -691,7 +700,10 @@ static char* copy_string_splice_to_arena(
     if (vm == NULL || prefix == NULL || suffix == NULL) {
         return NULL;
     }
-    total_length = prefix_length + suffix_length;
+    if (!size_add_checked(prefix_length, suffix_length, &total_length) ||
+        !size_add_checked(total_length, 1U, &bytes_needed)) {
+        return NULL;
+    }
     while (offset < vm->string_arena_used) {
         char* candidate = &vm->string_arena[offset];
         size_t candidate_length = strlen(candidate);
@@ -728,7 +740,7 @@ static char* copy_string_splice_to_arena(
         suffix_copy[suffix_length] = '\0';
         suffix_source = suffix_copy;
     }
-    output = arena_alloc(vm, total_length + 1U);
+    output = arena_alloc(vm, bytes_needed);
     if (output == NULL) {
         free(prefix_copy);
         free(suffix_copy);
@@ -3060,6 +3072,8 @@ void aivm_step(AivmVm* vm)
             AivmValue left;
             size_t left_length = 0U;
             size_t right_length = 0U;
+            size_t total_length = 0U;
+            size_t bytes_needed = 0U;
             size_t i;
             char* output;
 
@@ -3083,7 +3097,14 @@ void aivm_step(AivmVm* vm)
                 right_length += 1U;
             }
 
-            output = arena_alloc(vm, left_length + right_length + 1U);
+            if (!size_add_checked(left_length, right_length, &total_length) ||
+                !size_add_checked(total_length, 1U, &bytes_needed)) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat size arithmetic overflow.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+
+            output = arena_alloc(vm, bytes_needed);
             if (output == NULL) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
