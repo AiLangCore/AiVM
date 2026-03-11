@@ -390,12 +390,13 @@ static char* compact_lookup_or_copy_string(
         }
     }
     length = strlen(text);
-    if (!size_add_checked(*new_used, length + 1U, &offset) ||
+    if (!size_add_checked(length, 1U, &length) ||
+        !size_add_checked(*new_used, length, &offset) ||
         offset > AIVM_VM_STRING_ARENA_CAPACITY) {
         return NULL;
     }
     output = &new_arena[*new_used];
-    memcpy(output, text, length + 1U);
+    memcpy(output, text, length);
     *new_used = offset;
     return output;
 }
@@ -2376,7 +2377,7 @@ static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value)
         count += 1U;
     } while (value != 0U && count < sizeof(temp));
 
-    if (count + 1U > capacity) {
+    if (!size_add_checked(count, 1U, &i) || i > capacity) {
         return 0U;
     }
 
