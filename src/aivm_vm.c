@@ -3845,9 +3845,17 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             for (i = 0U; i < join_count; i += 1U) {
-                AivmValue value = vm->par_values[context.start_index + i];
+                size_t par_index = 0U;
+                AivmValue value;
                 AivmValue task_result;
                 int64_t child_handle;
+                if (!size_add_checked(context.start_index, i, &par_index) ||
+                    par_index >= vm->par_value_count) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "PAR_JOIN value index was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                value = vm->par_values[par_index];
                 if (value.type == AIVM_VAL_INT &&
                     find_terminal_task_result(vm, value.int_value, &task_result)) {
                     value = task_result;
@@ -4348,11 +4356,22 @@ void aivm_step(AivmVm* vm)
             }
 
             for (i = 0U; i < template_node->attr_count; i += 1U) {
-                attrs[i] = vm->node_attrs[template_node->attr_start + i];
+                size_t attr_slot = 0U;
+                if (!size_add_checked(template_node->attr_start, i, &attr_slot) ||
+                    attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "MAKE_NODE attr slot was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                attrs[i] = vm->node_attrs[attr_slot];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
             }
             for (i = 0U; i < argc; i += 1U) {
                 AivmValue child_value;
                 int64_t child_handle;
+                size_t child_index = 0U;
                 if (!aivm_stack_pop(vm, &child_value)) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4361,7 +4380,12 @@ void aivm_step(AivmVm* vm)
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
-                children[argc - i - 1U] = child_handle;
+                if (!size_sub_checked(argc, i + 1U, &child_index)) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "MAKE_NODE child index underflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                children[child_index] = child_handle;
             }
             if (vm->status == AIVM_VM_STATUS_ERROR) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -4448,6 +4472,7 @@ void aivm_step(AivmVm* vm)
             for (i = 0U; i < count; i += 1U) {
                 AivmValue child_value;
                 int64_t child_handle = -1;
+                size_t child_index = 0U;
                 if (!aivm_stack_pop(vm, &child_value)) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4456,7 +4481,12 @@ void aivm_step(AivmVm* vm)
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
-                children[count - i - 1U] = child_handle;
+                if (!size_sub_checked(count, i + 1U, &child_index)) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "MAKE_MAP child index underflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                children[child_index] = child_handle;
             }
             if (vm->status == AIVM_VM_STATUS_ERROR) {
                 vm->instruction_pointer = vm->program->instruction_count;
