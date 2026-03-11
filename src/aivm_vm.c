@@ -1853,12 +1853,17 @@ static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result)
     AivmNodeAttr attrs[3];
     int64_t handle;
     char id_buffer[40];
+    size_t next_node_count = 0U;
     size_t suffix_length;
     if (vm == NULL || out_result == NULL) {
         return 0;
     }
     memcpy(id_buffer, "debug_task_reclaim_stats_", 25U);
-    suffix_length = write_u64_decimal(id_buffer + 25U, sizeof(id_buffer) - 25U, (uint64_t)vm->node_count + 1U);
+    if (!size_add_checked(vm->node_count, 1U, &next_node_count)) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "debug task stats node id overflow.");
+        return 0;
+    }
+    suffix_length = write_u64_decimal(id_buffer + 25U, sizeof(id_buffer) - 25U, (uint64_t)next_node_count);
     if (suffix_length == 0U) {
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "debug task stats node id overflow.");
         return 0;
@@ -2513,6 +2518,7 @@ static int initialize_process_argv_node(AivmVm* vm)
     int64_t child_handles[AIVM_VM_NODE_CAPACITY];
     AivmNodeAttr value_attr;
     size_t i;
+    size_t child_handle_index = 0U;
 
     if (vm == NULL) {
         return 0;
@@ -2525,7 +2531,12 @@ static int initialize_process_argv_node(AivmVm* vm)
     }
 
     for (i = 0U; i < vm->process_argv_count; i += 1U) {
-        child_handles[i] = (int64_t)(i + 2U);
+        if (!size_add_checked(i, 2U, &child_handle_index) ||
+            child_handle_index > (size_t)INT64_MAX) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "process argv child handle overflow.");
+            return 0;
+        }
+        child_handles[i] = (int64_t)child_handle_index;
     }
     if (!create_node_record(
             vm,
