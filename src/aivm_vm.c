@@ -251,6 +251,25 @@ static void set_vm_error_call_arg_depth(
         (unsigned long long)stack_count,
         (unsigned long long)vm->call_frame_count,
         (unsigned long long)vm->instruction_pointer);
+    if (vm->last_call_target > 0U || vm->last_return_ip > 0U) {
+        size_t used = strlen(vm->error_detail_storage);
+        (void)snprintf(
+            vm->error_detail_storage + used,
+            sizeof(vm->error_detail_storage) > used ? sizeof(vm->error_detail_storage) - used : 0U,
+            " lastCall={ip=%llu,target=%llu,argCount=%llu,stackBefore=%llu} lastReturn={ip=%llu,stackAfter=%llu} prevCall={ip=%llu,target=%llu,argCount=%llu,stackBefore=%llu} prevReturn={ip=%llu,stackAfter=%llu}",
+            (unsigned long long)vm->last_call_ip,
+            (unsigned long long)vm->last_call_target,
+            (unsigned long long)vm->last_call_arg_count,
+            (unsigned long long)vm->last_call_stack_before,
+            (unsigned long long)vm->last_return_ip,
+            (unsigned long long)vm->last_return_stack_after,
+            (unsigned long long)vm->prev_call_ip,
+            (unsigned long long)vm->prev_call_target,
+            (unsigned long long)vm->prev_call_arg_count,
+            (unsigned long long)vm->prev_call_stack_before,
+            (unsigned long long)vm->prev_return_ip,
+            (unsigned long long)vm->prev_return_stack_after);
+    }
     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
 }
 
@@ -3350,6 +3369,14 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            vm->prev_call_ip = vm->last_call_ip;
+            vm->prev_call_target = vm->last_call_target;
+            vm->prev_call_arg_count = vm->last_call_arg_count;
+            vm->prev_call_stack_before = vm->last_call_stack_before;
+            vm->last_call_ip = vm->instruction_pointer;
+            vm->last_call_target = target;
+            vm->last_call_arg_count = arg_count;
+            vm->last_call_stack_before = vm->stack_count;
             frame_base = vm->stack_count - arg_count;
             if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip) ||
                 !aivm_frame_push(vm, return_ip, frame_base)) {
@@ -3401,6 +3428,10 @@ void aivm_step(AivmVm* vm)
                     break;
                 }
             }
+            vm->prev_return_ip = vm->last_return_ip;
+            vm->prev_return_stack_after = vm->last_return_stack_after;
+            vm->last_return_ip = frame.return_instruction_pointer;
+            vm->last_return_stack_after = vm->stack_count;
             vm->instruction_pointer = frame.return_instruction_pointer;
             break;
         }

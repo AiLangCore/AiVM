@@ -125,6 +125,18 @@ typedef struct {
     AivmCallFrame call_frames[AIVM_VM_CALLFRAME_CAPACITY];
     size_t call_frame_count;
     size_t call_frame_limit;
+    size_t last_call_ip;
+    size_t last_call_target;
+    size_t last_call_arg_count;
+    size_t last_call_stack_before;
+    size_t prev_call_ip;
+    size_t prev_call_target;
+    size_t prev_call_arg_count;
+    size_t prev_call_stack_before;
+    size_t last_return_ip;
+    size_t last_return_stack_after;
+    size_t prev_return_ip;
+    size_t prev_return_stack_after;
 
     AivmValue locals[AIVM_VM_LOCALS_CAPACITY];
     size_t locals_count;
