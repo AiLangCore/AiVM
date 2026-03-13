@@ -53,6 +53,7 @@ typedef struct {
 typedef struct {
     size_t instruction_pointer;
     int opcode;
+    size_t stack_count;
 } AivmOpcodeHistoryEntry;
 
 typedef enum {
@@ -136,7 +137,7 @@ typedef struct {
     AivmVmStatus status;
     AivmVmError error;
     const char* error_detail;
-    char error_detail_storage[1024];
+    char error_detail_storage[4096];
 
     AivmValue stack[AIVM_VM_STACK_CAPACITY];
     size_t stack_count;
@@ -149,7 +150,7 @@ typedef struct {
     size_t recent_call_count;
     AivmReturnHistoryEntry recent_returns[4];
     size_t recent_return_count;
-    AivmOpcodeHistoryEntry recent_opcodes[8];
+    AivmOpcodeHistoryEntry recent_opcodes[24];
     size_t recent_opcode_count;
 
     AivmValue locals[AIVM_VM_LOCALS_CAPACITY];

@@ -293,10 +293,11 @@ static void set_vm_error_call_arg_depth(
         used += (size_t)snprintf(
             vm->error_detail_storage + used,
             sizeof(vm->error_detail_storage) > used ? sizeof(vm->error_detail_storage) - used : 0U,
-            " op%llu={ip=%llu,opcode=%d}",
+            " op%llu={ip=%llu,opcode=%d,stack=%llu}",
             (unsigned long long)history_index,
             (unsigned long long)entry->instruction_pointer,
-            entry->opcode);
+            entry->opcode,
+            (unsigned long long)entry->stack_count);
         if (used >= sizeof(vm->error_detail_storage)) {
             used = sizeof(vm->error_detail_storage) - 1U;
             break;
@@ -356,7 +357,8 @@ static void record_recent_return(
 static void record_recent_opcode(
     AivmVm* vm,
     size_t instruction_pointer,
-    int opcode)
+    int opcode,
+    size_t stack_count)
 {
     size_t i;
     if (vm == NULL) {
@@ -367,6 +369,7 @@ static void record_recent_opcode(
     }
     vm->recent_opcodes[0].instruction_pointer = instruction_pointer;
     vm->recent_opcodes[0].opcode = opcode;
+    vm->recent_opcodes[0].stack_count = stack_count;
     if (vm->recent_opcode_count < (sizeof(vm->recent_opcodes) / sizeof(vm->recent_opcodes[0]))) {
         vm->recent_opcode_count += 1U;
     }
@@ -3300,7 +3303,7 @@ void aivm_step(AivmVm* vm)
     vm->status = AIVM_VM_STATUS_RUNNING;
     vm->error_detail = NULL;
     instruction = &vm->program->instructions[vm->instruction_pointer];
-    record_recent_opcode(vm, vm->instruction_pointer, (int)instruction->opcode);
+    record_recent_opcode(vm, vm->instruction_pointer, (int)instruction->opcode, vm->stack_count);
 
     switch (instruction->opcode) {
         case AIVM_OP_NOP:
