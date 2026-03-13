@@ -4330,7 +4330,8 @@ void aivm_step(AivmVm* vm)
         }
 
         case AIVM_OP_MAKE_LIT_STRING:
-        case AIVM_OP_MAKE_LIT_INT: {
+        case AIVM_OP_MAKE_LIT_INT:
+        case AIVM_OP_MAKE_LIT_BOOL: {
             AivmValue value;
             AivmValue id_value;
             AivmNodeAttr attr;
@@ -4349,7 +4350,7 @@ void aivm_step(AivmVm* vm)
                 }
                 attr.kind = AIVM_NODE_ATTR_STRING;
                 attr.string_value = value.string_value;
-            } else {
+            } else if (instruction->opcode == AIVM_OP_MAKE_LIT_INT) {
                 if (id_value.type != AIVM_VAL_STRING || id_value.string_value == NULL ||
                     value.type != AIVM_VAL_INT) {
                     set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_LIT_INT requires (string,int).");
@@ -4358,6 +4359,15 @@ void aivm_step(AivmVm* vm)
                 }
                 attr.kind = AIVM_NODE_ATTR_INT;
                 attr.int_value = value.int_value;
+            } else {
+                if (id_value.type != AIVM_VAL_STRING || id_value.string_value == NULL ||
+                    value.type != AIVM_VAL_BOOL) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_LIT_BOOL requires (string,bool).");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                attr.kind = AIVM_NODE_ATTR_BOOL;
+                attr.bool_value = value.bool_value != 0 ? 1 : 0;
             }
             if (!create_node_record(vm, "Lit", id_value.string_value, &attr, 1U, NULL, 0U, &handle)) {
                 vm->instruction_pointer = vm->program->instruction_count;
