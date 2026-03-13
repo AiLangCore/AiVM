@@ -179,7 +179,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
     out_program->format_flags = read_u32_le(bytes, 8U);
     out_program->section_count = read_u32_le(bytes, 12U);
 
-    if (out_program->format_version != 1U) {
+    if (out_program->format_version != 2U) {
         result.status = AIVM_PROGRAM_ERR_UNSUPPORTED;
         result.error_offset = 4U;
         return result;

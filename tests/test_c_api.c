@@ -36,13 +36,13 @@ int main(void)
     };
     static const uint8_t bad_magic_program[16] = {
         'X', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0
     };
     static const uint8_t valid_aibc1_program[56] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */

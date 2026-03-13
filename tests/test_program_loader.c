@@ -11,14 +11,14 @@ int main(void)
 {
     AivmProgram program;
     AivmProgramLoadResult result;
-    static const uint8_t bad_magic[16] = { 'X', 'I', 'B', 'C', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t bad_magic[16] = { 'X', 'I', 'B', 'C', 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     static const uint8_t truncated[3] = { 'A', 'I', 'B' };
-    static const uint8_t unsupported_version[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0 };
-    static const uint8_t valid_header[16] = { 'A', 'I', 'B', 'C', 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0 };
-    static const uint8_t section_table_truncated[16] = { 'A', 'I', 'B', 'C', 1, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0 };
+    static const uint8_t unsupported_version[16] = { 'A', 'I', 'B', 'C', 3, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t valid_header[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t section_table_truncated[16] = { 'A', 'I', 'B', 'C', 2, 0, 0, 0, 9, 0, 0, 0, 1, 0, 0, 0 };
     static const uint8_t section_oob[24] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         9, 0, 0, 0,
         1, 0, 0, 0,
         3, 0, 0, 0, /* section type */
@@ -26,7 +26,7 @@ int main(void)
     };
     static const uint8_t one_section_valid[28] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         9, 0, 0, 0,
         1, 0, 0, 0,  /* section count */
         7, 0, 0, 0,  /* section type */
@@ -35,7 +35,7 @@ int main(void)
     };
     static const uint8_t instruction_section_valid[56] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
@@ -48,7 +48,7 @@ int main(void)
     };
     static const uint8_t instruction_section_bad_size[44] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
@@ -59,7 +59,7 @@ int main(void)
     };
     static const uint8_t instruction_section_invalid_opcode[44] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         1, 0, 0, 0,   /* section type: instructions */
@@ -70,7 +70,7 @@ int main(void)
     };
     static const uint8_t constants_section_valid[53] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,   /* section type: constants */
@@ -86,7 +86,7 @@ int main(void)
     };
     static const uint8_t constants_section_invalid_kind[29] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,
@@ -96,7 +96,7 @@ int main(void)
     };
     static const uint8_t constants_section_with_bytes[43] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,   /* constants */
@@ -108,7 +108,7 @@ int main(void)
     };
     static const uint8_t constants_section_with_null[29] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         0, 0, 0, 0,
         1, 0, 0, 0,
         2, 0, 0, 0,   /* constants */
@@ -118,7 +118,7 @@ int main(void)
     };
     static const uint8_t section_limit_exceeded[16] = {
         'A', 'I', 'B', 'C',
-        1, 0, 0, 0,
+        2, 0, 0, 0,
         9, 0, 0, 0,
         33, 0, 0, 0  /* section count over max (32) */
     };
@@ -159,7 +159,7 @@ int main(void)
     if (expect(result.error_offset == 4U) != 0) {
         return 1;
     }
-    if (expect(program.format_version == 2U) != 0) {
+    if (expect(program.format_version == 3U) != 0) {
         return 1;
     }
     if (expect(program.format_flags == 7U) != 0) {
@@ -220,7 +220,7 @@ int main(void)
     if (expect(result.error_offset == 0U) != 0) {
         return 1;
     }
-    if (expect(program.format_version == 1U) != 0) {
+    if (expect(program.format_version == 2U) != 0) {
         return 1;
     }
     if (expect(program.format_flags == 9U) != 0) {
