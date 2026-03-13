@@ -239,6 +239,9 @@ static void set_vm_error_call_arg_depth(
     size_t arg_count,
     size_t stack_count)
 {
+    size_t history_index;
+    size_t return_index;
+    size_t used;
     if (vm == NULL) {
         return;
     }
@@ -251,26 +254,122 @@ static void set_vm_error_call_arg_depth(
         (unsigned long long)stack_count,
         (unsigned long long)vm->call_frame_count,
         (unsigned long long)vm->instruction_pointer);
-    if (vm->last_call_target > 0U || vm->last_return_ip > 0U) {
-        size_t used = strlen(vm->error_detail_storage);
-        (void)snprintf(
+    used = strlen(vm->error_detail_storage);
+    for (history_index = 0U; history_index < vm->recent_call_count; history_index += 1U) {
+        const AivmCallHistoryEntry* entry = &vm->recent_calls[history_index];
+        used += (size_t)snprintf(
             vm->error_detail_storage + used,
             sizeof(vm->error_detail_storage) > used ? sizeof(vm->error_detail_storage) - used : 0U,
-            " lastCall={ip=%llu,target=%llu,argCount=%llu,stackBefore=%llu} lastReturn={ip=%llu,stackAfter=%llu} prevCall={ip=%llu,target=%llu,argCount=%llu,stackBefore=%llu} prevReturn={ip=%llu,stackAfter=%llu}",
-            (unsigned long long)vm->last_call_ip,
-            (unsigned long long)vm->last_call_target,
-            (unsigned long long)vm->last_call_arg_count,
-            (unsigned long long)vm->last_call_stack_before,
-            (unsigned long long)vm->last_return_ip,
-            (unsigned long long)vm->last_return_stack_after,
-            (unsigned long long)vm->prev_call_ip,
-            (unsigned long long)vm->prev_call_target,
-            (unsigned long long)vm->prev_call_arg_count,
-            (unsigned long long)vm->prev_call_stack_before,
-            (unsigned long long)vm->prev_return_ip,
-            (unsigned long long)vm->prev_return_stack_after);
+            " call%llu={ip=%llu,target=%llu,argCount=%llu,stackBefore=%llu}",
+            (unsigned long long)history_index,
+            (unsigned long long)entry->instruction_pointer,
+            (unsigned long long)entry->target,
+            (unsigned long long)entry->arg_count,
+            (unsigned long long)entry->stack_count);
+        if (used >= sizeof(vm->error_detail_storage)) {
+            used = sizeof(vm->error_detail_storage) - 1U;
+            break;
+        }
+    }
+    for (return_index = 0U; return_index < vm->recent_return_count; return_index += 1U) {
+        const AivmReturnHistoryEntry* entry = &vm->recent_returns[return_index];
+        used += (size_t)snprintf(
+            vm->error_detail_storage + used,
+            sizeof(vm->error_detail_storage) > used ? sizeof(vm->error_detail_storage) - used : 0U,
+            " return%llu={ip=%llu,stackAfter=%llu,preRestore=%llu,frameBase=%llu,hasReturn=%d}",
+            (unsigned long long)return_index,
+            (unsigned long long)entry->instruction_pointer,
+            (unsigned long long)entry->stack_count,
+            (unsigned long long)entry->pre_restore_stack_count,
+            (unsigned long long)entry->frame_base,
+            entry->has_return_value);
+        if (used >= sizeof(vm->error_detail_storage)) {
+            used = sizeof(vm->error_detail_storage) - 1U;
+            break;
+        }
+    }
+    for (history_index = 0U; history_index < vm->recent_opcode_count; history_index += 1U) {
+        const AivmOpcodeHistoryEntry* entry = &vm->recent_opcodes[history_index];
+        used += (size_t)snprintf(
+            vm->error_detail_storage + used,
+            sizeof(vm->error_detail_storage) > used ? sizeof(vm->error_detail_storage) - used : 0U,
+            " op%llu={ip=%llu,opcode=%d}",
+            (unsigned long long)history_index,
+            (unsigned long long)entry->instruction_pointer,
+            entry->opcode);
+        if (used >= sizeof(vm->error_detail_storage)) {
+            used = sizeof(vm->error_detail_storage) - 1U;
+            break;
+        }
     }
     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+}
+
+static void record_recent_call(
+    AivmVm* vm,
+    size_t instruction_pointer,
+    size_t target,
+    size_t arg_count,
+    size_t stack_count)
+{
+    size_t i;
+    if (vm == NULL) {
+        return;
+    }
+    for (i = sizeof(vm->recent_calls) / sizeof(vm->recent_calls[0]); i > 1U; i -= 1U) {
+        vm->recent_calls[i - 1U] = vm->recent_calls[i - 2U];
+    }
+    vm->recent_calls[0].instruction_pointer = instruction_pointer;
+    vm->recent_calls[0].target = target;
+    vm->recent_calls[0].arg_count = arg_count;
+    vm->recent_calls[0].stack_count = stack_count;
+    if (vm->recent_call_count < (sizeof(vm->recent_calls) / sizeof(vm->recent_calls[0]))) {
+        vm->recent_call_count += 1U;
+    }
+}
+
+static void record_recent_return(
+    AivmVm* vm,
+    size_t instruction_pointer,
+    size_t stack_count,
+    size_t pre_restore_stack_count,
+    size_t frame_base,
+    int has_return_value)
+{
+    size_t i;
+    if (vm == NULL) {
+        return;
+    }
+    for (i = sizeof(vm->recent_returns) / sizeof(vm->recent_returns[0]); i > 1U; i -= 1U) {
+        vm->recent_returns[i - 1U] = vm->recent_returns[i - 2U];
+    }
+    vm->recent_returns[0].instruction_pointer = instruction_pointer;
+    vm->recent_returns[0].stack_count = stack_count;
+    vm->recent_returns[0].pre_restore_stack_count = pre_restore_stack_count;
+    vm->recent_returns[0].frame_base = frame_base;
+    vm->recent_returns[0].has_return_value = has_return_value;
+    if (vm->recent_return_count < (sizeof(vm->recent_returns) / sizeof(vm->recent_returns[0]))) {
+        vm->recent_return_count += 1U;
+    }
+}
+
+static void record_recent_opcode(
+    AivmVm* vm,
+    size_t instruction_pointer,
+    int opcode)
+{
+    size_t i;
+    if (vm == NULL) {
+        return;
+    }
+    for (i = sizeof(vm->recent_opcodes) / sizeof(vm->recent_opcodes[0]); i > 1U; i -= 1U) {
+        vm->recent_opcodes[i - 1U] = vm->recent_opcodes[i - 2U];
+    }
+    vm->recent_opcodes[0].instruction_pointer = instruction_pointer;
+    vm->recent_opcodes[0].opcode = opcode;
+    if (vm->recent_opcode_count < (sizeof(vm->recent_opcodes) / sizeof(vm->recent_opcodes[0]))) {
+        vm->recent_opcode_count += 1U;
+    }
 }
 
 
@@ -2834,6 +2933,9 @@ void aivm_reset_state(AivmVm* vm)
     vm->stack_limit = AIVM_VM_STACK_INITIAL_CAPACITY;
     vm->call_frame_count = 0U;
     vm->call_frame_limit = AIVM_VM_CALLFRAME_INITIAL_CAPACITY;
+    vm->recent_call_count = 0U;
+    vm->recent_return_count = 0U;
+    vm->recent_opcode_count = 0U;
     vm->locals_count = 0U;
     vm->locals_limit = AIVM_VM_LOCALS_INITIAL_CAPACITY;
     vm->string_arena_used = 0U;
@@ -3198,6 +3300,7 @@ void aivm_step(AivmVm* vm)
     vm->status = AIVM_VM_STATUS_RUNNING;
     vm->error_detail = NULL;
     instruction = &vm->program->instructions[vm->instruction_pointer];
+    record_recent_opcode(vm, vm->instruction_pointer, (int)instruction->opcode);
 
     switch (instruction->opcode) {
         case AIVM_OP_NOP:
@@ -3369,14 +3472,7 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            vm->prev_call_ip = vm->last_call_ip;
-            vm->prev_call_target = vm->last_call_target;
-            vm->prev_call_arg_count = vm->last_call_arg_count;
-            vm->prev_call_stack_before = vm->last_call_stack_before;
-            vm->last_call_ip = vm->instruction_pointer;
-            vm->last_call_target = target;
-            vm->last_call_arg_count = arg_count;
-            vm->last_call_stack_before = vm->stack_count;
+            record_recent_call(vm, vm->instruction_pointer, target, arg_count, vm->stack_count);
             frame_base = vm->stack_count - arg_count;
             if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip) ||
                 !aivm_frame_push(vm, return_ip, frame_base)) {
@@ -3428,10 +3524,13 @@ void aivm_step(AivmVm* vm)
                     break;
                 }
             }
-            vm->prev_return_ip = vm->last_return_ip;
-            vm->prev_return_stack_after = vm->last_return_stack_after;
-            vm->last_return_ip = frame.return_instruction_pointer;
-            vm->last_return_stack_after = vm->stack_count;
+            record_recent_return(
+                vm,
+                frame.return_instruction_pointer,
+                vm->stack_count,
+                pre_restore_stack_count,
+                frame.frame_base,
+                has_return_value);
             vm->instruction_pointer = frame.return_instruction_pointer;
             break;
         }

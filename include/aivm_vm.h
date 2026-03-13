@@ -35,6 +35,26 @@ typedef struct {
     size_t locals_base;
 } AivmCallFrame;
 
+typedef struct {
+    size_t instruction_pointer;
+    size_t target;
+    size_t arg_count;
+    size_t stack_count;
+} AivmCallHistoryEntry;
+
+typedef struct {
+    size_t instruction_pointer;
+    size_t stack_count;
+    size_t pre_restore_stack_count;
+    size_t frame_base;
+    int has_return_value;
+} AivmReturnHistoryEntry;
+
+typedef struct {
+    size_t instruction_pointer;
+    int opcode;
+} AivmOpcodeHistoryEntry;
+
 typedef enum {
     AIVM_NODE_ATTR_IDENTIFIER = 0,
     AIVM_NODE_ATTR_STRING = 1,
@@ -116,7 +136,7 @@ typedef struct {
     AivmVmStatus status;
     AivmVmError error;
     const char* error_detail;
-    char error_detail_storage[512];
+    char error_detail_storage[1024];
 
     AivmValue stack[AIVM_VM_STACK_CAPACITY];
     size_t stack_count;
@@ -125,18 +145,12 @@ typedef struct {
     AivmCallFrame call_frames[AIVM_VM_CALLFRAME_CAPACITY];
     size_t call_frame_count;
     size_t call_frame_limit;
-    size_t last_call_ip;
-    size_t last_call_target;
-    size_t last_call_arg_count;
-    size_t last_call_stack_before;
-    size_t prev_call_ip;
-    size_t prev_call_target;
-    size_t prev_call_arg_count;
-    size_t prev_call_stack_before;
-    size_t last_return_ip;
-    size_t last_return_stack_after;
-    size_t prev_return_ip;
-    size_t prev_return_stack_after;
+    AivmCallHistoryEntry recent_calls[4];
+    size_t recent_call_count;
+    AivmReturnHistoryEntry recent_returns[4];
+    size_t recent_return_count;
+    AivmOpcodeHistoryEntry recent_opcodes[8];
+    size_t recent_opcode_count;
 
     AivmValue locals[AIVM_VM_LOCALS_CAPACITY];
     size_t locals_count;
