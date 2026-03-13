@@ -233,6 +233,27 @@ static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmV
     set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, vm->error_detail_storage);
 }
 
+static void set_vm_error_call_arg_depth(
+    AivmVm* vm,
+    size_t target,
+    size_t arg_count,
+    size_t stack_count)
+{
+    if (vm == NULL) {
+        return;
+    }
+    (void)snprintf(
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
+        "Call argument count exceeds stack depth. target=%llu argCount=%llu stackCount=%llu frameCount=%llu pc=%llu",
+        (unsigned long long)target,
+        (unsigned long long)arg_count,
+        (unsigned long long)stack_count,
+        (unsigned long long)vm->call_frame_count,
+        (unsigned long long)vm->instruction_pointer);
+    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+}
+
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
 static const char* syscall_contract_failure_detail_with_args(
@@ -1860,7 +1881,7 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
     }
     arg_count = infer_call_arg_count(vm->program, target);
     if (arg_count > vm->stack_count) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call argument count exceeds stack depth.");
+        set_vm_error_call_arg_depth(vm, target, arg_count, vm->stack_count);
         return 0;
     }
     if (!validate_call_target_layout(vm, vm->program, target, arg_count)) {
@@ -3321,7 +3342,7 @@ void aivm_step(AivmVm* vm)
             }
             arg_count = infer_call_arg_count(vm->program, target);
             if (arg_count > vm->stack_count) {
-                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Call argument count exceeds stack depth.");
+                set_vm_error_call_arg_depth(vm, target, arg_count, vm->stack_count);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
