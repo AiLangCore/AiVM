@@ -368,4 +368,114 @@ if (BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/parity_left.txt
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/parity_right.txt
     )
+    if (WIN32)
+        add_test(
+            NAME aivm_test_airun_smoke
+            COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_airun_smoke.ps1
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+        )
+        add_test(
+            NAME aivm_test_task_edge_parity
+            COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_task_edge_parity.ps1
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+                $<TARGET_FILE:aivm_parity_cli>
+        )
+        add_test(
+            NAME aivm_test_debug_memory_smoke
+            COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_debug_memory_smoke.ps1
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+        )
+    else()
+        add_test(
+            NAME aivm_test_airun_smoke
+            COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_airun_smoke.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+        )
+        add_test(
+            NAME aivm_test_task_edge_parity
+            COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_task_edge_parity.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+                $<TARGET_FILE:aivm_parity_cli>
+        )
+        add_test(
+            NAME aivm_test_debug_memory_smoke
+            COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_debug_memory_smoke.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+        )
+        add_test(
+            NAME aivm_test_wasm_golden
+            COMMAND bash
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_wasm_golden.sh
+                ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+        )
+        set_tests_properties(
+            aivm_test_wasm_golden
+            PROPERTIES SKIP_RETURN_CODE 77
+        )
+    endif()
+
+    set_tests_properties(
+        aivm_test_program_loader
+        aivm_test_vm_core
+        aivm_test_values
+        aivm_test_vm_stack
+        aivm_test_vm_frames_locals
+        aivm_test_vm_ops
+        aivm_test_runtime
+        aivm_test_c_api
+        PROPERTIES LABELS "unit;core"
+    )
+    set_tests_properties(
+        aivm_test_syscall
+        aivm_test_syscall_contracts
+        PROPERTIES LABELS "unit;syscall"
+    )
+    set_tests_properties(
+        aivm_test_vm_diagnostics
+        aivm_test_vm_determinism
+        PROPERTIES LABELS "unit;determinism"
+    )
+    set_tests_properties(
+        aivm_test_memory_rc
+        aivm_test_memory_cycle
+        PROPERTIES LABELS "unit;memory"
+    )
+    set_tests_properties(
+        aivm_test_remote_channel
+        aivm_test_remote_session
+        aivm_test_remote_transport
+        aivm_test_remote_ws_frame
+        PROPERTIES LABELS "unit;remote"
+    )
+    set_tests_properties(
+        aivm_test_bytes_host
+        aivm_test_ui_image_host
+        aivm_test_net_async_host
+        aivm_test_host_open_default
+        aivm_test_process_lifecycle_stress
+        aivm_test_airun_smoke
+        PROPERTIES LABELS "integration;host"
+    )
+    set_tests_properties(
+        aivm_test_debug_memory_smoke
+        PROPERTIES LABELS "integration;memory;host"
+    )
+    set_tests_properties(
+        aivm_test_parity
+        aivm_test_parity_cli
+        aivm_test_task_edge_parity
+        PROPERTIES LABELS "integration;parity"
+    )
+    if (NOT WIN32)
+        set_tests_properties(
+            aivm_test_wasm_golden
+            PROPERTIES LABELS "integration;parity;wasm"
+        )
+    endif()
 endif()

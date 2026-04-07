@@ -81,6 +81,31 @@ Optional environment variables:
 - `AIVM_PARITY_REPORT`: override parity manifest report path
 - `AIVM_BUILD_SHARED=1`: enable shared-library build in the test flow
 
+CTest labels are available after configuring/building the native tree. Useful groups include:
+
+- `unit`
+- `integration`
+- `host`
+- `memory`
+- `parity`
+- `wasm`
+
+Example:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L host --output-on-failure
+```
+
+Preset-based workflows are also available via [CMakePresets.json](/Users/toddhenderson/RiderProjects/AiLang/src/AiVM.Core/native/CMakePresets.json).
+
+Examples:
+
+```bash
+cmake --preset aivm-native-unix
+cmake --build --preset aivm-native-unix-build
+ctest --preset aivm-native-unix-test-host
+```
+
 For normalized output comparison in dual-run workflows:
 
 ```bash
