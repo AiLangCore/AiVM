@@ -2589,18 +2589,33 @@ static int remap_child_handles_for_compaction(
     return 1;
 }
 
-static int should_attempt_proactive_node_gc(const AivmVm* vm)
+static int should_attempt_proactive_node_gc(
+    const AivmVm* vm,
+    size_t incoming_attr_count,
+    size_t incoming_child_count)
 {
+    size_t needed_attr_count = 0U;
+    size_t needed_child_count = 0U;
     if (vm == NULL) {
-        return 0;
-    }
-    if (vm->node_count < AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) {
         return 0;
     }
     if (vm->node_allocations_since_gc < AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) {
         return 0;
     }
-    return 1;
+    if (!size_add_checked(vm->node_attr_count, incoming_attr_count, &needed_attr_count) ||
+        !size_add_checked(vm->node_child_count, incoming_child_count, &needed_child_count)) {
+        return 1;
+    }
+    if (vm->node_count >= AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) {
+        return 1;
+    }
+    if (needed_attr_count >= AIVM_VM_NODE_ATTR_GC_PRESSURE_THRESHOLD) {
+        return 1;
+    }
+    if (needed_child_count >= AIVM_VM_NODE_CHILD_GC_PRESSURE_THRESHOLD) {
+        return 1;
+    }
+    return 0;
 }
 
 static int create_node_record(
@@ -2624,7 +2639,7 @@ static int create_node_record(
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
     }
-    if (should_attempt_proactive_node_gc(vm)) {
+    if (should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
         if (!compact_node_arenas_with_map(vm, children, child_count, handle_map)) {
             return 0;
         }

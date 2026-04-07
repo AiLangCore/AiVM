@@ -27,6 +27,16 @@ static void close_socket_if_valid(NativeSocket socket_fd)
     }
 }
 
+static int can_skip_local_bind_failure(void)
+{
+#ifdef _WIN32
+    int err = WSAGetLastError();
+    return err == WSAEACCES || err == WSAEADDRNOTAVAIL || err == WSAEAFNOSUPPORT;
+#else
+    return errno == EACCES || errno == EPERM || errno == EADDRNOTAVAIL || errno == EAFNOSUPPORT;
+#endif
+}
+
 int main(void)
 {
     NativeSocket listener = NATIVE_INVALID_SOCKET;
@@ -56,7 +66,15 @@ int main(void)
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     addr.sin_port = 0;
-    CHECK(bind(listener, (struct sockaddr*)&addr, sizeof(addr)) == 0);
+    if (bind(listener, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+        if (can_skip_local_bind_failure()) {
+            close_socket_if_valid(listener);
+            native_net_reset();
+            fprintf(stderr, "SKIP local loopback bind unavailable\n");
+            return 0;
+        }
+        CHECK(0);
+    }
     CHECK(listen(listener, 4) == 0);
     CHECK(getsockname(listener, (struct sockaddr*)&addr, &addr_len) == 0);
 
