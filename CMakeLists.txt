@@ -7,18 +7,18 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(AIVM_BUILD_SHARED "Build shared AiVM.C library for host bridge experiments" OFF)
 
 set(AIVM_CORE_SOURCES
-    src/aivm_types.c
-    src/aivm_vm.c
-    src/aivm_program.c
-    src/sys/aivm_syscall.c
-    src/sys/aivm_syscall_contracts.c
-    src/aivm_parity.c
-    src/aivm_runtime.c
-    src/aivm_c_api.c
-    src/remote/aivm_remote_channel.c
-    src/remote/aivm_remote_session.c
-    src/remote/aivm_remote_transport.c
-    src/remote/aivm_remote_ws_frame.c
+    aivm_types.c
+    aivm_vm.c
+    aivm_program.c
+    sys/aivm_syscall.c
+    sys/aivm_syscall_contracts.c
+    aivm_parity.c
+    aivm_runtime.c
+    aivm_c_api.c
+    remote/aivm_remote_channel.c
+    remote/aivm_remote_session.c
+    remote/aivm_remote_transport.c
+    remote/aivm_remote_ws_frame.c
 )
 
 add_library(aivm_core STATIC ${AIVM_CORE_SOURCES})
