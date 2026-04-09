@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`src/AiVM.Core/native` contains the clean C rewrite scaffold of the AiVM deterministic core. This is structural scaffolding and not yet a feature-complete VM host/runtime replacement.
+`src/AiVM.Core/native` contains the active native C implementation of the deterministic AiVM core and its native test/build surface.
 
 ## Deterministic VM Goal
 
