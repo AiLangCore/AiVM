@@ -55,9 +55,9 @@ consume this repository.
 
 ## Versioning
 
-The root `VERSION` file contains the base semantic version for AiVM release
-automation. Release tags use `v` plus the derived version, for example
-`v0.0.1-alpha.12`.
+The CMake project declaration in `native/CMakeLists.txt` is the base semantic
+version for AiVM release automation. Release tags use `v` plus the derived
+version, for example `v0.0.1-alpha.12`.
 
 ## Build and Test
 

@@ -51,29 +51,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stage="./artifacts/aivm-${{ matrix.id }}"
+          version="${GITHUB_REF_NAME#v}"
+          stage="./artifacts/aivm-${version}-${{ matrix.id }}"
           mkdir -p "${stage}/bin" "${stage}/lib" "${stage}/include"
           cp ./.tmp/aivm-c-build-native/aivm "${stage}/bin/"
           cp ./.tmp/aivm-c-build-native/libaivm_core.a "${stage}/lib/"
           cp ./native/include/*.h "${stage}/include/"
-          tar -czf ./aivm-${{ matrix.id }}.${{ matrix.archive }} -C artifacts aivm-${{ matrix.id }}
+          tar -czf "./aivm-${version}-${{ matrix.id }}.${{ matrix.archive }}" -C artifacts "aivm-${version}-${{ matrix.id }}"
 
       - name: Stage artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $stage = ".\artifacts\aivm-${{ matrix.id }}"
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $stage = ".\artifacts\aivm-$version-${{ matrix.id }}"
           New-Item -ItemType Directory -Force "$stage\bin", "$stage\lib", "$stage\include" | Out-Null
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm.exe" -Destination "$stage\bin\"
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core.lib" -Destination "$stage\lib\"
           Copy-Item -Path ".\native\include\*.h" -Destination "$stage\include\"
-          Compress-Archive -Path $stage -DestinationPath ".\aivm-${{ matrix.id }}.${{ matrix.archive }}"
+          Compress-Archive -Path $stage -DestinationPath ".\aivm-$version-${{ matrix.id }}.${{ matrix.archive }}"
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
           name: aivm-${{ matrix.id }}
-          path: ./aivm-${{ matrix.id }}.${{ matrix.archive }}
+          path: ./aivm-*-${{ matrix.id }}.${{ matrix.archive }}
 
   release:
     name: github-release
