@@ -1,0 +1,1 @@
+Err#err1(code=DEV008 message="C VM bridge execute path is unavailable: VM001: Opcode 'ASYNC_CALL_SYS' requires non-empty syscall target s in C bridge execute path. (nodeId=main)" nodeId=vmMode)

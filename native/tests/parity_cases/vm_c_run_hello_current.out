@@ -1,0 +1,1 @@
+Err#vm_err(code=VM001 message="Unsupported call target in bytecode mode: console.print." nodeId=console.print)

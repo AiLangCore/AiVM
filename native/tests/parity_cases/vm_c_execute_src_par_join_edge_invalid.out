@@ -1,0 +1,1 @@
+Err#err1(code=RUN001 message="AiBC1 execution failed. phase=exec function=main pc=0 nodeId=unknown opcode=PAR_JOIN callTarget=unknown vmCode=AIVM008 vmMessage=Invalid program state. detail=PAR_JOIN requires active Par context." nodeId=vm)

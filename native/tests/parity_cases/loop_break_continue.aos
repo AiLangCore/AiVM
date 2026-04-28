@@ -1,0 +1,28 @@
+Program#p1 {
+  Export#e1(name=start)
+  Let#l1(name=start) {
+    Fn#f1(params=argv) {
+      Block#b1 {
+        Let#l2(name=i) { Lit#i1(value=0) }
+        Let#l3(name=acc) { Lit#i2(value=0) }
+        Loop#lp1 {
+          Block#b2 {
+            Let#l4(name=i) { Add#a1 { Var#v1(name=i) Lit#i3(value=1) } }
+            If#if1 {
+              Eq#e1 { Var#v2(name=i) Lit#i4(value=2) }
+              Block#b3 { Continue#c1 { } }
+              Block#b4 { }
+            }
+            Let#l5(name=acc) { Add#a2 { Var#v3(name=acc) Var#v4(name=i) } }
+            If#if2 {
+              Eq#e2 { Var#v5(name=i) Lit#i5(value=4) }
+              Block#b5 { Break#k1 { } }
+              Block#b6 { }
+            }
+          }
+        }
+        Return#r1 { Var#v6(name=acc) }
+      }
+    }
+  }
+}

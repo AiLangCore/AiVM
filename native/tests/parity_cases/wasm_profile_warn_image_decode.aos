@@ -1,0 +1,17 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.bytes.fromUtf8String")
+  Const#k1(kind=string value="x")
+  Const#k2(kind=string value="sys.image.decodeToRgbaBase64")
+  Const#k3(kind=string value="image/png")
+  Func#f_main(name=main params="argv" locals="data") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CONST a=1)
+    Inst#i2(op=CALL_SYS a=1)
+    Inst#i3(op=STORE_LOCAL a=0)
+    Inst#i4(op=CONST a=2)
+    Inst#i5(op=LOAD_LOCAL a=0)
+    Inst#i6(op=CONST a=3)
+    Inst#i7(op=CALL_SYS a=2)
+    Inst#i8(op=HALT)
+  }
+}

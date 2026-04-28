@@ -1,0 +1,21 @@
+Program#p1 {
+  Let#l1(name=foo) {
+    Fn#f1(params=a,b) {
+      Block#b1 { Return#r1 { Var#v1(name=a) } }
+    }
+  }
+
+  Let#l2(name=start) {
+    Fn#f2(params=args) {
+      Block#b2 {
+        Return#r2 {
+          Call#c1(target=foo) {
+            Lit#i1(value=1)
+          }
+        }
+      }
+    }
+  }
+
+  Export#e1(name=start)
+}

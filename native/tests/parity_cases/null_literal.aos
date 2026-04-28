@@ -1,0 +1,17 @@
+Program#null_lit_p1 {
+  Let#null_lit_l1(name=start) {
+    Fn#null_lit_f1(params=args) {
+      Block#null_lit_b1 {
+        Call#null_lit_c1(target=sys.stdout.writeLine) {
+          ToString#null_lit_t1 { Lit#null_lit_n1(value=null) }
+        }
+        Call#null_lit_c2(target=sys.stdout.writeLine) {
+          ToString#null_lit_t2 {
+            Eq#null_lit_e1 { Lit#null_lit_n2(value=null) Lit#null_lit_n3(value=null) }
+          }
+        }
+        Return#null_lit_r1 { Lit#null_lit_i1(value=0) }
+      }
+    }
+  }
+}

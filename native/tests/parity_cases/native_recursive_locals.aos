@@ -1,0 +1,38 @@
+Program#p1 {
+  Let#l1(name=sumFrom) {
+    Fn#f1(params=n) {
+      Block#b1 {
+        If#if1 {
+          Eq#eq1 { Var#v1(name=n) Lit#i1(value=0) }
+          Block#b2 { Return#r1 { Lit#i2(value=0) } }
+          Block#b3 {
+            Let#l2(name=saved) { Var#v2(name=n) }
+            Let#l3(name=rest) {
+              Call#c1(target=sumFrom) {
+                Add#a1 { Var#v3(name=n) Lit#i3(value=-1) }
+              }
+            }
+            Return#r2 {
+              Add#a2 { Var#v4(name=saved) Var#v5(name=rest) }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Let#l4(name=start) {
+    Fn#f2(params=args) {
+      Block#b4 {
+        Call#c2(target=io.print) {
+          ToString#ts1 {
+            Call#c3(target=sumFrom) { Lit#i4(value=3) }
+          }
+        }
+        Return#r3 { Lit#i5(value=0) }
+      }
+    }
+  }
+
+  Export#e1(name=start)
+}

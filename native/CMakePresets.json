@@ -1,0 +1,175 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "aivm-native-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-native",
+      "cacheVariables": {
+        "AIVM_BUILD_SHARED": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "aivm-native-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "aivm-native-windows",
+      "inherits": "aivm-native-base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      }
+    },
+    {
+      "name": "aivm-native-shared-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-shared-native",
+      "cacheVariables": {
+        "AIVM_BUILD_SHARED": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "aivm-native-shared-windows",
+      "inherits": "aivm-native-base",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-shared-native",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "cacheVariables": {
+        "AIVM_BUILD_SHARED": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "aivm-native-unix-build",
+      "configurePreset": "aivm-native-unix"
+    },
+    {
+      "name": "aivm-native-windows-build",
+      "configurePreset": "aivm-native-windows",
+      "configuration": "Debug"
+    },
+    {
+      "name": "aivm-native-shared-unix-build",
+      "configurePreset": "aivm-native-shared-unix"
+    },
+    {
+      "name": "aivm-native-shared-windows-build",
+      "configurePreset": "aivm-native-shared-windows",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "aivm-native-unix-test",
+      "configurePreset": "aivm-native-unix",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-unit",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "unit"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-integration",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "integration"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-parity",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "parity"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-host",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "host"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-wasm",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "wasm"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-windows-test",
+      "configurePreset": "aivm-native-windows",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "aivm-native-windows-test-unit",
+      "inherits": "aivm-native-windows-test",
+      "filter": {
+        "include": {
+          "label": "unit"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-windows-test-integration",
+      "inherits": "aivm-native-windows-test",
+      "filter": {
+        "include": {
+          "label": "integration"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-windows-test-parity",
+      "inherits": "aivm-native-windows-test",
+      "filter": {
+        "include": {
+          "label": "parity"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-windows-test-host",
+      "inherits": "aivm-native-windows-test",
+      "filter": {
+        "include": {
+          "label": "host"
+        }
+      }
+    }
+  ]
+}

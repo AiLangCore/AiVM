@@ -1,0 +1,13 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.console.readAllStdin")
+  Const#k1(kind=string value="sys.stdout.writeLine")
+  Func#f_main(name=main params="argv" locals="text") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CALL_SYS a=0)
+    Inst#i2(op=STORE_LOCAL a=0)
+    Inst#i3(op=CONST a=1)
+    Inst#i4(op=LOAD_LOCAL a=0)
+    Inst#i5(op=CALL_SYS a=1)
+    Inst#i6(op=HALT)
+  }
+}

@@ -1,0 +1,10 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Const#k0(kind=string value="sys.fs.file.read")
+  Const#k1(kind=string value="./dummy.txt")
+  Func#f_main(name=main params="argv" locals="") {
+    Inst#i0(op=CONST a=0)
+    Inst#i1(op=CONST a=1)
+    Inst#i2(op=CALL_SYS a=1)
+    Inst#i3(op=HALT)
+  }
+}
