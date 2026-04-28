@@ -2,7 +2,8 @@
 
 ## Purpose
 
-`src/AiVM.Core/native` contains the active native C implementation of the deterministic AiVM core and its native test/build surface.
+`native` contains the active native C implementation of the deterministic AiVM
+core and its native test/build surface.
 
 ## Deterministic VM Goal
 
@@ -33,6 +34,8 @@ AiLang semantics remain governed by the AiLang specification (`SPEC/IL.md`, `SPE
 This scaffold does not introduce new language semantics or runtime behavior.
 
 ## Utility
+
+`aivm` is the standalone VM executable.
 
 `aivm_parity_cli` is provided as an initial harness utility to compare two text outputs using deterministic normalization (CRLF/LF normalization and trailing newline trimming).
 
@@ -77,9 +80,8 @@ From repository root:
 
 Optional environment variables:
 
-- `AIVM_C_BUILD_DIR`: override CMake build directory (default `.tmp/aivm-c-build`)
-- `AIVM_PARITY_REPORT`: override parity manifest report path
-- `AIVM_BUILD_SHARED=1`: enable shared-library build in the test flow
+- `AIVM_CMAKE_PRESET`: override CMake configure preset.
+- `AIVM_CTEST_LABEL`: override CTest label filter.
 
 CTest labels are available after configuring/building the native tree. Useful groups include:
 
@@ -96,24 +98,16 @@ Example:
 ctest --test-dir .tmp/aivm-c-build-native -L host --output-on-failure
 ```
 
-Preset-based workflows are also available via [CMakePresets.json](/Users/toddhenderson/RiderProjects/AiLang/src/AiVM.Core/native/CMakePresets.json).
+Preset-based workflows are also available via `native/CMakePresets.json`.
 
 Examples:
 
 ```bash
-cmake --preset aivm-native-unix
-cmake --build --preset aivm-native-unix-build
-ctest --preset aivm-native-unix-test-host
+cmake --preset aivm-native-unix -S native
+cmake --build .tmp/aivm-c-build-native
+ctest --test-dir .tmp/aivm-c-build-native -L unit --output-on-failure
 ```
 
-For normalized output comparison in dual-run workflows:
-
-```bash
-./scripts/aivm-parity-compare.sh <left-output-file> <right-output-file>
-```
-
-For command-driven dual-run comparison:
-
-```bash
-./scripts/aivm-dualrun-parity.sh "<left-command>" "<right-command>"
-```
+Host integration and parity tests that depend on AiLang tooling are disabled by
+default in this standalone repository. Configure with `AIVM_BUILD_HOST_TESTS=ON`
+only when the AiLang host tooling path is available.

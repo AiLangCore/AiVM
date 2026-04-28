@@ -9,7 +9,7 @@
     {
       "name": "aivm-native-base",
       "hidden": true,
-      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-native",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-native",
       "cacheVariables": {
         "AIVM_BUILD_SHARED": "OFF",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -33,7 +33,7 @@
       "name": "aivm-native-shared-unix",
       "inherits": "aivm-native-base",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-shared-native",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-shared-native",
       "cacheVariables": {
         "AIVM_BUILD_SHARED": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -43,7 +43,7 @@
       "name": "aivm-native-shared-windows",
       "inherits": "aivm-native-base",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/../../../.tmp/aivm-c-build-shared-native",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-shared-native",
       "architecture": {
         "value": "x64",
         "strategy": "set"

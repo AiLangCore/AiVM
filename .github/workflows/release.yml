@@ -30,39 +30,50 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
+      - name: Configure native
+        if: runner.os != 'Windows'
+        run: cmake --preset aivm-native-unix -S ./native
 
-      - name: Restore
-        run: dotnet restore ./src/AiVM/AiVM.Core.csproj
+      - name: Build native
+        if: runner.os != 'Windows'
+        run: cmake --build ./.tmp/aivm-c-build-native
 
-      - name: Build
-        run: dotnet build ./src/AiVM/AiVM.Core.csproj -c Release --no-restore
+      - name: Configure native (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --preset aivm-native-windows -S ./native
+
+      - name: Build native (Windows)
+        if: runner.os == 'Windows'
+        run: cmake --build ./.tmp/aivm-c-build-native --config Release
 
       - name: Stage artifact (non-Windows)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          cp -R ./src/AiVM/bin/Release/net10.0 ./artifacts/AiVM.Core-${{ matrix.id }}
-          tar -czf ./AiVM.Core-${{ matrix.id }}.${{ matrix.archive }} -C artifacts AiVM.Core-${{ matrix.id }}
+          stage="./artifacts/aivm-${{ matrix.id }}"
+          mkdir -p "${stage}/bin" "${stage}/lib" "${stage}/include"
+          cp ./.tmp/aivm-c-build-native/aivm "${stage}/bin/"
+          cp ./.tmp/aivm-c-build-native/libaivm_core.a "${stage}/lib/"
+          cp ./native/include/*.h "${stage}/include/"
+          tar -czf ./aivm-${{ matrix.id }}.${{ matrix.archive }} -C artifacts aivm-${{ matrix.id }}
 
       - name: Stage artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force artifacts | Out-Null
-          Copy-Item -Path ./src/AiVM/bin/Release/net10.0 -Destination .\artifacts\AiVM.Core-${{ matrix.id }} -Recurse
-          Compress-Archive -Path .\artifacts\AiVM.Core-${{ matrix.id }} -DestinationPath .\AiVM.Core-${{ matrix.id }}.${{ matrix.archive }}
+          $stage = ".\artifacts\aivm-${{ matrix.id }}"
+          New-Item -ItemType Directory -Force "$stage\bin", "$stage\lib", "$stage\include" | Out-Null
+          Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm.exe" -Destination "$stage\bin\"
+          Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core.lib" -Destination "$stage\lib\"
+          Copy-Item -Path ".\native\include\*.h" -Destination "$stage\include\"
+          Compress-Archive -Path $stage -DestinationPath ".\aivm-${{ matrix.id }}.${{ matrix.archive }}"
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AiVM.Core-${{ matrix.id }}
-          path: ./AiVM.Core-${{ matrix.id }}.${{ matrix.archive }}
+          name: aivm-${{ matrix.id }}
+          path: ./aivm-${{ matrix.id }}.${{ matrix.archive }}
 
   release:
     name: github-release
