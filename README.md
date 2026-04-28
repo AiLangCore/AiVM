@@ -53,6 +53,12 @@ consume this repository.
 - Embeddable native VM library.
 - Public C headers for host integration.
 
+## Versioning
+
+The root `VERSION` file contains the base semantic version for AiVM release
+automation. Release tags use `v` plus the derived version, for example
+`v0.0.1-alpha.12`.
+
 ## Build and Test
 
 Build native host artifacts:
