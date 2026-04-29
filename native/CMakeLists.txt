@@ -7,6 +7,12 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(AIVM_BUILD_SHARED "Build shared AiVM.C library for host bridge experiments" OFF)
 option(AIVM_BUILD_HOST_TESTS "Build AiLang host integration tests" OFF)
 
+if (MSVC)
+    # AivmVm currently owns fixed-size execution arenas. Keep Windows test and
+    # CLI stacks large enough until the VM arenas move behind heap-backed storage.
+    add_link_options(/STACK:16777216)
+endif()
+
 set(AIVM_CORE_SOURCES
     aivm_types.c
     aivm_vm.c
