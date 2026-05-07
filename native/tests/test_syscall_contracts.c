@@ -25,6 +25,8 @@ int main(void)
     AivmValue net_listen_tls_args[3];
     AivmValue net_tcp_listen_tls_args[4];
     AivmValue net_udp_send_args[4];
+    AivmValue remote_call_args[3];
+    AivmValue draw_path_args[4];
     AivmValue bool_string_string_args[3];
     AivmValue int_string_string_args[3];
     AivmValue str_args[3];
@@ -204,6 +206,18 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(110U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    remote_call_args[0] = aivm_value_string("bridge");
+    remote_call_args[1] = aivm_value_string("method");
+    remote_call_args[2] = aivm_value_int(1);
+    if (expect(aivm_syscall_contract_validate("sys.remote.call", remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(117U, remote_call_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
     if (expect(return_type == AIVM_VAL_INT) != 0) {
@@ -746,6 +760,28 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_validate_id(54U, draw_line_args, 7U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.ui.drawEllipse", draw_rect_args, 6U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(55U, draw_rect_args, 6U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    draw_path_args[0] = aivm_value_int(1);
+    draw_path_args[1] = aivm_value_string("M0 0 L10 10");
+    draw_path_args[2] = aivm_value_string("#000");
+    draw_path_args[3] = aivm_value_int(255);
+    if (expect(aivm_syscall_contract_validate("sys.ui.drawPath", draw_path_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(56U, draw_path_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.ui.drawImage", draw_rect_args, 6U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(57U, draw_rect_args, 6U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
 

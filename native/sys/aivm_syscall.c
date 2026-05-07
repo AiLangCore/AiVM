@@ -88,7 +88,15 @@ AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
         *out_contract_status = AIVM_CONTRACT_OK;
     }
 
+    if (bindings == NULL || binding_count == 0U) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_UNBOUND;
+    }
+
     invoke_status = aivm_syscall_dispatch(bindings, binding_count, target, args, arg_count, result);
+    if (invoke_status == AIVM_SYSCALL_ERR_NOT_FOUND) {
+        return AIVM_SYSCALL_ERR_UNBOUND;
+    }
     if (invoke_status != AIVM_SYSCALL_OK) {
         return invoke_status;
     }
@@ -134,6 +142,8 @@ const char* aivm_syscall_status_code(AivmSyscallStatus status)
             return "AIVMS004";
         case AIVM_SYSCALL_ERR_RETURN_TYPE:
             return "AIVMS005";
+        case AIVM_SYSCALL_ERR_UNBOUND:
+            return "AIVMS006";
         default:
             return "AIVMS999";
     }
@@ -154,6 +164,8 @@ const char* aivm_syscall_status_message(AivmSyscallStatus status)
             return "Syscall arguments violated contract.";
         case AIVM_SYSCALL_ERR_RETURN_TYPE:
             return "Syscall return type violated contract.";
+        case AIVM_SYSCALL_ERR_UNBOUND:
+            return "Syscall target is known but has no host binding.";
         default:
             return "Unknown syscall dispatch status.";
     }

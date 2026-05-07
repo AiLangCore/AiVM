@@ -53,6 +53,20 @@ if (AIVM_BUILD_SHARED)
     endif()
 endif()
 
+add_library(aivm_core_debug STATIC ${AIVM_CORE_SOURCES})
+
+target_include_directories(aivm_core_debug PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(aivm_core_debug PUBLIC AIVM_DEBUG_RUNTIME=1)
+
+if (MSVC)
+    target_compile_options(aivm_core_debug PRIVATE /W4 /Zi /Od)
+else()
+    target_compile_options(aivm_core_debug PRIVATE -Wall -Wextra -Wpedantic -Werror -g -O0)
+endif()
+
 add_executable(hello_vm
     examples/hello_vm.c
 )
@@ -75,6 +89,21 @@ if (MSVC)
     target_compile_options(aivm PRIVATE /W4)
 else()
     target_compile_options(aivm PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
+add_executable(aivm_debug
+    examples/aivm_cli.c
+)
+
+set_target_properties(aivm_debug PROPERTIES OUTPUT_NAME "aivm-debug")
+
+target_link_libraries(aivm_debug PRIVATE aivm_core_debug)
+target_compile_definitions(aivm_debug PRIVATE AIVM_DEBUG_RUNTIME=1)
+
+if (MSVC)
+    target_compile_options(aivm_debug PRIVATE /W4 /Zi /Od)
+else()
+    target_compile_options(aivm_debug PRIVATE -Wall -Wextra -Wpedantic -Werror -g -O0)
 endif()
 
 add_executable(aivm_parity_cli

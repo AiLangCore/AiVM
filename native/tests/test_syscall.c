@@ -423,6 +423,16 @@ int main(void)
     if (expect(contract_status == AIVM_CONTRACT_ERR_UNKNOWN_TARGET) != 0) {
         return 1;
     }
+    status = aivm_syscall_dispatch_checked(ui_bindings, 3U, "sys.process.cwd", NULL, 0U, &result);
+    if (expect(status == AIVM_SYSCALL_ERR_UNBOUND) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_syscall_status_code(status), "AIVMS006") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_syscall_status_message(status), "Syscall target is known but has no host binding.") == 0) != 0) {
+        return 1;
+    }
     arg = aivm_value_string("hello");
     status = aivm_syscall_dispatch_checked(console_bindings, 2U, "sys.console.write", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {

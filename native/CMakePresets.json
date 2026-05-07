@@ -12,6 +12,7 @@
       "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-native",
       "cacheVariables": {
         "AIVM_BUILD_SHARED": "OFF",
+        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -36,6 +37,7 @@
       "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-shared-native",
       "cacheVariables": {
         "AIVM_BUILD_SHARED": "ON",
+        "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },

@@ -1,5 +1,7 @@
 #include "aivm_c_api.h"
 
+#include <stdio.h>
+
 #include "aivm_runtime.h"
 
 static AivmCResult result_defaults(void)
@@ -13,7 +15,21 @@ static AivmCResult result_defaults(void)
     result.error = AIVM_VM_ERR_NONE;
     result.load_status = AIVM_PROGRAM_ERR_NULL;
     result.load_error_offset = 0U;
+    result.error_detail[0] = '\0';
     return result;
+}
+
+static void capture_error_detail(AivmCResult* result, const AivmVm* vm)
+{
+    const char* detail;
+    if (result == NULL || vm == NULL) {
+        return;
+    }
+    detail = aivm_vm_error_detail(vm);
+    if (detail == NULL) {
+        detail = "";
+    }
+    (void)snprintf(result->error_detail, sizeof(result->error_detail), "%s", detail);
 }
 
 static void capture_exit_code(AivmCResult* result, const AivmVm* vm)
@@ -87,6 +103,7 @@ AivmCResult aivm_c_execute_instructions_with_syscalls(
         &vm);
     result.status = vm.status;
     result.error = vm.error;
+    capture_error_detail(&result, &vm);
     capture_exit_code(&result, &vm);
     return result;
 }
@@ -134,11 +151,38 @@ AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
         &vm);
     result.status = vm.status;
     result.error = vm.error;
+    capture_error_detail(&result, &vm);
     capture_exit_code(&result, &vm);
     return result;
 }
 
 AivmCResult aivm_c_execute_aibc1(const uint8_t* bytes, size_t byte_count)
+{
+    return aivm_c_execute_aibc1_with_argv(bytes, byte_count, NULL, 0U);
+}
+
+AivmCResult aivm_c_execute_aibc1_with_argv(
+    const uint8_t* bytes,
+    size_t byte_count,
+    const char* const* process_argv,
+    size_t process_argv_count)
+{
+    return aivm_c_execute_aibc1_with_syscalls_and_argv(
+        bytes,
+        byte_count,
+        NULL,
+        0U,
+        process_argv,
+        process_argv_count);
+}
+
+AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
+    const uint8_t* bytes,
+    size_t byte_count,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count)
 {
     AivmProgram program;
     AivmVm vm;
@@ -156,9 +200,16 @@ AivmCResult aivm_c_execute_aibc1(const uint8_t* bytes, size_t byte_count)
     }
 
     result.loaded = 1;
-    result.ok = aivm_execute_program(&program, &vm);
+    result.ok = aivm_execute_program_with_syscalls_and_argv(
+        &program,
+        bindings,
+        binding_count,
+        process_argv,
+        process_argv_count,
+        &vm);
     result.status = vm.status;
     result.error = vm.error;
+    capture_error_detail(&result, &vm);
     capture_exit_code(&result, &vm);
     return result;
 }

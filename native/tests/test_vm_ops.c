@@ -1797,7 +1797,7 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
     return 0;
 }
 
-static int test_call_sys_missing_binding_sets_not_found_error(void)
+static int test_call_sys_missing_binding_sets_unbound_error(void)
 {
     AivmVm vm;
     static const AivmInstruction instructions[] = {
@@ -1833,7 +1833,10 @@ static int test_call_sys_missing_binding_sets_not_found_error(void)
     if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
         return 1;
     }
-    if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS003: Syscall target was not found.") != NULL) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS006: Syscall target is known but has no host binding.") != NULL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.str.substring") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -4017,7 +4020,7 @@ int main(void)
     if (test_call_sys_string_contract_type_mismatch_sets_error() != 0) {
         return 1;
     }
-    if (test_call_sys_missing_binding_sets_not_found_error() != 0) {
+    if (test_call_sys_missing_binding_sets_unbound_error() != 0) {
         return 1;
     }
     if (test_call_sys_does_not_recover_non_syscall_string_target_from_args() != 0) {

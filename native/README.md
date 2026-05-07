@@ -35,7 +35,14 @@ This scaffold does not introduce new language semantics or runtime behavior.
 
 ## Utility
 
-`aivm` is the standalone VM executable.
+`aivm` is the standalone production VM executable. It intentionally keeps a
+small command surface: version/help plus bytecode execution through `aivm
+<program.aibc1>`.
+
+`aivm-debug` is the standalone diagnostic VM executable. It is built from the
+debug VM library with debug symbols and no optimization, and is the place for VM
+debugging, profiling, and benchmarking commands. Because this binary is already
+the debug runtime, `aivm-debug <program.aibc1>` is the debug run path.
 
 `aivm_parity_cli` is provided as an initial harness utility to compare two text outputs using deterministic normalization (CRLF/LF normalization and trailing newline trimming).
 

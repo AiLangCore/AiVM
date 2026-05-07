@@ -55,7 +55,9 @@ jobs:
           stage="./artifacts/aivm-${version}-${{ matrix.id }}"
           mkdir -p "${stage}/bin" "${stage}/lib" "${stage}/include"
           cp ./.tmp/aivm-c-build-native/aivm "${stage}/bin/"
+          cp ./.tmp/aivm-c-build-native/aivm-debug "${stage}/bin/"
           cp ./.tmp/aivm-c-build-native/libaivm_core.a "${stage}/lib/"
+          cp ./.tmp/aivm-c-build-native/libaivm_core_debug.a "${stage}/lib/"
           cp ./native/include/*.h "${stage}/include/"
           tar -czf "./aivm-${version}-${{ matrix.id }}.${{ matrix.archive }}" -C artifacts "aivm-${version}-${{ matrix.id }}"
 
@@ -67,7 +69,9 @@ jobs:
           $stage = ".\artifacts\aivm-$version-${{ matrix.id }}"
           New-Item -ItemType Directory -Force "$stage\bin", "$stage\lib", "$stage\include" | Out-Null
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm.exe" -Destination "$stage\bin\"
+          Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm-debug.exe" -Destination "$stage\bin\"
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core.lib" -Destination "$stage\lib\"
+          Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core_debug.lib" -Destination "$stage\lib\"
           Copy-Item -Path ".\native\include\*.h" -Destination "$stage\include\"
           Compress-Archive -Path $stage -DestinationPath ".\aivm-$version-${{ matrix.id }}.${{ matrix.archive }}"
 

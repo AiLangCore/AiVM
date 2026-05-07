@@ -1543,6 +1543,15 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                     effective_arg_count));
             return 0;
         }
+        if (syscall_status == AIVM_SYSCALL_ERR_UNBOUND) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "AIVMS006: Syscall target is known but has no host binding. target=%.72s",
+                target_value.string_value);
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+            return 0;
+        }
         set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_failure_detail(syscall_status, contract_status));
         return 0;
     }
@@ -1607,6 +1616,8 @@ static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContract
             return syscall_contract_failure_detail(contract_status);
         case AIVM_SYSCALL_ERR_RETURN_TYPE:
             return "AIVMS005: Syscall return type violated contract.";
+        case AIVM_SYSCALL_ERR_UNBOUND:
+            return "AIVMS006: Syscall target is known but has no host binding.";
         case AIVM_SYSCALL_OK:
             return "AIVMS000: Syscall dispatch succeeded.";
         default:

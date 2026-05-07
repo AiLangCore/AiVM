@@ -2,33 +2,21 @@
 
 Standalone repository for the AiVM runtime layer.
 
-## Migration Status
+## Status
 
-This repository is moving to the native C AiVM implementation.
+This repository owns the native C AiVM implementation. It is intentionally
+independent from the AiLang compiler and AiVectra UI SDK.
 
-The native C VM has been imported under:
+The native C VM lives under:
 
 ```text
 native/
 ```
 
-The sibling AiLang checkout still contains the pre-split source path during
-migration:
-
-```text
-../AiLang/src/AiVM.Core/native
-```
-
-The previous C# runtime project has been archived under:
-
-```text
-legacy/csharp/src/AiVM
-```
-
 ## Layout
 
-- `native` - imported native C VM source, tests, and CMake build.
-- `legacy/csharp/src/AiVM` - archived legacy C# runtime project.
+- `native` - imported native C VM source, tests, native launcher code, and CMake build.
+- `native/ailang_cli` - temporary native AiLang launcher/host adapter code.
 - `.github/workflows` - CI and release workflows.
 
 Target native layout:
@@ -49,9 +37,17 @@ consume this repository.
 
 ## Deliverables
 
-- `aivm` executable.
+- `aivm` executable for production bytecode execution.
+- `aivm-debug` executable for VM diagnostics, profiling, and benchmarking.
 - Embeddable native VM library.
+- Embeddable native debug VM library.
 - Public C headers for host integration.
+- Temporary native launcher sources used to package SDK command-line tools.
+
+The production `aivm` surface is intentionally tiny: version/help plus bytecode
+execution through `aivm <program.aibc1>`. Project commands such as `build`,
+`publish`, and developer workflow modes are owned by AiLang tooling and should
+call into AiVM rather than expanding the production VM command surface.
 
 ## Versioning
 
@@ -73,8 +69,9 @@ Run the standalone native unit test surface:
 ./test-aivm-c.sh
 ```
 
-The full integration/parity suite still depends on AiLang tooling during this
-migration and should be ported after AiVM owns the native runtime fully.
+Optional host/parity tests that exercise AiLang tooling must be run explicitly
+with an installed AiLang toolchain. The default AiVM build and test path does
+not require an AiLang checkout.
 
 ## CI
 
