@@ -1,3 +1,16 @@
+#if !defined(_WIN32)
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#else
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif
+
 #include <errno.h>
 #include <limits.h>
 #include <stdint.h>
@@ -17,6 +30,14 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
+
+#ifndef PATH_MAX
+#ifdef _WIN32
+#define PATH_MAX MAX_PATH
+#else
+#define PATH_MAX 4096
+#endif
 #endif
 
 #include "aivm_c_api.h"
