@@ -40,6 +40,20 @@ else()
     target_compile_options(aivm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+add_library(ailang_native_bridge STATIC
+    ailang_native_bridge.c
+)
+
+target_include_directories(ailang_native_bridge PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+if (MSVC)
+    target_compile_options(ailang_native_bridge PRIVATE /W4)
+else()
+    target_compile_options(ailang_native_bridge PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 if (AIVM_BUILD_SHARED)
     add_library(aivm_core_shared SHARED ${AIVM_CORE_SOURCES})
     target_include_directories(aivm_core_shared PUBLIC
@@ -212,6 +226,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_c_api PRIVATE aivm_core)
 
+    add_executable(aivm_test_ailang_native_bridge
+        tests/test_ailang_native_bridge.c
+    )
+    target_link_libraries(aivm_test_ailang_native_bridge PRIVATE ailang_native_bridge)
+
     add_executable(aivm_test_memory_rc
         tests/test_memory_rc.c
     )
@@ -352,6 +371,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime PRIVATE /W4)
         target_compile_options(aivm_test_syscall_contracts PRIVATE /W4)
         target_compile_options(aivm_test_c_api PRIVATE /W4)
+        target_compile_options(aivm_test_ailang_native_bridge PRIVATE /W4)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         if (AIVM_BUILD_HOST_TESTS)
@@ -381,6 +401,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_syscall_contracts PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_c_api PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_ailang_native_bridge PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         if (AIVM_BUILD_HOST_TESTS)
@@ -411,6 +432,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_runtime COMMAND aivm_test_runtime)
     add_test(NAME aivm_test_syscall_contracts COMMAND aivm_test_syscall_contracts)
     add_test(NAME aivm_test_c_api COMMAND aivm_test_c_api)
+    add_test(NAME aivm_test_ailang_native_bridge COMMAND aivm_test_ailang_native_bridge)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     if (AIVM_BUILD_HOST_TESTS)
@@ -495,6 +517,7 @@ if (BUILD_TESTING)
         aivm_test_vm_ops
         aivm_test_runtime
         aivm_test_c_api
+        aivm_test_ailang_native_bridge
         PROPERTIES LABELS "unit;core"
     )
     set_tests_properties(
