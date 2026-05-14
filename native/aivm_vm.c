@@ -41,13 +41,12 @@ static void set_vm_local_out_of_range_error(
     size_t local_index,
     size_t locals_base)
 {
-    char detail[256];
     if (vm == NULL) {
         return;
     }
     (void)snprintf(
-        detail,
-        sizeof(detail),
+        vm->error_detail_storage,
+        sizeof(vm->error_detail_storage),
         "Invalid local slot. op=%s index=%llu base=%llu localsCount=%llu frameCount=%llu pc=%llu",
         (op_name == NULL || op_name[0] == '\0') ? "local" : op_name,
         (unsigned long long)local_index,
@@ -55,7 +54,7 @@ static void set_vm_local_out_of_range_error(
         (unsigned long long)vm->locals_count,
         (unsigned long long)vm->call_frame_count,
         (unsigned long long)vm->instruction_pointer);
-    set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, detail);
+    set_vm_error(vm, AIVM_VM_ERR_LOCAL_OUT_OF_RANGE, vm->error_detail_storage);
 }
 
 static int validate_vm_call_local_state(AivmVm* vm, const char* op_name)
