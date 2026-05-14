@@ -2186,6 +2186,34 @@ static int parse_target_to_artifact(const char* rid, char* out_dir, size_t out_d
     return n >= 0 && (size_t)n < out_dir_len;
 }
 
+static int resolve_runtime_artifact_dir(const char* artifact_dir, char* out_dir, size_t out_dir_len)
+{
+    char exe_dir[PATH_MAX];
+    char sdk_root[PATH_MAX];
+    char sdk_artifact_dir[PATH_MAX];
+
+    if (artifact_dir == NULL || out_dir == NULL || out_dir_len == 0U) {
+        return 0;
+    }
+    if (directory_exists(artifact_dir)) {
+        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
+               strlen(artifact_dir) < out_dir_len;
+    }
+    if (g_airun_runtime_exe_path[0] == '\0' ||
+        !dirname_of(g_airun_runtime_exe_path, exe_dir, sizeof(exe_dir)) ||
+        !dirname_of(exe_dir, sdk_root, sizeof(sdk_root)) ||
+        !join_path(sdk_root, artifact_dir, sdk_artifact_dir, sizeof(sdk_artifact_dir))) {
+        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
+               strlen(artifact_dir) < out_dir_len;
+    }
+    if (!directory_exists(sdk_artifact_dir)) {
+        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
+               strlen(artifact_dir) < out_dir_len;
+    }
+    return snprintf(out_dir, out_dir_len, "%s", sdk_artifact_dir) >= 0 &&
+           strlen(sdk_artifact_dir) < out_dir_len;
+}
+
 static void print_usage(void)
 {
 #ifdef AIRUN_MINIMAL_RUNTIME
@@ -8991,6 +9019,11 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
             "Err#err1(code=RUN001 message=\"Unsupported publish target RID.\" nodeId=target)\n");
         return 2;
     }
+    if (!resolve_runtime_artifact_dir(artifact_dir, artifact_dir, sizeof(artifact_dir))) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Runtime artifact path overflow.\" nodeId=publish)\n");
+        return 2;
+    }
     if (!derive_publish_app_name(program_input, publish_app_name, sizeof(publish_app_name))) {
         fprintf(stderr,
             "Err#err1(code=RUN001 message=\"Failed to derive publish app name.\" nodeId=publish)\n");
@@ -9143,6 +9176,14 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
                     sizeof(fullstack_host_runtime_bin))) {
                 fprintf(stderr,
                     "Err#err1(code=RUN001 message=\"Unsupported wasm fullstack host target RID.\" nodeId=wasmFullstackHostTarget)\n");
+                return 2;
+            }
+            if (!resolve_runtime_artifact_dir(
+                    fullstack_host_artifact_dir,
+                    fullstack_host_artifact_dir,
+                    sizeof(fullstack_host_artifact_dir))) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Wasm fullstack host runtime artifact path overflow.\" nodeId=publish)\n");
                 return 2;
             }
             if (strstr(fullstack_host_runtime_bin, ".exe") != NULL) {
