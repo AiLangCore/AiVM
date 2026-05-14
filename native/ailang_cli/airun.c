@@ -93,6 +93,7 @@ extern int kill(pid_t pid, int sig);
 #include "remote/aivm_remote_channel.h"
 #include "remote/aivm_remote_session.h"
 #include "aivm_runtime.h"
+#include "ailang_package_manager.h"
 #include "airun_ui_host.h"
 
 #ifndef AIRUN_UI_HOST_EXTERNAL
@@ -134,6 +135,7 @@ typedef int NativeSocket;
 static int resolve_executable_path(const char* argv0, char* out, size_t out_len);
 static int dirname_of(const char* path, char* out, size_t out_len);
 static int simple_resolve_path(const char* base_file, const char* import_path, char* out_path, size_t out_path_len);
+static int simple_resolve_import_path(const char* base_file, const char* attrs, char* out_path, size_t out_path_len);
 static int simple_fail(const char* message);
 static int simple_failf(const char* fmt, ...);
 static int starts_with(const char* value, const char* prefix);
@@ -2232,6 +2234,8 @@ static void print_usage(void)
         "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
         "  build <program(.aibc1|.aos|project-dir|project.aiproj)> [--out <dir>] [--no-cache]\n"
         "  init <project-dir> [--template <cli|cli-args>] [--agent <codex|claude|cursor|gemini|copilot|windsurf>] [--agents <list|all>] [--force]\n"
+        "  template list [projects|files] [project-dir]\n"
+        "  package <list|restore> [project-dir]\n"
         "  clean [program(.aibc1|.aos|project-dir|project.aiproj)]\n"
         "  repl\n"
         "  bench [--iterations <n>] [--human]\n"
@@ -5946,6 +5950,248 @@ static int simple_resolve_path(const char* base_file, const char* import_path, c
     return 1;
 }
 
+static int simple_find_project_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len)
+{
+    char source_dir[PATH_MAX];
+    char parent_dir[PATH_MAX];
+    char manifest_path[PATH_MAX];
+    if (source_file == NULL || out_project_dir == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (!dirname_of(source_file, source_dir, sizeof(source_dir))) {
+        return 0;
+    }
+    if (join_path(source_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) &&
+        file_exists(manifest_path)) {
+        return snprintf(out_project_dir, out_len, "%s", source_dir) >= 0 &&
+               strlen(source_dir) < out_len;
+    }
+    if (dirname_of(source_dir, parent_dir, sizeof(parent_dir)) &&
+        join_path(parent_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) &&
+        file_exists(manifest_path)) {
+        return snprintf(out_project_dir, out_len, "%s", parent_dir) >= 0 &&
+               strlen(parent_dir) < out_len;
+    }
+    return snprintf(out_project_dir, out_len, "%s", source_dir) >= 0 &&
+           strlen(source_dir) < out_len;
+}
+
+static int simple_toml_get_from_section(const char* section, const char* key, char* out, size_t out_len)
+{
+    char needle[96];
+    const char* pos;
+    const char* start;
+    const char* end;
+    size_t n;
+    if (section == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (snprintf(needle, sizeof(needle), "%s = \"", key) >= (int)sizeof(needle)) {
+        return 0;
+    }
+    pos = strstr(section, needle);
+    if (pos == NULL) {
+        if (snprintf(needle, sizeof(needle), "%s=\"", key) >= (int)sizeof(needle)) {
+            return 0;
+        }
+        pos = strstr(section, needle);
+    }
+    if (pos == NULL) {
+        return 0;
+    }
+    start = pos + strlen(needle);
+    end = strchr(start, '"');
+    if (end == NULL) {
+        return 0;
+    }
+    n = (size_t)(end - start);
+    if (n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return 1;
+}
+
+static int simple_lock_resolve_package(
+    const char* project_dir,
+    const char* package_name,
+    char* out_package_dir,
+    size_t out_len)
+{
+    char lock_path[PATH_MAX];
+    unsigned char* bytes = NULL;
+    size_t byte_count = 0U;
+    char* text = NULL;
+    const char* p;
+    if (project_dir == NULL || package_name == NULL || out_package_dir == NULL) {
+        return 0;
+    }
+    if (!join_path(project_dir, "ailang.lock.toml", lock_path, sizeof(lock_path)) ||
+        !read_binary_file(lock_path, &bytes, &byte_count)) {
+        return 0;
+    }
+    text = (char*)malloc(byte_count + 1U);
+    if (text == NULL) {
+        free(bytes);
+        return 0;
+    }
+    if (byte_count > 0U) {
+        memcpy(text, bytes, byte_count);
+    }
+    text[byte_count] = '\0';
+    free(bytes);
+    p = text;
+    while ((p = strstr(p, "[[package]]")) != NULL) {
+        char name[128];
+        char package_path[PATH_MAX];
+        char package_root[PATH_MAX];
+        char local_path[PATH_MAX];
+        if (simple_toml_get_from_section(p, "name", name, sizeof(name)) &&
+            strcmp(name, package_name) == 0 &&
+            simple_toml_get_from_section(p, "path", package_path, sizeof(package_path)) &&
+            simple_toml_get_from_section(p, "packageRoot", package_root, sizeof(package_root)) &&
+            join_path(project_dir, package_path, local_path, sizeof(local_path)) &&
+            join_path(local_path, package_root, out_package_dir, out_len)) {
+            free(text);
+            return 1;
+        }
+        p += strlen("[[package]]");
+    }
+    free(text);
+    return 0;
+}
+
+static int simple_resolve_import_path(const char* base_file, const char* attrs, char* out_path, size_t out_path_len)
+{
+    char import_path[PATH_MAX];
+    char package_name[128];
+    if (attrs == NULL ||
+        !parse_attr_span(attrs, "path", import_path, sizeof(import_path))) {
+        return 0;
+    }
+    if (!parse_attr_span(attrs, "package", package_name, sizeof(package_name))) {
+        return simple_resolve_path(base_file, import_path, out_path, out_path_len);
+    }
+    {
+        char project_dir[PATH_MAX];
+        char package_root[PATH_MAX];
+        if (!simple_find_project_dir_for_source(base_file, project_dir, sizeof(project_dir)) ||
+            !simple_lock_resolve_package(project_dir, package_name, package_root, sizeof(package_root))) {
+            return 0;
+        }
+        return join_path(package_root, import_path, out_path, out_path_len);
+    }
+}
+
+static void print_template_names_in_dir(const char* prefix, const char* dir_path)
+{
+#ifdef _WIN32
+    char pattern[PATH_MAX];
+    WIN32_FIND_DATAA data;
+    HANDLE h;
+    if (!join_path(dir_path, "*", pattern, sizeof(pattern))) {
+        return;
+    }
+    h = FindFirstFileA(pattern, &data);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    do {
+        if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
+            strcmp(data.cFileName, ".") != 0 &&
+            strcmp(data.cFileName, "..") != 0) {
+            printf("%s%s\n", prefix == NULL ? "" : prefix, data.cFileName);
+        }
+    } while (FindNextFileA(h, &data));
+    FindClose(h);
+#else
+    DIR* dir;
+    struct dirent* ent;
+    dir = opendir(dir_path);
+    if (dir == NULL) {
+        return;
+    }
+    while ((ent = readdir(dir)) != NULL) {
+        char child[PATH_MAX];
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+            continue;
+        }
+        if (join_path(dir_path, ent->d_name, child, sizeof(child)) && directory_exists(child)) {
+            printf("%s%s\n", prefix == NULL ? "" : prefix, ent->d_name);
+        }
+    }
+    closedir(dir);
+#endif
+}
+
+static AIRUN_MAYBE_UNUSED int handle_template(int argc, char** argv)
+{
+    const char* kind = "projects";
+    const char* project_dir = ".";
+    char lock_path[PATH_MAX];
+    char* text = NULL;
+    unsigned char* bytes = NULL;
+    size_t byte_count = 0U;
+    const char* p;
+    if (argc >= 3 && strcmp(argv[2], "list") != 0) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Unsupported template command.\" nodeId=template)\n");
+        return 2;
+    }
+    if (argc >= 4 && argv[3] != NULL && argv[3][0] != '-') {
+        kind = argv[3];
+    }
+    if (argc >= 5 && argv[4] != NULL && argv[4][0] != '-') {
+        project_dir = argv[4];
+    }
+    if (strcmp(kind, "projects") != 0 && strcmp(kind, "files") != 0) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Unknown template type.\" nodeId=template)\n");
+        return 2;
+    }
+    if (strcmp(kind, "projects") == 0) {
+        printf("cli\n");
+        printf("cli-args\n");
+    }
+    if (!join_path(project_dir, "ailang.lock.toml", lock_path, sizeof(lock_path)) ||
+        !read_binary_file(lock_path, &bytes, &byte_count)) {
+        return 0;
+    }
+    text = (char*)malloc(byte_count + 1U);
+    if (text == NULL) {
+        free(bytes);
+        return 0;
+    }
+    if (byte_count > 0U) {
+        memcpy(text, bytes, byte_count);
+    }
+    text[byte_count] = '\0';
+    free(bytes);
+    p = text;
+    while ((p = strstr(p, "[[package]]")) != NULL) {
+        char name[128];
+        char package_path[PATH_MAX];
+        char package_root[PATH_MAX];
+        char package_dir[PATH_MAX];
+        char package_root_dir[PATH_MAX];
+        char templates_dir[PATH_MAX];
+        char typed_templates_dir[PATH_MAX];
+        char prefix[160];
+        if (simple_toml_get_from_section(p, "name", name, sizeof(name)) &&
+            simple_toml_get_from_section(p, "path", package_path, sizeof(package_path)) &&
+            simple_toml_get_from_section(p, "packageRoot", package_root, sizeof(package_root)) &&
+            join_path(project_dir, package_path, package_dir, sizeof(package_dir)) &&
+            join_path(package_dir, package_root, package_root_dir, sizeof(package_root_dir)) &&
+            join_path(package_root_dir, "templates", templates_dir, sizeof(templates_dir)) &&
+            join_path(templates_dir, kind, typed_templates_dir, sizeof(typed_templates_dir))) {
+            (void)snprintf(prefix, sizeof(prefix), "%s/", name);
+            print_template_names_in_dir(prefix, typed_templates_dir);
+        }
+        p += strlen("[[package]]");
+    }
+    free(text);
+    return 0;
+}
+
 typedef struct {
     char paths[SIMPLE_MAX_SOURCES][PATH_MAX];
     size_t count;
@@ -6076,13 +6322,8 @@ static int source_graph_hash_file(
             break;
         }
         if (strcmp(node.kind, "Import") == 0) {
-            char import_path[PATH_MAX];
             char resolved[PATH_MAX];
-            if (!parse_attr_span(node.attrs, "path", import_path, sizeof(import_path))) {
-                free(text);
-                return 0;
-            }
-            if (!simple_resolve_path(path, import_path, resolved, sizeof(resolved))) {
+            if (!simple_resolve_import_path(path, node.attrs, resolved, sizeof(resolved))) {
                 free(text);
                 return 0;
             }
@@ -6231,13 +6472,9 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
                 (unsigned long long)(close_brace - ctx->sources[(size_t)source_index].text));
         }
         if (strcmp(node.kind, "Import") == 0) {
-            char import_path[PATH_MAX];
             char resolved[PATH_MAX];
-            if (!parse_attr_span(node.attrs, "path", import_path, sizeof(import_path))) {
+            if (!simple_resolve_import_path(path, node.attrs, resolved, sizeof(resolved))) {
                 return simple_failf("collect: import missing path in %s", path);
-            }
-            if (!simple_resolve_path(path, import_path, resolved, sizeof(resolved))) {
-                return simple_failf("collect: import resolve failed for %s from %s", import_path, path);
             }
             if (!simple_collect_from_file(ctx, resolved, 0)) {
                 return 0;
@@ -9334,6 +9571,12 @@ int main(int argc, char** argv)
     }
     if (strcmp(argv[1], "init") == 0) {
         return handle_init(argc, argv);
+    }
+    if (strcmp(argv[1], "template") == 0) {
+        return handle_template(argc, argv);
+    }
+    if (strcmp(argv[1], "package") == 0) {
+        return ailang_package_manager_cli(argc, argv);
     }
     if (strcmp(argv[1], "serve") == 0) {
         return handle_serve(argc, argv);

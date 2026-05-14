@@ -58,3 +58,15 @@ for accepting or returning bytes.
 During self-hosting, package management and compiler bootstrap helpers may use
 this bridge as a temporary C-backed implementation. The target end state is
 still AiLang-authored package/compiler logic running on AiVM.
+
+Current bridge-backed alpha helper:
+
+- `package.list`
+- `package.restore`
+
+The native CLI calls these through the bridge for:
+
+```bash
+ailang package list [project-dir]
+ailang package restore [project-dir]
+```
