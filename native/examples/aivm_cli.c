@@ -10,6 +10,7 @@
 #include <io.h>
 #include <windows.h>
 #else
+#include <dirent.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/stat.h>
@@ -259,6 +260,149 @@ static int aivm_cli_dir_create(
         return AIVM_SYSCALL_ERR_INVALID;
     }
     *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int aivm_cli_file_delete(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int deleted;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+#if defined(_WIN32)
+    deleted = DeleteFileA(args[0].string_value) != 0;
+#else
+    deleted = unlink(args[0].string_value) == 0;
+#endif
+    *result = aivm_value_bool(deleted);
+    return AIVM_SYSCALL_OK;
+}
+
+#if defined(_WIN32)
+static int aivm_cli_join_path(char* out_path, size_t out_size, const char* parent, const char* child)
+{
+    int written = snprintf(out_path, out_size, "%s\\%s", parent, child);
+    return written > 0 && (size_t)written < out_size;
+}
+
+static int aivm_cli_dir_delete_recursive(const char* path)
+{
+    char pattern[MAX_PATH];
+    WIN32_FIND_DATAA entry;
+    HANDLE handle;
+    int ok = 1;
+
+    if (snprintf(pattern, sizeof(pattern), "%s\\*", path) <= 0) {
+        return 0;
+    }
+    handle = FindFirstFileA(pattern, &entry);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return RemoveDirectoryA(path) != 0;
+    }
+    do {
+        char child[MAX_PATH];
+        if (strcmp(entry.cFileName, ".") == 0 || strcmp(entry.cFileName, "..") == 0) {
+            continue;
+        }
+        if (!aivm_cli_join_path(child, sizeof(child), path, entry.cFileName)) {
+            ok = 0;
+            break;
+        }
+        if ((entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) {
+            if (!aivm_cli_dir_delete_recursive(child)) {
+                ok = 0;
+                break;
+            }
+        } else if (DeleteFileA(child) == 0) {
+            ok = 0;
+            break;
+        }
+    } while (FindNextFileA(handle, &entry) != 0);
+    FindClose(handle);
+    return ok && RemoveDirectoryA(path) != 0;
+}
+#else
+static int aivm_cli_join_path(char* out_path, size_t out_size, const char* parent, const char* child)
+{
+    int written = snprintf(out_path, out_size, "%s/%s", parent, child);
+    return written > 0 && (size_t)written < out_size;
+}
+
+static int aivm_cli_dir_delete_recursive(const char* path)
+{
+    DIR* dir;
+    struct dirent* entry;
+    int ok = 1;
+
+    dir = opendir(path);
+    if (dir == NULL) {
+        return rmdir(path) == 0;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        char child[PATH_MAX];
+        struct stat st;
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        if (!aivm_cli_join_path(child, sizeof(child), path, entry->d_name)) {
+            ok = 0;
+            break;
+        }
+        if (lstat(child, &st) != 0) {
+            ok = 0;
+            break;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            if (!aivm_cli_dir_delete_recursive(child)) {
+                ok = 0;
+                break;
+            }
+        } else if (unlink(child) != 0) {
+            ok = 0;
+            break;
+        }
+    }
+    closedir(dir);
+    return ok && rmdir(path) == 0;
+}
+#endif
+
+static int aivm_cli_dir_delete(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int recursive;
+    int deleted;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 2U ||
+        args == NULL ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[0].string_value == NULL ||
+        args[1].type != AIVM_VAL_BOOL) {
+        *result = aivm_value_void();
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    recursive = args[1].bool_value != 0;
+#if defined(_WIN32)
+    deleted = recursive ? aivm_cli_dir_delete_recursive(args[0].string_value) : RemoveDirectoryA(args[0].string_value) != 0;
+#else
+    deleted = recursive ? aivm_cli_dir_delete_recursive(args[0].string_value) : rmdir(args[0].string_value) == 0;
+#endif
+    *result = aivm_value_bool(deleted);
     return AIVM_SYSCALL_OK;
 }
 
@@ -548,6 +692,8 @@ static int execute_bytes(
         { "sys.host.openDefault", native_syscall_host_open_default },
         { "sys.fs.path.exists", aivm_cli_path_exists },
         { "sys.fs.dir.create", aivm_cli_dir_create },
+        { "sys.fs.dir.delete", aivm_cli_dir_delete },
+        { "sys.fs.file.delete", aivm_cli_file_delete },
         { "sys.fs.file.write", aivm_cli_file_write },
         { "sys.fs.file.read", aivm_cli_file_read },
         { "sys.bytes.fromUtf8String", aivm_cli_bytes_from_utf8_string },
