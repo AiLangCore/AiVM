@@ -2196,19 +2196,16 @@ static int resolve_runtime_artifact_dir(const char* artifact_dir, char* out_dir,
         return 0;
     }
     if (directory_exists(artifact_dir)) {
-        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
-               strlen(artifact_dir) < out_dir_len;
+        return 1;
     }
     if (g_airun_runtime_exe_path[0] == '\0' ||
         !dirname_of(g_airun_runtime_exe_path, exe_dir, sizeof(exe_dir)) ||
         !dirname_of(exe_dir, sdk_root, sizeof(sdk_root)) ||
         !join_path(sdk_root, artifact_dir, sdk_artifact_dir, sizeof(sdk_artifact_dir))) {
-        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
-               strlen(artifact_dir) < out_dir_len;
+        return 1;
     }
     if (!directory_exists(sdk_artifact_dir)) {
-        return snprintf(out_dir, out_dir_len, "%s", artifact_dir) >= 0 &&
-               strlen(artifact_dir) < out_dir_len;
+        return 1;
     }
     return snprintf(out_dir, out_dir_len, "%s", sdk_artifact_dir) >= 0 &&
            strlen(sdk_artifact_dir) < out_dir_len;
