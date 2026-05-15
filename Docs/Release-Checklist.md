@@ -25,7 +25,7 @@ AIVM_CTEST_LABEL='unit|integration' ./test-aivm-c.sh
 ## Release
 
 - Push the release branch and confirm GitHub Actions pass.
-- Tag with `v<version>`, for example `v0.0.1-alpha.12`.
+- Tag with `v<version>`, for example `v0.0.1-alpha.17`.
 - Confirm the GitHub release is marked as a prerelease for `-alpha`, `-beta`,
   `-rc`, and `-local` tags.
 - Confirm Linux, macOS, and Windows artifacts are attached.
