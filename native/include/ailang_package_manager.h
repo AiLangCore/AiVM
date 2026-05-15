@@ -31,6 +31,31 @@ int ailang_package_manager_restore(
     char* error,
     size_t error_len);
 
+int ailang_package_manager_add(
+    const AilangPackageManagerOptions* options,
+    const char* package_spec,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len);
+
+int ailang_package_manager_remove(
+    const AilangPackageManagerOptions* options,
+    const char* package_name,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len);
+
+int ailang_package_manager_try_run_tool(
+    const AilangPackageManagerOptions* options,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len);
+
 int ailang_package_manager_cli(int argc, char** argv);
 
 #ifdef __cplusplus

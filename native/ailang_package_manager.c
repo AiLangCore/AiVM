@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #define AILANG_PM_PATH_SEP '/'
 #ifndef PATH_MAX
@@ -229,6 +230,43 @@ static int pm_read_text_limited(const char* path, char** out_text)
     return 1;
 }
 
+static int pm_copy_text(char* out, size_t out_len, const char* text)
+{
+    if (out == NULL || out_len == 0U || text == NULL) {
+        return 0;
+    }
+    if (snprintf(out, out_len, "%s", text) < 0 || strlen(text) >= out_len) {
+        return 0;
+    }
+    return 1;
+}
+
+static int pm_sanitize_id(const char* input, char* out, size_t out_len)
+{
+    size_t i;
+    size_t w = 0U;
+    if (input == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    for (i = 0U; input[i] != '\0'; i += 1U) {
+        char c = input[i];
+        if (isalnum((unsigned char)c)) {
+            c = (char)tolower((unsigned char)c);
+        } else {
+            c = '_';
+        }
+        if (w + 1U >= out_len) {
+            return 0;
+        }
+        out[w++] = c;
+    }
+    if (w == 0U) {
+        return 0;
+    }
+    out[w] = '\0';
+    return 1;
+}
+
 static int pm_toml_get_string(const char* text, const char* key, char* out, size_t out_len)
 {
     char needle[128];
@@ -390,6 +428,43 @@ static int pm_run(const char* command)
     return command != NULL && system(command) == 0;
 }
 
+static int pm_run_tool_command(const char* tool_path, int arg_count, char** args, int* exit_code)
+{
+    char command[PATH_MAX * 4];
+    char quoted[PATH_MAX * 2];
+    size_t used = 0U;
+    int i;
+    int rc;
+    if (tool_path == NULL || exit_code == NULL || !pm_shell_quote(tool_path, quoted, sizeof(quoted))) {
+        return 0;
+    }
+    command[0] = '\0';
+    if (!pm_append(command, sizeof(command), &used, quoted)) {
+        return 0;
+    }
+    for (i = 0; i < arg_count; i += 1) {
+        if (args == NULL || args[i] == NULL || !pm_shell_quote(args[i], quoted, sizeof(quoted)) ||
+            !pm_append(command, sizeof(command), &used, " ") ||
+            !pm_append(command, sizeof(command), &used, quoted)) {
+            return 0;
+        }
+    }
+    rc = system(command);
+    if (rc == -1) {
+        return 0;
+    }
+#ifndef _WIN32
+    if (WIFEXITED(rc)) {
+        *exit_code = WEXITSTATUS(rc);
+    } else {
+        *exit_code = 1;
+    }
+#else
+    *exit_code = rc;
+#endif
+    return 1;
+}
+
 static int pm_resolve_install_root(const AilangPackageManagerOptions* options, char* out, size_t out_len)
 {
     const char* env;
@@ -540,6 +615,209 @@ static int pm_parse_include(const char* cursor, char* name, size_t name_len, cha
             version[n] = '\0';
         }
     }
+    return 1;
+}
+
+static int pm_parse_package_spec(const char* spec, char* name, size_t name_len, char* version, size_t version_len)
+{
+    const char* at;
+    size_t name_size;
+    if (spec == NULL || spec[0] == '\0' || name == NULL || version == NULL) {
+        return 0;
+    }
+    at = strrchr(spec, '@');
+    if (at != NULL && at != spec && at[1] != '\0') {
+        name_size = (size_t)(at - spec);
+        if (name_size + 1U > name_len || strlen(at + 1) + 1U > version_len) {
+            return 0;
+        }
+        memcpy(name, spec, name_size);
+        name[name_size] = '\0';
+        (void)snprintf(version, version_len, "%s", at + 1);
+    } else {
+        if (strlen(spec) + 1U > name_len) {
+            return 0;
+        }
+        (void)snprintf(name, name_len, "%s", spec);
+        version[0] = '\0';
+    }
+    return name[0] != '\0';
+}
+
+static int pm_manifest_has_include(const char* manifest, const char* package_name)
+{
+    const char* p = manifest;
+    while (p != NULL && (p = strstr(p, "Include")) != NULL) {
+        char name[128];
+        char version[64];
+        if (pm_parse_include(p, name, sizeof(name), version, sizeof(version)) &&
+            strcmp(name, package_name) == 0) {
+            return 1;
+        }
+        p += strlen("Include");
+    }
+    return 0;
+}
+
+static const char* pm_find_matching_delim(const char* open, char left, char right)
+{
+    const char* p;
+    int depth = 0;
+    int in_string = 0;
+    if (open == NULL || *open != left) {
+        return NULL;
+    }
+    for (p = open; *p != '\0'; p += 1) {
+        if (*p == '"' && (p == open || p[-1] != '\\')) {
+            in_string = !in_string;
+        }
+        if (in_string) {
+            continue;
+        }
+        if (*p == left) {
+            depth += 1;
+        } else if (*p == right) {
+            depth -= 1;
+            if (depth == 0) {
+                return p;
+            }
+        }
+    }
+    return NULL;
+}
+
+static const char* pm_find_project_attr_close(const char* manifest)
+{
+    const char* project;
+    const char* attrs;
+    project = strstr(manifest, "Project");
+    if (project == NULL) {
+        return NULL;
+    }
+    attrs = strchr(project, '(');
+    return pm_find_matching_delim(attrs, '(', ')');
+}
+
+static int pm_append_include_to_manifest(const char* manifest, const AilangPackageRecord* record, char** out_text)
+{
+    const char* attr_close;
+    const char* insert_at;
+    const char* suffix_at;
+    char id[160];
+    char include_line[384];
+    size_t prefix_len;
+    size_t manifest_len;
+    size_t line_len;
+    size_t extra_len = 0U;
+    int has_project_block = 0;
+    char* next;
+    if (manifest == NULL || record == NULL || out_text == NULL) {
+        return 0;
+    }
+    *out_text = NULL;
+    attr_close = pm_find_project_attr_close(manifest);
+    if (attr_close == NULL || !pm_sanitize_id(record->name, id, sizeof(id))) {
+        return 0;
+    }
+    if (snprintf(
+            include_line,
+            sizeof(include_line),
+            "    Include#dep_%s(name=\"%s\" version=\"%s\")\n",
+            id,
+            record->name,
+            record->version) >= (int)sizeof(include_line)) {
+        return 0;
+    }
+    manifest_len = strlen(manifest);
+    insert_at = attr_close + 1;
+    while (*insert_at != '\0' && isspace((unsigned char)*insert_at)) {
+        insert_at += 1;
+    }
+    if (*insert_at == '{') {
+        const char* project_end = pm_find_matching_delim(insert_at, '{', '}');
+        if (project_end == NULL) {
+            return 0;
+        }
+        insert_at = project_end;
+        suffix_at = project_end;
+        has_project_block = 1;
+    } else {
+        suffix_at = insert_at;
+        insert_at = attr_close + 1;
+        extra_len = strlen(" {\n  }\n");
+    }
+    prefix_len = (size_t)(insert_at - manifest);
+    line_len = strlen(include_line);
+    next = (char*)malloc(manifest_len + line_len + extra_len + 2U);
+    if (next == NULL) {
+        return 0;
+    }
+    memcpy(next, manifest, prefix_len);
+    if (has_project_block) {
+        if (prefix_len > 0U && next[prefix_len - 1U] != '\n') {
+            next[prefix_len++] = '\n';
+        }
+        memcpy(next + prefix_len, include_line, line_len);
+        memcpy(next + prefix_len + line_len, suffix_at, strlen(suffix_at) + 1U);
+    } else {
+        memcpy(next + prefix_len, " {\n", 3U);
+        prefix_len += 3U;
+        memcpy(next + prefix_len, include_line, line_len);
+        prefix_len += line_len;
+        memcpy(next + prefix_len, "  }\n", 4U);
+        prefix_len += 4U;
+        memcpy(next + prefix_len, suffix_at, strlen(suffix_at) + 1U);
+    }
+    *out_text = next;
+    return 1;
+}
+
+static int pm_remove_include_from_manifest(const char* manifest, const char* package_name, char** out_text, int* removed)
+{
+    const char* line_start;
+    const char* cursor;
+    size_t output_len;
+    size_t used = 0U;
+    char* next;
+    if (manifest == NULL || package_name == NULL || out_text == NULL || removed == NULL) {
+        return 0;
+    }
+    output_len = strlen(manifest) + 1U;
+    next = (char*)malloc(output_len);
+    if (next == NULL) {
+        return 0;
+    }
+    next[0] = '\0';
+    *removed = 0;
+    cursor = manifest;
+    while (*cursor != '\0') {
+        const char* line_end = strchr(cursor, '\n');
+        size_t line_len = line_end == NULL ? strlen(cursor) : (size_t)(line_end - cursor) + 1U;
+        line_start = cursor;
+        if (strstr(line_start, "Include") != NULL) {
+            char line[1024];
+            char name[128];
+            char version[64];
+            size_t copy_len = line_len >= sizeof(line) ? sizeof(line) - 1U : line_len;
+            memcpy(line, line_start, copy_len);
+            line[copy_len] = '\0';
+            if (pm_parse_include(line, name, sizeof(name), version, sizeof(version)) &&
+                strcmp(name, package_name) == 0) {
+                *removed += 1;
+                cursor += line_len;
+                continue;
+            }
+        }
+        if (used + line_len + 1U > output_len) {
+            free(next);
+            return 0;
+        }
+        memcpy(next + used, line_start, line_len);
+        used += line_len;
+        next[used] = '\0';
+        cursor += line_len;
+    }
+    *out_text = next;
     return 1;
 }
 
@@ -811,6 +1089,266 @@ int ailang_package_manager_restore(
     return 1;
 }
 
+int ailang_package_manager_add(
+    const AilangPackageManagerOptions* options,
+    const char* package_spec,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len)
+{
+    const char* project_dir = (options != NULL && options->project_dir != NULL) ? options->project_dir : ".";
+    char manifest_path[PATH_MAX];
+    char registry[PATH_MAX];
+    char name[128];
+    char version[64];
+    char restore_output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    char* manifest = NULL;
+    char* next_manifest = NULL;
+    AilangPackageRecord record;
+    if (output != NULL && output_len > 0U) {
+        output[0] = '\0';
+    }
+    if (!pm_parse_package_spec(package_spec, name, sizeof(name), version, sizeof(version))) {
+        return pm_set_error(error, error_len, "invalid package spec");
+    }
+    if (!pm_join_path(project_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) ||
+        !pm_resolve_registry(options, registry, sizeof(registry)) ||
+        !pm_read_text_limited(manifest_path, &manifest)) {
+        return pm_set_error(error, error_len, "package add setup failed");
+    }
+    if (pm_manifest_has_include(manifest, name)) {
+        free(manifest);
+        return pm_set_error(error, error_len, "package already included: %s", name);
+    }
+    if (!pm_load_record(registry, name, version, &record, error, error_len) ||
+        !pm_append_include_to_manifest(manifest, &record, &next_manifest) ||
+        !pm_write_text(manifest_path, next_manifest)) {
+        free(manifest);
+        free(next_manifest);
+        return error != NULL && error[0] != '\0' ? 0 : pm_set_error(error, error_len, "package add failed");
+    }
+    free(manifest);
+    free(next_manifest);
+    if (!ailang_package_manager_restore(options, restore_output, sizeof(restore_output), error, error_len)) {
+        return 0;
+    }
+    if (output != NULL && output_len > 0U) {
+        (void)snprintf(output, output_len, "Ok#ok1(type=string value=\"added %s %s\")\n", record.name, record.version);
+    }
+    return 1;
+}
+
+int ailang_package_manager_remove(
+    const AilangPackageManagerOptions* options,
+    const char* package_name,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len)
+{
+    const char* project_dir = (options != NULL && options->project_dir != NULL) ? options->project_dir : ".";
+    char manifest_path[PATH_MAX];
+    char restore_output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    char* manifest = NULL;
+    char* next_manifest = NULL;
+    int removed = 0;
+    if (output != NULL && output_len > 0U) {
+        output[0] = '\0';
+    }
+    if (package_name == NULL || package_name[0] == '\0') {
+        return pm_set_error(error, error_len, "missing package name");
+    }
+    if (!pm_join_path(project_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) ||
+        !pm_read_text_limited(manifest_path, &manifest)) {
+        return pm_set_error(error, error_len, "package remove setup failed");
+    }
+    if (!pm_remove_include_from_manifest(manifest, package_name, &next_manifest, &removed)) {
+        free(manifest);
+        return pm_set_error(error, error_len, "package remove failed");
+    }
+    free(manifest);
+    if (removed == 0) {
+        free(next_manifest);
+        return pm_set_error(error, error_len, "package not included: %s", package_name);
+    }
+    if (!pm_write_text(manifest_path, next_manifest)) {
+        free(next_manifest);
+        return pm_set_error(error, error_len, "could not write project.aiproj");
+    }
+    free(next_manifest);
+    if (!ailang_package_manager_restore(options, restore_output, sizeof(restore_output), error, error_len)) {
+        return 0;
+    }
+    if (output != NULL && output_len > 0U) {
+        (void)snprintf(output, output_len, "Ok#ok1(type=string value=\"removed %s\")\n", package_name);
+    }
+    return 1;
+}
+
+static int pm_getcwd(char* out, size_t out_len)
+{
+    if (out == NULL || out_len == 0U) {
+        return 0;
+    }
+#ifdef _WIN32
+    return _getcwd(out, (int)out_len) != NULL;
+#else
+    return getcwd(out, out_len) != NULL;
+#endif
+}
+
+static int pm_dirname_in_place(char* path)
+{
+    size_t len;
+    if (path == NULL || path[0] == '\0') {
+        return 0;
+    }
+    len = strlen(path);
+    while (len > 1U && (path[len - 1U] == '/' || path[len - 1U] == '\\')) {
+        path[len - 1U] = '\0';
+        len -= 1U;
+    }
+    while (len > 0U && path[len - 1U] != '/' && path[len - 1U] != '\\') {
+        len -= 1U;
+    }
+    if (len == 0U) {
+        return 0;
+    }
+    if (len == 1U) {
+        path[1] = '\0';
+    } else {
+        path[len - 1U] = '\0';
+    }
+    return 1;
+}
+
+static int pm_find_project_dir(const AilangPackageManagerOptions* options, char* out, size_t out_len)
+{
+    char current[PATH_MAX];
+    if (options != NULL && options->project_dir != NULL && options->project_dir[0] != '\0') {
+        return pm_copy_text(out, out_len, options->project_dir);
+    }
+    if (!pm_getcwd(current, sizeof(current))) {
+        return 0;
+    }
+    for (;;) {
+        char manifest[PATH_MAX];
+        char lockfile[PATH_MAX];
+        if ((pm_join_path(current, "project.aiproj", manifest, sizeof(manifest)) && pm_file_exists(manifest)) ||
+            (pm_join_path(current, "ailang.lock.toml", lockfile, sizeof(lockfile)) && pm_file_exists(lockfile))) {
+            return pm_copy_text(out, out_len, current);
+        }
+        if (!pm_dirname_in_place(current)) {
+            break;
+        }
+    }
+    return pm_copy_text(out, out_len, ".");
+}
+
+static int pm_find_tool_in_package_root(const char* package_root, const char* tool_name, char* out, size_t out_len)
+{
+    static const char* prefixes[] = { "tools", "bin", "scripts", "" };
+    size_t i;
+    for (i = 0U; i < (sizeof(prefixes) / sizeof(prefixes[0])); i += 1U) {
+        char dir[PATH_MAX];
+        char candidate[PATH_MAX];
+        if (prefixes[i][0] == '\0') {
+            if (!pm_join_path(package_root, tool_name, candidate, sizeof(candidate))) {
+                continue;
+            }
+        } else if (!pm_join_path(package_root, prefixes[i], dir, sizeof(dir)) ||
+                   !pm_join_path(dir, tool_name, candidate, sizeof(candidate))) {
+            continue;
+        }
+        if (pm_file_exists(candidate)) {
+            return pm_copy_text(out, out_len, candidate);
+        }
+#ifdef _WIN32
+        {
+            char exe_candidate[PATH_MAX];
+            if (snprintf(exe_candidate, sizeof(exe_candidate), "%s.exe", candidate) < (int)sizeof(exe_candidate) &&
+                pm_file_exists(exe_candidate)) {
+                return pm_copy_text(out, out_len, exe_candidate);
+            }
+        }
+#endif
+    }
+    return 0;
+}
+
+static int pm_find_local_tool(const char* project_dir, const char* tool_name, char* out, size_t out_len)
+{
+    char lock_path[PATH_MAX];
+    char* text = NULL;
+    const char* p;
+    if (!pm_join_path(project_dir, "ailang.lock.toml", lock_path, sizeof(lock_path)) ||
+        !pm_read_text_limited(lock_path, &text)) {
+        return 0;
+    }
+    p = text;
+    while ((p = strstr(p, "[[package]]")) != NULL) {
+        char package_path[PATH_MAX];
+        char package_root[PATH_MAX];
+        char local_path[PATH_MAX];
+        char root_path[PATH_MAX];
+        if (pm_toml_get_string(p, "path", package_path, sizeof(package_path)) &&
+            pm_toml_get_string(p, "packageRoot", package_root, sizeof(package_root)) &&
+            pm_join_path(project_dir, package_path, local_path, sizeof(local_path)) &&
+            pm_join_path(local_path, package_root, root_path, sizeof(root_path)) &&
+            pm_find_tool_in_package_root(root_path, tool_name, out, out_len)) {
+            free(text);
+            return 1;
+        }
+        p += strlen("[[package]]");
+    }
+    free(text);
+    return 0;
+}
+
+int ailang_package_manager_try_run_tool(
+    const AilangPackageManagerOptions* options,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len)
+{
+    char install_root[PATH_MAX];
+    char global_tools[PATH_MAX];
+    char tool_path[PATH_MAX];
+    char project_dir[PATH_MAX];
+    if (exit_code != NULL) {
+        *exit_code = 0;
+    }
+    if (tool_name == NULL || tool_name[0] == '\0' || exit_code == NULL) {
+        return pm_set_error(error, error_len, "invalid tool request");
+    }
+    if (pm_resolve_install_root(options, install_root, sizeof(install_root)) &&
+        pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
+        pm_join_path(global_tools, tool_name, tool_path, sizeof(tool_path)) &&
+        pm_file_exists(tool_path)) {
+        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
+            pm_set_error(error, error_len, "failed to run global tool: %s", tool_name);
+    }
+#ifdef _WIN32
+    if (pm_resolve_install_root(options, install_root, sizeof(install_root)) &&
+        pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
+        snprintf(tool_path, sizeof(tool_path), "%s%c%s.exe", global_tools, AILANG_PM_PATH_SEP, tool_name) < (int)sizeof(tool_path) &&
+        pm_file_exists(tool_path)) {
+        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
+            pm_set_error(error, error_len, "failed to run global tool: %s", tool_name);
+    }
+#endif
+    if (pm_find_project_dir(options, project_dir, sizeof(project_dir)) &&
+        pm_find_local_tool(project_dir, tool_name, tool_path, sizeof(tool_path))) {
+        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
+            pm_set_error(error, error_len, "failed to run local tool: %s", tool_name);
+    }
+    return 0;
+}
+
 static int bridge_package_list(
     void* context,
     const AilangNativeValue* args,
@@ -857,10 +1395,70 @@ static int bridge_package_restore(
     return 1;
 }
 
+static int bridge_package_add(
+    void* context,
+    const AilangNativeValue* args,
+    size_t arg_count,
+    AilangNativeValue* result,
+    char* error,
+    size_t error_len)
+{
+    static char output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    AilangPackageManagerOptions options;
+    const char* project_dir = ".";
+    const char* package_spec;
+    (void)context;
+    if (arg_count < 1U || args == NULL || args[0].type != AILANG_NATIVE_STRING) {
+        return pm_set_error(error, error_len, "missing package spec");
+    }
+    package_spec = args[0].as.string_value;
+    if (arg_count > 1U && args[1].type == AILANG_NATIVE_STRING) {
+        project_dir = args[1].as.string_value;
+    }
+    memset(&options, 0, sizeof(options));
+    options.project_dir = project_dir;
+    if (!ailang_package_manager_add(&options, package_spec, output, sizeof(output), error, error_len)) {
+        return 0;
+    }
+    ailang_native_value_string(result, output);
+    return 1;
+}
+
+static int bridge_package_remove(
+    void* context,
+    const AilangNativeValue* args,
+    size_t arg_count,
+    AilangNativeValue* result,
+    char* error,
+    size_t error_len)
+{
+    static char output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    AilangPackageManagerOptions options;
+    const char* project_dir = ".";
+    const char* package_name;
+    (void)context;
+    if (arg_count < 1U || args == NULL || args[0].type != AILANG_NATIVE_STRING) {
+        return pm_set_error(error, error_len, "missing package name");
+    }
+    package_name = args[0].as.string_value;
+    if (arg_count > 1U && args[1].type == AILANG_NATIVE_STRING) {
+        project_dir = args[1].as.string_value;
+    }
+    memset(&options, 0, sizeof(options));
+    options.project_dir = project_dir;
+    if (!ailang_package_manager_remove(&options, package_name, output, sizeof(output), error, error_len)) {
+        return 0;
+    }
+    ailang_native_value_string(result, output);
+    return 1;
+}
+
 int ailang_package_manager_register(AilangNativeBridge* bridge, char* error, size_t error_len)
 {
     return ailang_native_bridge_register(bridge, "package.list", bridge_package_list, NULL, error, error_len) &&
-           ailang_native_bridge_register(bridge, "package.restore", bridge_package_restore, NULL, error, error_len);
+           ailang_native_bridge_register(bridge, "package.restore", bridge_package_restore, NULL, error, error_len) &&
+           ailang_native_bridge_register(bridge, "package.add", bridge_package_add, NULL, error, error_len) &&
+           ailang_native_bridge_register(bridge, "package.remove", bridge_package_remove, NULL, error, error_len);
 }
 
 static int pm_resolve_cli_project_dir(int argc, char** argv, int start, char* out, size_t out_len)
@@ -878,40 +1476,56 @@ static int pm_resolve_cli_project_dir(int argc, char** argv, int start, char* ou
 
 int ailang_package_manager_cli(int argc, char** argv)
 {
-    AilangNativeBridge bridge;
-    AilangNativeValue arg;
-    AilangNativeValue result;
+    AilangPackageManagerOptions options;
     char project_dir[PATH_MAX];
+    char output[AILANG_NATIVE_BRIDGE_MAX_STRING];
     char error[512];
-    const char* fn_name;
     if (argc < 3 || argv == NULL || argv[2] == NULL) {
-        fprintf(stderr, "Usage: ailang package <list|restore> [project-dir]\n");
+        fprintf(stderr, "Usage: ailang package <list|restore|add|remove> [args]\n");
         return 2;
     }
-    if (strcmp(argv[2], "list") == 0) {
-        fn_name = "package.list";
-    } else if (strcmp(argv[2], "restore") == 0) {
-        fn_name = "package.restore";
-    } else {
-        fprintf(stderr, "Err#err1(code=PKG000 message=\"Unknown package command.\" nodeId=package)\n");
-        return 2;
+    memset(&options, 0, sizeof(options));
+    error[0] = '\0';
+    if (strcmp(argv[2], "list") == 0 || strcmp(argv[2], "restore") == 0) {
+        if (!pm_resolve_cli_project_dir(argc, argv, 3, project_dir, sizeof(project_dir))) {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"Package command path overflow.\" nodeId=package)\n");
+            return 2;
+        }
+        options.project_dir = project_dir;
+        if (strcmp(argv[2], "list") == 0) {
+            if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error))) {
+                fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
+                return 2;
+            }
+        } else if (!ailang_package_manager_restore(&options, output, sizeof(output), error, sizeof(error))) {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
+            return 2;
+        }
+        fputs(output, stdout);
+        return 0;
     }
-    if (!pm_resolve_cli_project_dir(argc, argv, 3, project_dir, sizeof(project_dir))) {
-        fprintf(stderr, "Err#err1(code=PKG001 message=\"Package command path overflow.\" nodeId=package)\n");
-        return 2;
+    if (strcmp(argv[2], "add") == 0 || strcmp(argv[2], "remove") == 0) {
+        if (argc < 4 || argv[3] == NULL) {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"Missing package name.\" nodeId=package)\n");
+            return 2;
+        }
+        if (!pm_resolve_cli_project_dir(argc, argv, 4, project_dir, sizeof(project_dir))) {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"Package command path overflow.\" nodeId=package)\n");
+            return 2;
+        }
+        options.project_dir = project_dir;
+        if (strcmp(argv[2], "add") == 0) {
+            if (!ailang_package_manager_add(&options, argv[3], output, sizeof(output), error, sizeof(error))) {
+                fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
+                return 2;
+            }
+        } else if (!ailang_package_manager_remove(&options, argv[3], output, sizeof(output), error, sizeof(error))) {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
+            return 2;
+        }
+        fputs(output, stdout);
+        return 0;
     }
-    ailang_native_bridge_init(&bridge);
-    if (!ailang_package_manager_register(&bridge, error, sizeof(error))) {
-        fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
-        return 2;
-    }
-    ailang_native_value_string(&arg, project_dir);
-    if (!ailang_native_bridge_call(&bridge, fn_name, &arg, 1U, &result, error, sizeof(error))) {
-        fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", error);
-        return 2;
-    }
-    if (result.type == AILANG_NATIVE_STRING && result.as.string_value != NULL) {
-        fputs(result.as.string_value, stdout);
-    }
-    return 0;
+    fprintf(stderr, "Err#err1(code=PKG000 message=\"Unknown package command.\" nodeId=package)\n");
+    return 2;
 }

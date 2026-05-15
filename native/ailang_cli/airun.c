@@ -2236,6 +2236,8 @@ static void print_usage(void)
         "  init <project-dir> [--template <cli|cli-args>] [--agent <codex|claude|cursor|gemini|copilot|windsurf>] [--agents <list|all>] [--force]\n"
         "  template list [projects|files] [project-dir]\n"
         "  package <list|restore> [project-dir]\n"
+        "  package add <name[@version]> [project-dir]\n"
+        "  package remove <name> [project-dir]\n"
         "  clean [program(.aibc1|.aos|project-dir|project.aiproj)]\n"
         "  repl\n"
         "  bench [--iterations <n>] [--human]\n"
@@ -9595,6 +9597,28 @@ int main(int argc, char** argv)
     }
     if (strcmp(argv[1], "clean") == 0) {
         return handle_clean(argc, argv);
+    }
+
+    {
+        AilangPackageManagerOptions package_options;
+        int package_tool_exit = 0;
+        char package_tool_error[512];
+        memset(&package_options, 0, sizeof(package_options));
+        package_tool_error[0] = '\0';
+        if (ailang_package_manager_try_run_tool(
+                &package_options,
+                argv[1],
+                argc - 2,
+                argc > 2 ? &argv[2] : NULL,
+                &package_tool_exit,
+                package_tool_error,
+                sizeof(package_tool_error))) {
+            return package_tool_exit;
+        }
+        if (package_tool_error[0] != '\0') {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=package)\n", package_tool_error);
+            return 2;
+        }
     }
 
     fprintf(stderr, "Unknown command: %s\n", argv[1]);
