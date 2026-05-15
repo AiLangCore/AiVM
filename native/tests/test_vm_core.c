@@ -1,12 +1,20 @@
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "aivm_program.h"
 #include "aivm_vm.h"
 
-static int expect(int condition)
+static int expect_line(int condition, int line)
 {
-    return condition ? 0 : 1;
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
 }
+
+#define expect(condition) expect_line((condition), __LINE__)
 
 static int host_core_bytes_small(
     const char* target,
@@ -46,7 +54,7 @@ static int host_core_bytes_large(
 
 static int test_run_nop_halt(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_NOP, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
@@ -80,7 +88,7 @@ static int test_run_nop_halt(void)
 
 static int test_invalid_opcode_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = (AivmOpcode)99, .operand_int = 0 }
     };
@@ -107,7 +115,7 @@ static int test_invalid_opcode_sets_error(void)
 
 static int test_stub_opcode_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_STUB, .operand_int = 0 }
     };
@@ -137,7 +145,7 @@ static int test_stub_opcode_sets_error(void)
 
 static int test_halt_without_program_is_safe(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
 
     aivm_init(&vm, NULL);
     aivm_halt(&vm);
@@ -151,7 +159,7 @@ static int test_halt_without_program_is_safe(void)
 
 static int test_empty_program_halts(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmProgram program = {
         .instructions = NULL,
         .instruction_count = 0U,
@@ -172,7 +180,7 @@ static int test_empty_program_halts(void)
 
 static int test_missing_instruction_buffer_sets_error_detail(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmProgram program = {
         .instructions = NULL,
         .instruction_count = 1U,
@@ -221,7 +229,7 @@ static int test_gc_policy_constants_are_valid(void)
 
 static int test_reset_keeps_gc_allocation_counter_deterministic(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const char* argv_values[] = { "first", "second" };
 
     aivm_init_with_syscalls_and_argv(&vm, NULL, NULL, 0U, argv_values, 2U);
@@ -242,7 +250,7 @@ static int test_reset_keeps_gc_allocation_counter_deterministic(void)
 
 static int test_reset_clears_gc_counters_after_allocations(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
@@ -315,8 +323,8 @@ static int test_reset_clears_gc_counters_after_allocations(void)
 
 static int test_gc_policy_requires_interval_even_under_pressure(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U) * 3U + 1U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS - 1U) * 3U + 1U];
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = "tmp" }
     };
@@ -383,8 +391,8 @@ static int test_gc_policy_requires_interval_even_under_pressure(void)
 
 static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = "tmp" }
     };
@@ -454,8 +462,8 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
 
 static int test_gc_counters_saturate_without_wrapping(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = "tmp" }
     };
@@ -532,7 +540,7 @@ static int test_gc_counters_saturate_without_wrapping(void)
 
 static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -586,7 +594,7 @@ static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
 
 static int test_reset_clears_pressure_counters_after_string_failure(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -641,7 +649,7 @@ static int test_reset_clears_pressure_counters_after_string_failure(void)
 
 static int test_reset_clears_pressure_counters_after_bytes_failure(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -694,13 +702,17 @@ static int test_reset_clears_pressure_counters_after_bytes_failure(void)
 
 static int test_reset_clears_pressure_counters_after_node_failure(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 1U) * 2U + 1U];
+    static AivmVm vm;
+    AivmInstruction* instructions;
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
     size_t i;
 
+    instructions = (AivmInstruction*)calloc((AIVM_VM_NODE_CAPACITY + 1U) * 2U + 1U, sizeof(AivmInstruction));
+    if (instructions == NULL) {
+        return 1;
+    }
     constants[0] = aivm_value_string("tmp");
     for (i = 0U; i < (size_t)(AIVM_VM_NODE_CAPACITY + 1U); i += 1U) {
         instructions[ip].opcode = AIVM_OP_CONST;
@@ -723,34 +735,42 @@ static int test_reset_clears_pressure_counters_after_node_failure(void)
     aivm_init(&vm, &program);
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        free(instructions);
         return 1;
     }
     if (expect(vm.error == AIVM_VM_ERR_MEMORY_PRESSURE) != 0) {
+        free(instructions);
         return 1;
     }
     if (expect(vm.node_arena_pressure_count == 1U) != 0) {
+        free(instructions);
         return 1;
     }
 
     aivm_reset_state(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_READY) != 0) {
+        free(instructions);
         return 1;
     }
     if (expect(vm.string_arena_pressure_count == 0U) != 0) {
+        free(instructions);
         return 1;
     }
     if (expect(vm.bytes_arena_pressure_count == 0U) != 0) {
+        free(instructions);
         return 1;
     }
     if (expect(vm.node_arena_pressure_count == 0U) != 0) {
+        free(instructions);
         return 1;
     }
+    free(instructions);
     return 0;
 }
 
 static int test_pressure_counters_remain_zero_on_successful_run(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 2 },

@@ -2388,11 +2388,11 @@ static int compact_node_arenas_with_map(
     size_t extra_handle_count,
     int64_t* out_handle_map)
 {
-    uint8_t live[AIVM_VM_NODE_CAPACITY];
-    int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
-    AivmNodeRecord new_nodes[AIVM_VM_NODE_CAPACITY];
-    AivmNodeAttr new_attrs[AIVM_VM_NODE_ATTR_CAPACITY];
-    int64_t new_children[AIVM_VM_NODE_CHILD_CAPACITY];
+    uint8_t* live = NULL;
+    int64_t* handle_map = NULL;
+    AivmNodeRecord* new_nodes = NULL;
+    AivmNodeAttr* new_attrs = NULL;
+    int64_t* new_children = NULL;
     size_t new_node_count = 0U;
     size_t new_attr_count = 0U;
     size_t new_child_count = 0U;
@@ -2408,14 +2408,26 @@ static int compact_node_arenas_with_map(
     if (vm->node_count == 0U) {
         return 1;
     }
+    live = (uint8_t*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(uint8_t));
+    handle_map = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY + 1U, sizeof(int64_t));
+    new_nodes = (AivmNodeRecord*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(AivmNodeRecord));
+    new_attrs = (AivmNodeAttr*)calloc(AIVM_VM_NODE_ATTR_CAPACITY, sizeof(AivmNodeAttr));
+    new_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(int64_t));
+    if (live == NULL || handle_map == NULL || new_nodes == NULL || new_attrs == NULL || new_children == NULL) {
+        free(live);
+        free(handle_map);
+        free(new_nodes);
+        free(new_attrs);
+        free(new_children);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction allocation failed.");
+        return 0;
+    }
     old_node_count = vm->node_count;
     old_attr_count = vm->node_attr_count;
     old_child_count = vm->node_child_count;
 
-    memset(live, 0, sizeof(live));
-    memset(handle_map, 0, sizeof(handle_map));
     if (!mark_live_node_handles(vm, live, extra_handles, extra_handle_count)) {
-        return 0;
+        goto fail;
     }
 
     for (i = 0U; i < vm->node_count; i += 1U) {
@@ -2425,7 +2437,7 @@ static int compact_node_arenas_with_map(
             if (!size_add_checked(i, 1U, &old_handle_index) ||
                 !size_add_checked(new_node_count, 1U, &compacted_handle)) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction handle overflow.");
-                return 0;
+                goto fail;
             }
             handle_map[old_handle_index] = (int64_t)compacted_handle;
             new_node_count = compacted_handle;
@@ -2447,12 +2459,12 @@ static int compact_node_arenas_with_map(
             int64_t compacted_handle;
             if (!size_add_checked(i, 1U, &old_handle_index)) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction handle overflow.");
-                return 0;
+                goto fail;
             }
             compacted_handle = handle_map[old_handle_index];
             if (compacted_handle <= 0) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling live node handle during node GC.");
-                return 0;
+                goto fail;
             }
             out_node = &new_nodes[(size_t)(compacted_handle - 1)];
         }
@@ -2468,7 +2480,7 @@ static int compact_node_arenas_with_map(
                 needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
                 needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
-                return 0;
+                goto fail;
             }
         }
 
@@ -2480,7 +2492,7 @@ static int compact_node_arenas_with_map(
                 new_attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY ||
                 old_attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during node GC.");
-                return 0;
+                goto fail;
             }
             new_attrs[new_attr_slot] = vm->node_attrs[old_attr_slot];
         }
@@ -2493,25 +2505,25 @@ static int compact_node_arenas_with_map(
                 old_child_slot >= AIVM_VM_NODE_CHILD_CAPACITY ||
                 new_child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node child slot overflow during node GC.");
-                return 0;
+                goto fail;
             }
             old_child = vm->node_children[old_child_slot];
             if (old_child <= 0 || old_child > (int64_t)AIVM_VM_NODE_CAPACITY || handle_map[old_child] <= 0) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling child handle during node GC.");
-                return 0;
+                goto fail;
             }
             new_children[new_child_slot] = handle_map[old_child];
         }
         if (!size_add_checked(new_attr_count, old_node->attr_count, &new_attr_count) ||
             !size_add_checked(new_child_count, old_node->child_count, &new_child_count)) {
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node compaction capacity exceeded.");
-            return 0;
+            goto fail;
         }
     }
 
-    memcpy(vm->nodes, new_nodes, sizeof(new_nodes));
-    memcpy(vm->node_attrs, new_attrs, sizeof(new_attrs));
-    memcpy(vm->node_children, new_children, sizeof(new_children));
+    memcpy(vm->nodes, new_nodes, sizeof(vm->nodes));
+    memcpy(vm->node_attrs, new_attrs, sizeof(vm->node_attrs));
+    memcpy(vm->node_children, new_children, sizeof(vm->node_children));
     vm->node_count = new_node_count;
     vm->node_attr_count = new_attr_count;
     vm->node_child_count = new_child_count;
@@ -2523,32 +2535,32 @@ static int compact_node_arenas_with_map(
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (!remap_value_node_handle(&vm->stack[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid stack node handle during node GC.");
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->locals_count; i += 1U) {
         if (!remap_value_node_handle(&vm->locals[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid local node handle during node GC.");
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
         if (!remap_value_node_handle(&vm->completed_tasks[i].result, handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid completed-task node handle during node GC.");
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->par_value_count; i += 1U) {
         if (!remap_value_node_handle(&vm->par_values[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid parallel-value node handle during node GC.");
-            return 0;
+            goto fail;
         }
     }
     if (vm->process_argv_node_handle > 0) {
         if (vm->process_argv_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
             handle_map[vm->process_argv_node_handle] <= 0) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid process argv node handle during node GC.");
-            return 0;
+            goto fail;
         }
         vm->process_argv_node_handle = handle_map[vm->process_argv_node_handle];
     }
@@ -2556,7 +2568,7 @@ static int compact_node_arenas_with_map(
         if (vm->ui_default_window_size_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
             handle_map[vm->ui_default_window_size_node_handle] <= 0) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid ui window size node handle during node GC.");
-            return 0;
+            goto fail;
         }
         vm->ui_default_window_size_node_handle = handle_map[vm->ui_default_window_size_node_handle];
     }
@@ -2564,14 +2576,27 @@ static int compact_node_arenas_with_map(
         if (vm->ui_empty_event_node_handle > (int64_t)AIVM_VM_NODE_CAPACITY ||
             handle_map[vm->ui_empty_event_node_handle] <= 0) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid ui event node handle during node GC.");
-            return 0;
+            goto fail;
         }
         vm->ui_empty_event_node_handle = handle_map[vm->ui_empty_event_node_handle];
     }
     if (out_handle_map != NULL) {
-        memcpy(out_handle_map, handle_map, sizeof(handle_map));
+        memcpy(out_handle_map, handle_map, (AIVM_VM_NODE_CAPACITY + 1U) * sizeof(handle_map[0]));
     }
+    free(live);
+    free(handle_map);
+    free(new_nodes);
+    free(new_attrs);
+    free(new_children);
     return 1;
+
+fail:
+    free(live);
+    free(handle_map);
+    free(new_nodes);
+    free(new_attrs);
+    free(new_children);
+    return 0;
 }
 
 static int remap_child_handles_for_compaction(
@@ -2639,9 +2664,9 @@ static int create_node_record(
     int64_t* out_handle)
 {
     AivmNodeRecord* node;
-    int64_t remapped_children[AIVM_VM_NODE_CHILD_CAPACITY];
+    int64_t* remapped_children = NULL;
     const int64_t* effective_children = children;
-    int64_t handle_map[AIVM_VM_NODE_CAPACITY + 1U];
+    int64_t* handle_map = NULL;
     size_t needed_attr_count = 0U;
     size_t needed_child_count = 0U;
     size_t needed_node_count = 0U;
@@ -2649,13 +2674,21 @@ static int create_node_record(
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
     }
+    remapped_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(int64_t));
+    handle_map = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY + 1U, sizeof(int64_t));
+    if (remapped_children == NULL || handle_map == NULL) {
+        free(remapped_children);
+        free(handle_map);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node allocation scratch allocation failed.");
+        return 0;
+    }
     if (should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
         if (!compact_node_arenas_with_map(vm, children, child_count, handle_map)) {
-            return 0;
+            goto fail;
         }
         if (!remap_child_handles_for_compaction(vm, remapped_children, children, child_count, handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child handle remap during proactive node GC.");
-            return 0;
+            goto fail;
         }
         if (child_count > 0U) {
             effective_children = remapped_children;
@@ -2667,17 +2700,17 @@ static int create_node_record(
         !size_add_checked(vm->node_count, 1U, &needed_node_count)) {
         increment_counter_saturating(&vm->node_arena_pressure_count);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
-        return 0;
+        goto fail;
     }
     if (needed_node_count > AIVM_VM_NODE_CAPACITY ||
         needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
         needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
         if (!compact_node_arenas_with_map(vm, effective_children, child_count, handle_map)) {
-            return 0;
+            goto fail;
         }
         if (!remap_child_handles_for_compaction(vm, remapped_children, effective_children, child_count, handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child handle remap during node GC.");
-            return 0;
+            goto fail;
         }
         if (child_count > 0U) {
             effective_children = remapped_children;
@@ -2691,7 +2724,7 @@ static int create_node_record(
             needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
             increment_counter_saturating(&vm->node_arena_pressure_count);
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
-            return 0;
+            goto fail;
         }
     }
 
@@ -2699,7 +2732,7 @@ static int create_node_record(
     node->kind = copy_string_to_arena(vm, kind);
     node->id = copy_string_to_arena(vm, id);
     if (node->kind == NULL || node->id == NULL) {
-        return 0;
+        goto fail;
     }
     node->attr_start = vm->node_attr_count;
     node->attr_count = attr_count;
@@ -2714,18 +2747,18 @@ static int create_node_record(
             attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
             increment_counter_saturating(&vm->node_arena_pressure_count);
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
-            return 0;
+            goto fail;
         }
         out_attr = &vm->node_attrs[attr_slot];
         out_attr->key = copy_string_to_arena(vm, attr.key);
         out_attr->kind = attr.kind;
         if (out_attr->key == NULL) {
-            return 0;
+            goto fail;
         }
         if (attr.kind == AIVM_NODE_ATTR_IDENTIFIER || attr.kind == AIVM_NODE_ATTR_STRING) {
             out_attr->string_value = copy_string_to_arena(vm, attr.string_value == NULL ? "" : attr.string_value);
             if (out_attr->string_value == NULL) {
-                return 0;
+                goto fail;
             }
         } else if (attr.kind == AIVM_NODE_ATTR_INT) {
             out_attr->int_value = attr.int_value;
@@ -2740,7 +2773,7 @@ static int create_node_record(
             child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
             increment_counter_saturating(&vm->node_arena_pressure_count);
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
-            return 0;
+            goto fail;
         }
         vm->node_children[child_slot] = effective_children[i];
     }
@@ -2764,7 +2797,14 @@ static int create_node_record(
         }
     }
     *out_handle = (int64_t)vm->node_count;
+    free(remapped_children);
+    free(handle_map);
     return 1;
+
+fail:
+    free(remapped_children);
+    free(handle_map);
+    return 0;
 }
 
 static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value)
@@ -3481,6 +3521,7 @@ void aivm_step(AivmVm* vm)
             size_t arg_count = 0U;
             size_t frame_base = 0U;
             size_t return_ip = 0U;
+            int is_tail_call = 0;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -3502,6 +3543,31 @@ void aivm_step(AivmVm* vm)
             }
             record_recent_call(vm, vm->instruction_pointer, target, arg_count, vm->stack_count);
             frame_base = vm->stack_count - arg_count;
+            if (vm->call_frame_count > 0U &&
+                vm->instruction_pointer + 1U < vm->program->instruction_count &&
+                (vm->program->instructions[vm->instruction_pointer + 1U].opcode == AIVM_OP_RETURN ||
+                 vm->program->instructions[vm->instruction_pointer + 1U].opcode == AIVM_OP_RET)) {
+                is_tail_call = 1;
+            }
+            if (is_tail_call != 0) {
+                AivmCallFrame* current_frame = &vm->call_frames[vm->call_frame_count - 1U];
+                size_t tail_frame_base = current_frame->frame_base;
+                if (tail_frame_base > frame_base) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Tail-call frame base exceeds argument base.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                if (arg_count > 0U) {
+                    memmove(
+                        &vm->stack[tail_frame_base],
+                        &vm->stack[frame_base],
+                        arg_count * sizeof(vm->stack[0]));
+                }
+                vm->stack_count = tail_frame_base + arg_count;
+                vm->locals_count = current_frame->locals_base;
+                vm->instruction_pointer = target;
+                break;
+            }
             if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip) ||
                 !aivm_frame_push(vm, return_ip, frame_base)) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -4389,8 +4455,8 @@ void aivm_step(AivmVm* vm)
             const AivmNodeRecord* base_node;
             const AivmNodeRecord* child_node;
             int64_t child_handle;
-            int64_t new_children[AIVM_VM_NODE_CHILD_CAPACITY];
-            AivmNodeAttr attrs[AIVM_VM_NODE_ATTR_CAPACITY];
+            int64_t* new_children = NULL;
+            AivmNodeAttr* attrs = NULL;
             int64_t handle;
             size_t needed_child_count = 0U;
             size_t i;
@@ -4418,10 +4484,21 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            new_children = (int64_t*)calloc(needed_child_count, sizeof(int64_t));
+            attrs = (AivmNodeAttr*)calloc(base_node->attr_count == 0U ? 1U : base_node->attr_count, sizeof(AivmNodeAttr));
+            if (new_children == NULL || attrs == NULL) {
+                free(new_children);
+                free(attrs);
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "APPEND_CHILD scratch allocation failed.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
             for (i = 0U; i < base_node->attr_count; i += 1U) {
                 size_t attr_slot = 0U;
                 if (!size_add_checked(base_node->attr_start, i, &attr_slot) ||
                     attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    free(new_children);
+                    free(attrs);
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD attr slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4429,12 +4506,16 @@ void aivm_step(AivmVm* vm)
                 attrs[i] = vm->node_attrs[attr_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
+                free(new_children);
+                free(attrs);
                 break;
             }
             for (i = 0U; i < base_node->child_count; i += 1U) {
                 size_t child_slot = 0U;
                 if (!size_add_checked(base_node->child_start, i, &child_slot) ||
                     child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    free(new_children);
+                    free(attrs);
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD child slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4442,6 +4523,8 @@ void aivm_step(AivmVm* vm)
                 new_children[i] = vm->node_children[child_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
+                free(new_children);
+                free(attrs);
                 break;
             }
             new_children[base_node->child_count] = child_handle;
@@ -4454,9 +4537,13 @@ void aivm_step(AivmVm* vm)
                 new_children,
                 needed_child_count,
                 &handle)) {
+                free(new_children);
+                free(attrs);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            free(new_children);
+            free(attrs);
             if (!aivm_stack_push(vm, aivm_value_node(handle))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -4470,8 +4557,8 @@ void aivm_step(AivmVm* vm)
             AivmValue node_value;
             const AivmNodeRecord* base_node;
             const AivmNodeRecord* attr_node;
-            AivmNodeAttr attrs[AIVM_VM_NODE_ATTR_CAPACITY];
-            int64_t children[AIVM_VM_NODE_CHILD_CAPACITY];
+            AivmNodeAttr* attrs = NULL;
+            int64_t* children = NULL;
             int64_t handle;
             size_t needed_attr_count = 0U;
             size_t i;
@@ -4494,10 +4581,21 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            attrs = (AivmNodeAttr*)calloc(needed_attr_count, sizeof(AivmNodeAttr));
+            children = (int64_t*)calloc(base_node->child_count == 0U ? 1U : base_node->child_count, sizeof(int64_t));
+            if (attrs == NULL || children == NULL) {
+                free(attrs);
+                free(children);
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "APPEND_ATTR scratch allocation failed.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
             for (i = 0U; i < base_node->attr_count; i += 1U) {
                 size_t attr_slot = 0U;
                 if (!size_add_checked(base_node->attr_start, i, &attr_slot) ||
                     attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    free(attrs);
+                    free(children);
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR attr slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4505,6 +4603,8 @@ void aivm_step(AivmVm* vm)
                 attrs[i] = vm->node_attrs[attr_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
+                free(attrs);
+                free(children);
                 break;
             }
             attrs[base_node->attr_count] = vm->node_attrs[attr_node->attr_start];
@@ -4513,6 +4613,8 @@ void aivm_step(AivmVm* vm)
                 size_t child_slot = 0U;
                 if (!size_add_checked(base_node->child_start, i, &child_slot) ||
                     child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    free(attrs);
+                    free(children);
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR child slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -4520,6 +4622,8 @@ void aivm_step(AivmVm* vm)
                 children[i] = vm->node_children[child_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
+                free(attrs);
+                free(children);
                 break;
             }
             if (!create_node_record(
@@ -4531,9 +4635,13 @@ void aivm_step(AivmVm* vm)
                 children,
                 base_node->child_count,
                 &handle)) {
+                free(attrs);
+                free(children);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            free(attrs);
+            free(children);
             if (!aivm_stack_push(vm, aivm_value_node(handle))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;

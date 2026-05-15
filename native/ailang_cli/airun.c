@@ -4410,7 +4410,7 @@ static int run_native_compiled_program(
     const NativeDebugOptions* debug_options)
 {
     AivmSyscallBinding bindings[107];
-    AivmVm vm;
+    static AivmVm vm;
     int ok;
     int exit_code = 0;
     int has_exit_code = 0;

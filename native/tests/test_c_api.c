@@ -22,7 +22,7 @@ static int host_ui_get_window_size(
 int main(void)
 {
     AivmCResult result;
-    AivmVm vm;
+    static AivmVm vm;
     uint32_t abi_version;
     static const AivmInstruction ok_instructions[] = {
         { .opcode = AIVM_OP_NOP, .operand_int = 0 },

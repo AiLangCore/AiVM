@@ -10,7 +10,7 @@ static int expect(int condition)
 
 int main(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction async_call_instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = -1 }
     };

@@ -23,7 +23,7 @@ $builder = New-Object System.Text.StringBuilder
 [void]$builder.AppendLine('  Const#k0(kind=string value="n")')
 [void]$builder.AppendLine('  Func#f1(name=main params="argv" locals="") {')
 $instId = 1
-for ($n = 1; $n -le 2200; $n++) {
+for ($n = 1; $n -le 17000; $n++) {
   [void]$builder.AppendLine(("    Inst#c{0}(op=CONST a=0)" -f $instId))
   $instId++
   [void]$builder.AppendLine(("    Inst#m{0}(op=MAKE_BLOCK)" -f $instId))
@@ -51,9 +51,9 @@ if ($diag -notmatch 'vm_code=AIVM011') { throw 'debug memory smoke: expected vm_
 if ($diag -notmatch 'detail=(AIVMM005: )?node arena capacity exceeded\.') { throw 'debug memory smoke: expected node arena capacity detail' }
 if ($diag -notmatch 'node_gc_compactions = [1-9][0-9]*') { throw 'debug memory smoke: expected gc compaction activity' }
 if ($diag -notmatch 'node_gc_attempts = [1-9][0-9]*') { throw 'debug memory smoke: expected gc attempt activity' }
-if ($diag -notmatch 'node_count = 2048') { throw 'debug memory smoke: expected node_count=2048' }
-if ($diag -notmatch 'node_high_water = 2048') { throw 'debug memory smoke: expected node_high_water=2048' }
-if ($diag -notmatch 'node_gc_pressure_threshold_nodes = 1536') { throw 'debug memory smoke: expected node_gc_pressure_threshold_nodes=1536' }
+if ($diag -notmatch 'node_count = 16384') { throw 'debug memory smoke: expected node_count=16384' }
+if ($diag -notmatch 'node_high_water = 16384') { throw 'debug memory smoke: expected node_high_water=16384' }
+if ($diag -notmatch 'node_gc_pressure_threshold_nodes = 12288') { throw 'debug memory smoke: expected node_gc_pressure_threshold_nodes=12288' }
 if ($diag -notmatch 'node_roots = \{') { throw 'debug memory smoke: expected node_roots table' }
 if ($snap -notmatch 'node_gc_attempts = [1-9][0-9]*') { throw 'debug memory smoke: expected node_gc_attempts>0 in state snapshots' }
 if ($snap -notmatch 'node_root_stack_slots') { throw 'debug memory smoke: expected node_root_stack_slots in state snapshots' }

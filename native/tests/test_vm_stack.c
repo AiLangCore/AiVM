@@ -7,7 +7,7 @@ static int expect(int condition)
 
 int main(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue value;
     AivmValue out;
     size_t i;

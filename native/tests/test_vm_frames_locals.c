@@ -9,7 +9,7 @@ static int expect(int condition)
 
 int main(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmCallFrame frame;
     AivmValue value;
     AivmValue out;

@@ -236,7 +236,7 @@ static int run_high_inflight_event_queue_stress(size_t* out_checksum)
 
 int main(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     HostAdapterState adapter_state;
     AivmRuntimeHostAdapter adapter;
     size_t drained_count = 0U;

@@ -151,7 +151,7 @@ int main(void)
     AivmValue result;
     AivmSyscallStatus status;
     int64_t handle;
-    AivmVm vm;
+    static AivmVm vm;
     const AivmNodeRecord* node = NULL;
 
     create_args[0] = aivm_value_string("Image Test");

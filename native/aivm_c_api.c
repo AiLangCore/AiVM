@@ -1,6 +1,7 @@
 #include "aivm_c_api.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "aivm_runtime.h"
 
@@ -84,9 +85,15 @@ AivmCResult aivm_c_execute_instructions_with_syscalls(
     size_t binding_count)
 {
     AivmProgram program;
-    AivmVm vm;
+    AivmVm* vm;
     AivmCResult result = result_defaults();
 
+    vm = (AivmVm*)calloc(1U, sizeof(AivmVm));
+    if (vm == NULL) {
+        result.status = AIVM_VM_STATUS_ERROR;
+        result.error = AIVM_VM_ERR_MEMORY_PRESSURE;
+        return result;
+    }
     aivm_program_init(&program, instructions, instruction_count);
     if (constants != NULL && constant_count > 0U) {
         program.constants = constants;
@@ -100,11 +107,12 @@ AivmCResult aivm_c_execute_instructions_with_syscalls(
         &program,
         bindings,
         binding_count,
-        &vm);
-    result.status = vm.status;
-    result.error = vm.error;
-    capture_error_detail(&result, &vm);
-    capture_exit_code(&result, &vm);
+        vm);
+    result.status = vm->status;
+    result.error = vm->error;
+    capture_error_detail(&result, vm);
+    capture_exit_code(&result, vm);
+    free(vm);
     return result;
 }
 
@@ -128,14 +136,21 @@ AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
     const char* const* process_argv,
     size_t process_argv_count)
 {
-    AivmVm vm;
+    AivmVm* vm;
     AivmCResult result = result_defaults();
 
+    vm = (AivmVm*)calloc(1U, sizeof(AivmVm));
+    if (vm == NULL) {
+        result.status = AIVM_VM_STATUS_ERROR;
+        result.error = AIVM_VM_ERR_MEMORY_PRESSURE;
+        return result;
+    }
     if (program == NULL) {
         result.load_status = AIVM_PROGRAM_ERR_NULL;
         result.load_error_offset = 0U;
         result.status = AIVM_VM_STATUS_ERROR;
         result.error = AIVM_VM_ERR_INVALID_PROGRAM;
+        free(vm);
         return result;
     }
 
@@ -148,11 +163,12 @@ AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
         binding_count,
         process_argv,
         process_argv_count,
-        &vm);
-    result.status = vm.status;
-    result.error = vm.error;
-    capture_error_detail(&result, &vm);
-    capture_exit_code(&result, &vm);
+        vm);
+    result.status = vm->status;
+    result.error = vm->error;
+    capture_error_detail(&result, vm);
+    capture_exit_code(&result, vm);
+    free(vm);
     return result;
 }
 
@@ -185,10 +201,16 @@ AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
     size_t process_argv_count)
 {
     AivmProgram program;
-    AivmVm vm;
+    AivmVm* vm;
     AivmProgramLoadResult load_result;
     AivmCResult result = result_defaults();
 
+    vm = (AivmVm*)calloc(1U, sizeof(AivmVm));
+    if (vm == NULL) {
+        result.status = AIVM_VM_STATUS_ERROR;
+        result.error = AIVM_VM_ERR_MEMORY_PRESSURE;
+        return result;
+    }
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);
     result.load_status = load_result.status;
     result.load_error_offset = load_result.error_offset;
@@ -196,6 +218,7 @@ AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
     if (load_result.status != AIVM_PROGRAM_OK) {
         result.status = AIVM_VM_STATUS_ERROR;
         result.error = AIVM_VM_ERR_INVALID_PROGRAM;
+        free(vm);
         return result;
     }
 
@@ -206,11 +229,12 @@ AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
         binding_count,
         process_argv,
         process_argv_count,
-        &vm);
-    result.status = vm.status;
-    result.error = vm.error;
-    capture_error_detail(&result, &vm);
-    capture_exit_code(&result, &vm);
+        vm);
+    result.status = vm->status;
+    result.error = vm->error;
+    capture_error_detail(&result, vm);
+    capture_exit_code(&result, vm);
+    free(vm);
     return result;
 }
 

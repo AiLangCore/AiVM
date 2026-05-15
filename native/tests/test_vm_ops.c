@@ -1,12 +1,19 @@
+#include <stdio.h>
 #include <string.h>
 
 #include "aivm_program.h"
 #include "aivm_vm.h"
 
-static int expect(int condition)
+static int expect_line(int condition, int line)
 {
-    return condition ? 0 : 1;
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
 }
+
+#define expect(condition) expect_line((condition), __LINE__)
 
 static int host_ui_get_window_size(
     const char* target,
@@ -112,7 +119,7 @@ static int host_bytes_large(
 
 static int test_push_store_load_pop(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 41 },
@@ -163,7 +170,7 @@ static int test_push_store_load_pop(void)
 
 static int test_load_local_missing_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 }
     };
@@ -193,7 +200,7 @@ static int test_load_local_missing_sets_error(void)
 
 static int test_add_int(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 2 },
@@ -230,7 +237,7 @@ static int test_add_int(void)
 
 static int test_add_int_type_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue non_int;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 }
@@ -264,7 +271,7 @@ static int test_add_int_type_mismatch_sets_error(void)
 
 static int test_jump_skips_instruction(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_JUMP, .operand_int = 2 },
@@ -300,7 +307,7 @@ static int test_jump_skips_instruction(void)
 
 static int test_jump_if_false_takes_branch(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_BOOL, .operand_int = 0 },
@@ -337,7 +344,7 @@ static int test_jump_if_false_takes_branch(void)
 
 static int test_jump_if_false_type_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_JUMP_IF_FALSE, .operand_int = 0 }
@@ -366,7 +373,7 @@ static int test_jump_if_false_type_mismatch_sets_error(void)
 
 static int test_call_ret_roundtrip(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CALL, .operand_int = 2 },
@@ -406,7 +413,7 @@ static int test_call_ret_roundtrip(void)
 
 static int test_call_ret_rejects_extra_callee_stack_values(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 11 },
         { .opcode = AIVM_OP_CALL, .operand_int = 3 },
@@ -443,7 +450,7 @@ static int test_call_ret_rejects_extra_callee_stack_values(void)
 
 static int test_top_level_ret_halts(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_RET, .operand_int = 0 }
     };
@@ -470,7 +477,7 @@ static int test_top_level_ret_halts(void)
 
 static int test_top_level_return_alias_halts(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
     };
@@ -496,7 +503,7 @@ static int test_top_level_return_alias_halts(void)
 
 static int test_return_alias_roundtrip(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CALL, .operand_int = 2 },
@@ -528,7 +535,7 @@ static int test_return_alias_roundtrip(void)
 
 static int test_call_target_equal_instruction_count_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CALL, .operand_int = 1 }
     };
@@ -556,7 +563,7 @@ static int test_call_target_equal_instruction_count_sets_error(void)
 
 static int test_call_ret_restores_caller_locals_scope(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
@@ -600,9 +607,9 @@ static int test_call_ret_restores_caller_locals_scope(void)
     return 0;
 }
 
-static int test_recursive_loop_without_tail_call_reuse_sets_frame_overflow(void)
+static int test_recursive_tail_call_reuses_current_frame(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CALL, .operand_int = 2 },
@@ -625,13 +632,13 @@ static int test_recursive_loop_without_tail_call_reuse_sets_frame_overflow(void)
         }
         aivm_step(&vm);
     }
-    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+    if (expect(vm.status == AIVM_VM_STATUS_RUNNING) != 0) {
         return 1;
     }
-    if (expect(vm.error == AIVM_VM_ERR_FRAME_OVERFLOW) != 0) {
+    if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "Call-frame overflow.") == 0) != 0) {
+    if (expect(vm.call_frame_count == 1U) != 0) {
         return 1;
     }
     return 0;
@@ -639,7 +646,7 @@ static int test_recursive_loop_without_tail_call_reuse_sets_frame_overflow(void)
 
 static int test_negative_jump_operand_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_JUMP, .operand_int = -1 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
@@ -669,7 +676,7 @@ static int test_negative_jump_operand_sets_error(void)
 
 static int test_eq_int_true_false(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
@@ -713,7 +720,7 @@ static int test_eq_int_true_false(void)
 
 static int test_eq_int_type_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
         { .opcode = AIVM_OP_PUSH_BOOL, .operand_int = 1 },
@@ -744,7 +751,7 @@ static int test_eq_int_type_mismatch_sets_error(void)
 
 static int test_eq_value_across_types(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
@@ -788,7 +795,7 @@ static int test_eq_value_across_types(void)
 
 static int test_eq_string_content_and_null_handling(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_EQ, .operand_int = 0 },
@@ -844,7 +851,7 @@ static int test_eq_string_content_and_null_handling(void)
 }
 static int test_eq_stack_underflow_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
         { .opcode = AIVM_OP_EQ, .operand_int = 0 }
@@ -870,7 +877,7 @@ static int test_eq_stack_underflow_sets_error(void)
 
 static int test_const_pushes_program_constant(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -906,7 +913,7 @@ static int test_const_pushes_program_constant(void)
 
 static int test_str_concat_success(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -948,7 +955,7 @@ static int test_str_concat_success(void)
 
 static int test_str_concat_type_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -984,7 +991,7 @@ static int test_str_concat_type_mismatch_sets_error(void)
 
 static int test_to_string_converts_scalar_values(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -1048,7 +1055,7 @@ static int test_to_string_converts_scalar_values(void)
 
 static int test_to_string_null_string_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_TO_STRING, .operand_int = 0 }
@@ -1082,7 +1089,7 @@ static int test_to_string_null_string_sets_error(void)
 
 static int test_str_escape_escapes_special_chars(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -1119,7 +1126,7 @@ static int test_str_escape_escapes_special_chars(void)
 
 static int test_str_escape_requires_string(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_STR_ESCAPE, .operand_int = 0 }
@@ -1153,7 +1160,7 @@ static int test_str_escape_requires_string(void)
 
 static int test_string_arena_overflow_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions_concat[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -1288,7 +1295,7 @@ static int test_string_arena_overflow_sets_error(void)
 
 static int test_bytes_arena_overflow_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -1345,7 +1352,7 @@ static int test_bytes_arena_overflow_sets_error(void)
 
 static int test_str_substring_and_remove_rune_clamp_semantics(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const char emoji_text[] = { 'a', (char)0xF0, (char)0x9F, (char)0x98, (char)0x80, 'b', '\0' };
     static const AivmInstruction instructions_substring[] = {
@@ -1446,7 +1453,7 @@ static int test_str_substring_and_remove_rune_clamp_semantics(void)
 
 static int test_str_substring_and_remove_type_mismatch(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -1484,7 +1491,7 @@ static int test_str_substring_and_remove_type_mismatch(void)
 
 static int test_str_substring_reuses_interned_results(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmVm baseline_vm;
     AivmValue second;
     AivmValue first;
@@ -1569,7 +1576,7 @@ static int test_str_substring_reuses_interned_results(void)
 
 static int test_call_sys_success_and_void_result(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -1633,7 +1640,7 @@ static int test_call_sys_success_and_void_result(void)
 
 static int test_call_sys_failure_sets_vm_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 }
@@ -1667,7 +1674,7 @@ static int test_call_sys_failure_sets_vm_error(void)
 
 static int test_call_sys_string_contracts_success(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -1741,7 +1748,7 @@ static int test_call_sys_string_contracts_success(void)
 
 static int test_call_sys_string_contract_type_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 2 },
@@ -1799,7 +1806,7 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
 
 static int test_call_sys_missing_binding_sets_unbound_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -1844,7 +1851,7 @@ static int test_call_sys_missing_binding_sets_unbound_error(void)
 
 static int test_call_sys_does_not_recover_non_syscall_string_target_from_args(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -1880,7 +1887,7 @@ static int test_call_sys_does_not_recover_non_syscall_string_target_from_args(vo
 
 static int test_nested_call_preserves_argument_without_tail_call_reuse(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
@@ -1924,7 +1931,7 @@ static int test_nested_call_preserves_argument_without_tail_call_reuse(void)
 
 static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     const AivmNodeRecord* stats_node;
     const AivmNodeAttr* attr0;
@@ -1998,7 +2005,7 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
 
 static int test_call_sys_debug_task_reclaim_stats_arity_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -2034,7 +2041,7 @@ static int test_call_sys_debug_task_reclaim_stats_arity_error(void)
 
 static int test_async_call_and_await_roundtrip(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
@@ -2062,7 +2069,7 @@ static int test_async_call_and_await_roundtrip(void)
 
 static int test_async_call_invalid_target_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 999 }
     };
@@ -2084,7 +2091,7 @@ static int test_async_call_invalid_target_sets_error(void)
 
 static int test_async_call_target_equal_instruction_count_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 1 }
     };
@@ -2106,7 +2113,7 @@ static int test_async_call_target_equal_instruction_count_sets_error(void)
 
 static int test_async_call_task_handle_overflow_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
@@ -2132,7 +2139,7 @@ static int test_async_call_task_handle_overflow_sets_error(void)
 
 static int test_async_call_rejects_extra_callee_stack_values(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
@@ -2158,7 +2165,7 @@ static int test_async_call_rejects_extra_callee_stack_values(void)
 
 static int test_async_call_rejects_invalid_call_target_layout(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 7 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 8 },
@@ -2187,7 +2194,7 @@ static int test_async_call_rejects_invalid_call_target_layout(void)
 
 static int test_async_call_reclaims_oldest_task_slot_when_full(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     size_t i;
     static const AivmInstruction instructions[] = {
@@ -2240,7 +2247,7 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
 
 static int test_await_evicted_task_handle_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
@@ -2287,7 +2294,7 @@ static int test_await_evicted_task_handle_sets_error(void)
 
 static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
@@ -2338,7 +2345,7 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
 
 static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
@@ -2383,7 +2390,7 @@ static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
 
 static int test_async_call_sys_and_await_roundtrip(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -2428,7 +2435,7 @@ static int test_async_call_sys_and_await_roundtrip(void)
 
 static int test_await_invalid_handle_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
@@ -2462,7 +2469,7 @@ static int test_await_invalid_handle_sets_error(void)
 
 static int test_await_pending_task_handle_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
@@ -2501,7 +2508,7 @@ static int test_await_pending_task_handle_sets_error(void)
 
 static int test_await_failed_task_handle_returns_terminal_result(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -2549,7 +2556,7 @@ static int test_await_failed_task_handle_returns_terminal_result(void)
 
 static int test_await_failed_task_non_err_result_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
@@ -2588,7 +2595,7 @@ static int test_await_failed_task_non_err_result_sets_error(void)
 
 static int test_parallel_join_resolves_canceled_task_handles(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     const AivmNodeRecord* block_node;
     const AivmNodeRecord* child;
@@ -2648,7 +2655,7 @@ static int test_parallel_join_resolves_canceled_task_handles(void)
 
 static int test_parallel_join_failed_task_non_err_result_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PAR_BEGIN, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -2689,7 +2696,7 @@ static int test_parallel_join_failed_task_non_err_result_sets_error(void)
 
 static int test_parallel_begin_fork_join_and_cancel(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     const AivmNodeRecord* block_node;
     const AivmNodeRecord* child0;
@@ -2754,7 +2761,7 @@ static int test_parallel_begin_fork_join_and_cancel(void)
 
 static int test_parallel_join_mismatch_sets_error(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PAR_BEGIN, .operand_int = 1 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 10 },
@@ -2780,7 +2787,7 @@ static int test_parallel_join_mismatch_sets_error(void)
 
 static int test_parallel_join_resolves_completed_task_handles(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     const AivmNodeRecord* block_node;
     const AivmNodeRecord* child;
@@ -2828,7 +2835,7 @@ static int test_parallel_join_resolves_completed_task_handles(void)
 
 static int test_parallel_fork_requires_context(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 10 },
         { .opcode = AIVM_OP_PAR_FORK, .operand_int = 0 }
@@ -2852,7 +2859,7 @@ static int test_parallel_fork_requires_context(void)
 
 static int test_parallel_join_requires_context(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PAR_JOIN, .operand_int = 0 }
     };
@@ -2875,7 +2882,7 @@ static int test_parallel_join_requires_context(void)
 
 static int test_str_utf8_byte_count(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const char emoji_text[] = { (char)0xF0, (char)0x9F, (char)0x98, (char)0x80, '\0' };
     static const AivmInstruction instructions[] = {
@@ -2912,7 +2919,7 @@ static int test_str_utf8_byte_count(void)
 
 static int test_str_utf8_byte_count_requires_string(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_STR_UTF8_BYTE_COUNT, .operand_int = 0 }
@@ -2946,7 +2953,7 @@ static int test_str_utf8_byte_count_requires_string(void)
 
 static int test_node_ops_core_semantics(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3069,7 +3076,7 @@ static int test_node_ops_core_semantics(void)
 
 static int test_make_node_from_template_and_children(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3117,7 +3124,7 @@ static int test_make_node_from_template_and_children(void)
 
 static int test_make_node_empty_from_kind_and_id(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3162,7 +3169,7 @@ static int test_make_node_empty_from_kind_and_id(void)
 
 static int test_append_attr_adds_lit_attr_to_node(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3214,7 +3221,7 @@ static int test_append_attr_adds_lit_attr_to_node(void)
 
 static int test_make_node_converts_scalar_children_to_runtime_nodes(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3260,8 +3267,8 @@ static int test_make_node_converts_scalar_children_to_runtime_nodes(void)
 
 static int test_node_compaction_reclaims_unreachable_nodes(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 32U) * 3U + 3U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 32U) * 3U + 3U];
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
@@ -3325,8 +3332,8 @@ static int test_node_compaction_reclaims_unreachable_nodes(void)
 
 static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY - 8U) * 3U + 3U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY - 8U) * 3U + 3U];
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
@@ -3398,8 +3405,8 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
 
 static int test_node_compaction_does_not_run_below_pressure_threshold(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[((size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 2U) * 3U + 3U];
+    static AivmVm vm;
+    static AivmInstruction instructions[((size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD - 2U) * 3U + 3U];
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
@@ -3462,10 +3469,10 @@ static int test_node_compaction_does_not_run_below_pressure_threshold(void)
 
 static int test_node_compaction_runs_on_child_pressure_before_node_threshold(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     size_t persistent_children = 17U;
     size_t transient_maps = ((size_t)AIVM_VM_NODE_CHILD_GC_PRESSURE_THRESHOLD / persistent_children) + 1U;
-    AivmInstruction instructions[17U * 3U + ((((size_t)AIVM_VM_NODE_CHILD_GC_PRESSURE_THRESHOLD / 17U) + 1U) * 20U) + 1U];
+    static AivmInstruction instructions[17U * 3U + ((((size_t)AIVM_VM_NODE_CHILD_GC_PRESSURE_THRESHOLD / 17U) + 1U) * 20U) + 1U];
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
@@ -3536,8 +3543,8 @@ static int test_node_compaction_runs_on_child_pressure_before_node_threshold(voi
 
 static int test_node_capacity_failure_resets_gc_allocation_counter(void)
 {
-    AivmVm vm;
-    AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 1U) * 2U + 1U];
+    static AivmVm vm;
+    static AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY + 1U) * 2U + 1U];
     AivmValue constants[1];
     AivmProgram program;
     size_t ip = 0U;
@@ -3603,7 +3610,7 @@ static int test_node_capacity_failure_resets_gc_allocation_counter(void)
 
 static int test_make_node_requires_node_args(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
@@ -3641,7 +3648,7 @@ static int test_make_node_requires_node_args(void)
 
 static int test_make_node_empty_requires_string_args(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3676,7 +3683,7 @@ static int test_make_node_empty_requires_string_args(void)
 
 static int test_append_attr_requires_single_attr_node(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -3716,7 +3723,7 @@ static int test_append_attr_requires_single_attr_node(void)
 
 static int test_make_lit_string_requires_string_id(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -3751,7 +3758,7 @@ static int test_make_lit_string_requires_string_id(void)
 
 static int test_make_block_requires_string_id(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 }
@@ -3775,7 +3782,7 @@ static int test_make_block_requires_string_id(void)
 
 static int test_child_at_out_of_range_sets_error_detail(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
@@ -3812,7 +3819,7 @@ static int test_child_at_out_of_range_sets_error_detail(void)
 
 static int test_append_child_requires_node_operands(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
@@ -3849,7 +3856,7 @@ static int test_append_child_requires_node_operands(void)
 
 static int test_node_kind_requires_node_operand(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
         { .opcode = AIVM_OP_NODE_KIND, .operand_int = 0 }
@@ -3873,7 +3880,7 @@ static int test_node_kind_requires_node_operand(void)
 
 static int test_attr_key_requires_node_and_index(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
@@ -3898,8 +3905,8 @@ static int test_attr_key_requires_node_and_index(void)
 
 static int run_attr_requires_node_and_index_test(AivmOpcode opcode, const char* expected_message)
 {
-    AivmVm vm;
-    AivmInstruction instructions[3];
+    static AivmVm vm;
+    static AivmInstruction instructions[3];
     AivmProgram program;
 
     instructions[0].opcode = AIVM_OP_PUSH_INT;
@@ -3954,7 +3961,7 @@ static int test_attr_value_bool_requires_node_and_index(void)
 
 static int test_make_err_requires_string_operands(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
@@ -3994,7 +4001,7 @@ static int test_make_err_requires_string_operands(void)
 
 static int test_make_field_string_and_map_roundtrip(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },  /* lit id */
@@ -4047,7 +4054,7 @@ static int test_make_field_string_and_map_roundtrip(void)
 
 static int test_make_map_requires_int_count(void)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_MAP, .operand_int = 0 }
@@ -4123,7 +4130,7 @@ int main(void)
     if (test_call_ret_restores_caller_locals_scope() != 0) {
         return 1;
     }
-    if (test_recursive_loop_without_tail_call_reuse_sets_frame_overflow() != 0) {
+    if (test_recursive_tail_call_reuses_current_frame() != 0) {
         return 1;
     }
     if (test_negative_jump_operand_sets_error() != 0) {

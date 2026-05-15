@@ -16,7 +16,7 @@ int main(void)
         .format_flags = 0U,
         .section_count = 0U
     };
-    AivmVm vm;
+    static AivmVm vm;
 
     aivm_init(&vm, &program);
     aivm_run(&vm);

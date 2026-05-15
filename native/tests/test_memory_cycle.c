@@ -8,7 +8,7 @@ static int expect(int condition)
 
 static int run_node_graph_program(size_t* out_node_count)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },

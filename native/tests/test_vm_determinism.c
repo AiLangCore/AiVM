@@ -26,7 +26,7 @@ static int host_utf8_count_constant(
 
 static int run_once_and_assert(const AivmProgram* program, const AivmSyscallBinding* bindings, size_t binding_count)
 {
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue out;
 
     aivm_init_with_syscalls(&vm, program, bindings, binding_count);

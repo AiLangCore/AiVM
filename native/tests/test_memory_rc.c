@@ -8,7 +8,7 @@ static int expect(int condition)
 
 static int run_string_program(size_t* out_arena_used)
 {
-    AivmVm vm;
+    static AivmVm vm;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },

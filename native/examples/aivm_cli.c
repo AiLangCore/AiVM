@@ -693,7 +693,7 @@ static int execute_bytes(
     size_t process_argv_count)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     AivmProgramLoadResult load_result;
     int ok;
     static const AivmSyscallBinding bindings[] = {

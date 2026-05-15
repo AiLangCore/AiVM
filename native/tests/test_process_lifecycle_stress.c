@@ -31,7 +31,7 @@ static void test_sleep_ms(unsigned int milliseconds)
 static int spawn_and_wait_zero_exit(void)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue wait_args[1];
     AivmValue poll_args[1];
@@ -77,7 +77,7 @@ static int spawn_and_wait_zero_exit(void)
 static int spawn_kill_wait_nonzero_exit(void)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue poll_args[1];
     AivmValue kill_args[1];
@@ -133,7 +133,7 @@ static int spawn_kill_wait_nonzero_exit(void)
 static int spawn_and_wait_nonzero_exit(void)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     AivmValue spawn_args[4];
     AivmValue wait_args[1];
     AivmValue poll_args[1];
@@ -224,7 +224,7 @@ static int bytes_contains(const uint8_t* haystack, size_t haystack_len, const ch
 static int spawn_uses_args_node_contract(void)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     const char* argv_values[2];
     AivmValue spawn_args[4];
     AivmValue read_args[1];
@@ -294,7 +294,7 @@ static int spawn_uses_args_node_contract(void)
 static int wait_drains_child_output_without_deadlock(void)
 {
     AivmProgram program;
-    AivmVm vm;
+    static AivmVm vm;
     const char* argv_values[2];
     AivmValue spawn_args[4];
     AivmValue wait_args[1];
