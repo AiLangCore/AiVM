@@ -14,6 +14,33 @@ mechanics that make those contracts deterministic and bounded.
   compaction and reclamation.
 - Keep host resources outside semantic memory unless explicitly represented by a
   syscall contract.
+- Support beta multithreaded execution without shared mutable semantic heaps.
+
+## Beta Memory and Threading Strategy
+
+For beta, AiVM may run background workers in parallel. Observable AiLang and
+AiVectra state changes must occur only through deterministic queue dispatch.
+
+Canonical rule:
+
+```text
+AiVM can run background workers in parallel, but observable AiLang/AiVectra
+state changes only happen through deterministic queue dispatch.
+```
+
+Beta requirements:
+
+- worker threads are mechanical execution resources
+- workers do not share a mutable semantic heap
+- workers do not mutate observable semantic state directly
+- worker results are copied, frozen, or represented as immutable messages
+- the deterministic event queue serializes worker results before semantic state
+  changes are applied
+- thread scheduling may affect completion timing, but must not affect
+  observable semantic order
+
+Generational memory management is not a beta requirement. Deterministic
+generational arenas are post-beta research and hardening work.
 
 ## Arena Model
 
@@ -86,9 +113,31 @@ Scratch memory may be used for:
 - temporary string snapshots
 - temporary child handle remapping
 - syscall marshaling
+- parser/compiler tokenization and parse construction
+- compiler/tooling analysis passes
 
 Scratch memory must be released or discarded before returning to normal VM
 execution. Live VM records must not point into scratch buffers.
+
+Parser/compiler scratch arenas are the next memory hardening step. Compiler
+workloads may create large volumes of temporary parser nodes and parse results.
+Those temporaries should be placed in scratch regions or shortened lifetimes
+before raising semantic node limits again.
+
+## Retained Intermediate Node Reduction
+
+Compiler and parser workloads must minimize retained intermediate nodes.
+
+Targets:
+
+- avoid retaining token nodes after the final AST is constructed
+- avoid retaining parse result wrapper nodes longer than needed
+- keep parser diagnostics rooted only while diagnostics are needed
+- prefer scratch-owned intermediate structures for parser/compiler internals
+- keep final AST nodes in semantic node storage
+
+Debug diagnostics should continue reporting retained node kinds and live root
+attribution so parser/compiler memory work is measurable.
 
 ## Worker-Local Heaps
 
@@ -98,6 +147,17 @@ Worker-local storage must not contain shared mutable AiLang semantic state.
 Worker results cross back into semantic execution only through deterministic VM
 queues or completed task records.
 
+Worker-local heaps are a beta-direction feature. They are allowed for
+background execution, blocking host work, parsing, validation, and other
+mechanical tasks. They are not shared semantic heaps.
+
+Worker-local heaps must:
+
+- be owned by one worker
+- be released when the worker task completes or is canceled
+- produce immutable message payloads or copied semantic values at the boundary
+- avoid exposing worker-local pointers to the UI/Semantic thread
+
 ## Immutable Shared Memory
 
 The following may be shared across workers because they are immutable:
@@ -106,10 +166,48 @@ The following may be shared across workers because they are immutable:
 - constant tables
 - read-only metadata
 - immutable frozen assets
+- immutable module cache entries
 
 Mutable semantic values are not shared across workers. If a value must cross a
 worker boundary, it must be copied, frozen, or represented as a deterministic
 message.
+
+An immutable shared module cache is a production direction after worker-local
+heap and deterministic message rules are stable. The cache must not contain
+mutable per-execution semantic state.
+
+## Deterministic Queue Dispatch
+
+AiVM owns the mechanical runtime queue used to serialize worker results back
+into observable execution.
+
+Queue requirements:
+
+- messages are immutable when enqueued
+- messages have deterministic ordering metadata
+- dequeue/application order is deterministic
+- batching is allowed when it preserves deterministic ordering
+- cancellation/shutdown messages are ordered deterministically
+- UI/Semantic thread state mutation occurs only while processing queue messages
+
+AiVM documents queue mechanics here. AiLang owns language-level concurrency
+semantics in its canonical specs. AiVectra owns UI runtime integration rules.
+
+## Large Object and Blob Storage
+
+Large object/blob storage is a production direction for assets, byte buffers,
+large UI payloads, and host data that should not pressure node/string arenas.
+
+Blob storage must:
+
+- be handle-based
+- have explicit resource limits
+- report deterministic allocation/read/write failures
+- avoid changing semantic ordering
+- be released deterministically by VM lifetime, profile policy, or explicit
+  resource ownership rules
+
+Large object storage must not become a shared mutable semantic heap.
 
 ## Safe Points
 
@@ -121,9 +219,16 @@ Required safe points include:
 - before proactive node compaction
 - at explicit VM reset/dispose boundaries
 - at allocation paths that can prove all temporary handles are protected
+- at deterministic compiler/tooling phase boundaries
+- at deterministic worker result handoff boundaries
 
 Compaction must not depend on wall-clock timing, host thread scheduling, or
 non-deterministic host state.
+
+Safe-point collection is the beta memory strategy before any generational
+memory work. The VM may prepare compaction mechanically on background workers
+only if the observable collection point and resulting state transition remain
+deterministic.
 
 ## Resource Limits
 
@@ -144,6 +249,15 @@ stable limits for:
 Future runtime profiles may tune those limits for production, debug, and
 compiler/tooling workloads. A profile change must be explicit and visible in
 diagnostics.
+
+Initial profile names:
+
+- `production`: normal command-line/runtime execution
+- `debug`: diagnostics, tracing, profiling, and developer inspection
+- `tooling`: compiler, parser, package restore, and SDK tooling workloads
+
+Runtime profiles select limits and diagnostics first. They must not silently
+change language semantics.
 
 ## Allocation Failure
 
@@ -173,6 +287,23 @@ Debug diagnostics may report:
 
 Diagnostics must distinguish live semantic roots from dead arena records.
 
+## Roadmap Order
+
+Memory and threading hardening proceeds in this order:
+
+1. Stabilize current bounded arenas.
+2. Add parser/compiler scratch arenas.
+3. Reduce retained intermediate nodes.
+4. Formalize deterministic safe-point compaction.
+5. Add worker-local heaps and deterministic messaging.
+6. Add immutable shared module cache.
+7. Add large-object/blob storage.
+8. Add runtime memory profiles.
+9. Research deterministic generational arenas after beta.
+
+Deterministic generational arenas are explicitly post-beta. They must not block
+beta readiness.
+
 ## Ownership Boundary
 
 AiVM owns this memory implementation strategy.
@@ -180,3 +311,6 @@ AiVM owns this memory implementation strategy.
 AiLang specs may define semantic requirements that constrain the strategy, but
 they must not duplicate runtime implementation constants or compaction mechanics
 as language semantics.
+
+AiVM must not duplicate AiLang concurrency semantics in this file. This document
+defines runtime memory, worker, queue, and compaction strategy only.

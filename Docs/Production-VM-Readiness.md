@@ -67,6 +67,16 @@ than embedded directly in `AivmVm`. The goal is to keep production behavior
 bounded without forcing every host process, test executable, or embedded API
 caller to carry a multi-megabyte stack object.
 
+Beta memory/threading direction:
+
+```text
+AiVM can run background workers in parallel, but observable AiLang/AiVectra
+state changes only happen through deterministic queue dispatch.
+```
+
+Generational memory management is post-beta research/hardening work, not a beta
+requirement.
+
 - [x] Keep stack, locals, strings, bytes, node, attr, and child arenas under
   explicit VM limits.
 - [x] Allocate large arena storage on the heap during VM initialization.
@@ -77,10 +87,44 @@ caller to carry a multi-megabyte stack object.
 - [x] Add live node-kind attribution to debug diagnostics.
 - [x] Add regression coverage for string arena compaction preserving live node
   strings.
-- [ ] Beta: add named runtime profiles for production, debug, and
-  compiler/tooling workloads.
+- [ ] Beta: add parser/compiler scratch arenas for tokenization, parse
+  construction, and compiler analysis passes.
 - [ ] Beta: reduce retained parser intermediate nodes so compiler source
   parsing does not depend on repeatedly raising arena ceilings.
+- [ ] Beta: formalize deterministic safe-point compaction beyond allocation
+  paths.
+- [ ] Beta: add worker-local heap strategy for mechanical background work.
+- [ ] Beta: add immutable message passing through deterministic queue dispatch.
+- [ ] Beta: document immutable shared module cache direction.
+- [ ] Beta: document large-object/blob storage direction.
+- [ ] Beta: add named runtime profiles for production, debug, and
+  compiler/tooling workloads.
+- [ ] Post-beta: research deterministic generational arenas only after beta
+  memory/threading requirements are stable.
+
+## Threading Strategy
+
+AiVM supports multithreaded execution before beta through worker threads and a
+deterministic event queue.
+
+Worker threads are mechanical execution resources. They may perform background
+work, blocking host operations, parsing, validation, and other runtime tasks,
+but they must not mutate observable AiLang or AiVectra semantic state directly.
+
+Before beta:
+
+- no shared mutable semantic heap
+- no worker mutation of UI state or live semantic state
+- no generational GC requirement
+- worker results cross the boundary as immutable messages, frozen payloads, or
+  copied semantic values
+- observable semantic mutation occurs only when the deterministic queue is
+  processed
+- host thread scheduling may affect timing, but must not affect semantic order
+
+AiVM owns worker mechanics, queue mechanics, resource limits, and runtime
+memory strategy. AiLang owns language-level concurrency semantics. AiVectra owns
+UI/Semantic thread integration and UI mutation rules.
 
 ## Tracked Beta Tasks
 
@@ -94,6 +138,17 @@ These are the immediate hardening tasks before beta:
   worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
+- Parser/compiler scratch arenas: route parser/compiler internals through
+  scratch storage where possible while keeping final AST nodes in semantic node
+  storage.
+- Safe-point compaction: define deterministic safe points for allocation,
+  compiler/tooling phase boundaries, and worker result handoff.
+- Worker-local heaps and messaging: document and implement worker-local
+  mechanical storage plus immutable deterministic queue messages.
+- Shared immutable module cache: design read-only module/cache storage that can
+  be shared across workers without exposing mutable semantic state.
+- Large-object/blob storage: design handle-based storage for large byte buffers,
+  assets, and UI payloads with explicit limits and deterministic failures.
 - Security boundary docs: document that AiVM is a runtime with explicit
   syscalls, not a sandbox; deployment sandboxing is provided by the OS,
   container, or app environment.
