@@ -30,9 +30,48 @@ static int write_file(const char* path, const char* text)
     return 1;
 }
 
+static int read_file(const char* path, char* out, size_t out_len)
+{
+    FILE* f;
+    long length;
+    size_t read_count;
+    if (path == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    f = fopen(path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    if (fseek(f, 0L, SEEK_END) != 0) {
+        fclose(f);
+        return 0;
+    }
+    length = ftell(f);
+    if (length < 0 || (size_t)length >= out_len) {
+        fclose(f);
+        return 0;
+    }
+    if (fseek(f, 0L, SEEK_SET) != 0) {
+        fclose(f);
+        return 0;
+    }
+    read_count = fread(out, 1U, (size_t)length, f);
+    fclose(f);
+    if (read_count != (size_t)length) {
+        return 0;
+    }
+    out[read_count] = '\0';
+    return 1;
+}
+
 static int mkdir_ok(const char* path)
 {
     return MKDIR(path) == 0 || errno == EEXIST;
+}
+
+static int run_ok(const char* command)
+{
+    return command != NULL && system(command) == 0;
 }
 
 int main(void)
@@ -40,33 +79,69 @@ int main(void)
     AilangPackageManagerOptions options;
     char output[4096];
     char error[512];
+    char commit[128];
+    char registry_record[2048];
+    int tool_exit = 0;
 
+#ifdef _WIN32
+    (void)run_ok("rmdir /s /q .tmp\\pkg-manager-test >nul 2>nul");
+#else
+    (void)run_ok("rm -rf .tmp/pkg-manager-test");
+#endif
     if (!mkdir_ok(".tmp") ||
         !mkdir_ok(".tmp/pkg-manager-test") ||
         !mkdir_ok(".tmp/pkg-manager-test/registry") ||
         !mkdir_ok(".tmp/pkg-manager-test/registry/packages") ||
-        !mkdir_ok(".tmp/pkg-manager-test/project")) {
+        !mkdir_ok(".tmp/pkg-manager-test/project") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg/tools") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg/src")) {
         return 1;
     }
     if (!write_file(
-            ".tmp/pkg-manager-test/registry/packages/demo.toml",
-            "schema = \"ailang.package.v1\"\n"
-            "name = \"demo\"\n"
-            "repo = \"https://example.invalid/demo.git\"\n"
-            "packageRoot = \".\"\n"
-            "types = [\"library\"]\n"
-            "\n"
-            "[versions.\"0.1.0\"]\n"
-            "ref = \"v0.1.0\"\n"
-            "commit = \"abc123\"\n") ||
+            ".tmp/pkg-manager-test/package-src/pkg/src/lib.aos",
+            "Program#pkg1 {}\n") ||
+        !write_file(
+            ".tmp/pkg-manager-test/package-src/pkg/tools/demo",
+            "#!/bin/sh\n"
+            "echo demo-tool \"$@\"\n") ||
         !write_file(
             ".tmp/pkg-manager-test/project/project.aiproj",
             "Program#p1 {\n"
-            "  Project#proj1(name=\"demo-app\" entryFile=\"src/app.aos\" entryExport=\"start\") {\n"
-            "    Include#dep1(name=\"demo\" version=\"0.1.0\")\n"
-            "  }\n"
+            "  Project#proj1(name=\"demo-app\" entryFile=\"src/app.aos\" entryExport=\"start\")\n"
             "}\n")) {
         return 2;
+    }
+#ifndef _WIN32
+    if (!run_ok("chmod +x .tmp/pkg-manager-test/package-src/pkg/tools/demo")) {
+        return 3;
+    }
+#endif
+    if (!run_ok("git -C .tmp/pkg-manager-test/package-src init --quiet") ||
+        !run_ok("git -C .tmp/pkg-manager-test/package-src add .") ||
+        !run_ok("git -C .tmp/pkg-manager-test/package-src -c user.name=AiLangTest -c user.email=ailang-test@example.invalid commit --quiet -m init") ||
+        !run_ok("git -C .tmp/pkg-manager-test/package-src rev-parse HEAD > .tmp/pkg-manager-test/package-commit.txt") ||
+        !read_file(".tmp/pkg-manager-test/package-commit.txt", commit, sizeof(commit))) {
+        return 4;
+    }
+    commit[strcspn(commit, "\r\n")] = '\0';
+    if (snprintf(
+            registry_record,
+            sizeof(registry_record),
+            "schema = \"ailang.package.v1\"\n"
+            "name = \"demo\"\n"
+            "repo = \".tmp/pkg-manager-test/package-src\"\n"
+            "packageRoot = \"pkg\"\n"
+            "types = [\"library\", \"tool\"]\n"
+            "defaultVersion = \"0.1.0\"\n"
+            "\n"
+            "[versions.\"0.1.0\"]\n"
+            "ref = \"v0.1.0\"\n"
+            "commit = \"%s\"\n",
+            commit) >= (int)sizeof(registry_record) ||
+        !write_file(".tmp/pkg-manager-test/registry/packages/demo.toml", registry_record)) {
+        return 5;
     }
 
     memset(&options, 0, sizeof(options));
@@ -74,10 +149,44 @@ int main(void)
     options.registry_dir = ".tmp/pkg-manager-test/registry";
 
     if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error))) {
-        return 3;
+        return 6;
     }
     if (strstr(output, "demo\n") == NULL) {
-        return 4;
+        return 7;
+    }
+    if (!ailang_package_manager_add(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
+        strstr(output, "added demo 0.1.0") == NULL) {
+        return 8;
+    }
+    if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
+        strstr(output, "Project#proj1") == NULL ||
+        strstr(output, "Include#dep_demo(name=\"demo\" version=\"0.1.0\")") == NULL) {
+        return 9;
+    }
+    if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error)) ||
+        strstr(output, "demo 0.1.0") == NULL) {
+        return 10;
+    }
+#ifndef _WIN32
+    if (!ailang_package_manager_try_run_tool(
+            &options,
+            "demo",
+            0,
+            NULL,
+            &tool_exit,
+            error,
+            sizeof(error)) ||
+        tool_exit != 0) {
+        return 11;
+    }
+#endif
+    if (!ailang_package_manager_remove(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
+        strstr(output, "removed demo") == NULL) {
+        return 12;
+    }
+    if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
+        strstr(output, "Include#dep_demo") != NULL) {
+        return 13;
     }
     return 0;
 }
