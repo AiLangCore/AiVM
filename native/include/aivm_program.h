@@ -56,7 +56,8 @@ typedef enum {
     AIVM_OP_MAKE_LIT_BOOL = 46,
     AIVM_OP_MAKE_NODE = 47,
     AIVM_OP_MAKE_FIELD_STRING = 48,
-    AIVM_OP_MAKE_MAP = 49
+    AIVM_OP_MAKE_MAP = 49,
+    AIVM_OP_MAKE_NODE_EMPTY = 50
 } AivmOpcode;
 
 typedef struct {

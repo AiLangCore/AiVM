@@ -4199,6 +4199,7 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_NODE: return "MAKE_NODE";
         case AIVM_OP_MAKE_FIELD_STRING: return "MAKE_FIELD_STRING";
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
+        case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
         default: return "UNKNOWN";
     }
 }
@@ -4986,6 +4987,7 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(MAKE_NODE)
     MAP_OP(MAKE_FIELD_STRING)
     MAP_OP(MAKE_MAP)
+    MAP_OP(MAKE_NODE_EMPTY)
 #undef MAP_OP
     return 0;
 }
@@ -6792,6 +6794,20 @@ static int simple_compile_expr_ext(
         }
         if (!simple_compile_expr_ext(&id_expr, program, locals, ctx) ||
             !simple_emit_instruction(program, AIVM_OP_MAKE_BLOCK, 0)) {
+            return 0;
+        }
+        return 1;
+    }
+    if (starts_with(node->kind, "MakeNode")) {
+        SimpleNodeView kind_expr;
+        SimpleNodeView id_expr;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &kind_expr) ||
+            !simple_parse_next_node(kind_expr.next, node->body_end, &id_expr)) {
+            return simple_fail("MakeNode requires (kind,id)");
+        }
+        if (!simple_compile_expr_ext(&kind_expr, program, locals, ctx) ||
+            !simple_compile_expr_ext(&id_expr, program, locals, ctx) ||
+            !simple_emit_instruction(program, AIVM_OP_MAKE_NODE_EMPTY, 0)) {
             return 0;
         }
         return 1;

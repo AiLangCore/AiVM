@@ -3115,6 +3115,51 @@ static int test_make_node_from_template_and_children(void)
     return 0;
 }
 
+static int test_make_node_empty_from_kind_and_id(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_NODE_EMPTY, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_NODE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_NODE_ID, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "Program" },
+        { .type = AIVM_VAL_STRING, .string_value = "p1" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 9U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("p1")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("Program")) == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_make_node_converts_scalar_children_to_runtime_nodes(void)
 {
     AivmVm vm;
@@ -3537,6 +3582,41 @@ static int test_make_node_requires_node_args(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "MAKE_NODE requires (node,int>=0).") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_make_node_empty_requires_string_args(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_NODE_EMPTY, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "p1" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_TYPE_MISMATCH) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "MAKE_NODE_EMPTY requires (string,string).") == 0) != 0) {
         return 1;
     }
     return 0;
@@ -4113,6 +4193,9 @@ int main(void)
     if (test_make_node_from_template_and_children() != 0) {
         return 1;
     }
+    if (test_make_node_empty_from_kind_and_id() != 0) {
+        return 1;
+    }
     if (test_make_node_converts_scalar_children_to_runtime_nodes() != 0) {
         return 1;
     }
@@ -4132,6 +4215,9 @@ int main(void)
         return 1;
     }
     if (test_make_node_requires_node_args() != 0) {
+        return 1;
+    }
+    if (test_make_node_empty_requires_string_args() != 0) {
         return 1;
     }
     if (test_make_lit_string_requires_string_id() != 0) {

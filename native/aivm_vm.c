@@ -4651,6 +4651,33 @@ void aivm_step(AivmVm* vm)
             break;
         }
 
+        case AIVM_OP_MAKE_NODE_EMPTY: {
+            AivmValue id_value;
+            AivmValue kind_value;
+            int64_t handle;
+            if (!aivm_stack_pop(vm, &id_value) ||
+                !aivm_stack_pop(vm, &kind_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (kind_value.type != AIVM_VAL_STRING || kind_value.string_value == NULL ||
+                id_value.type != AIVM_VAL_STRING || id_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAKE_NODE_EMPTY requires (string,string).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_node_record(vm, kind_value.string_value, id_value.string_value, NULL, 0U, NULL, 0U, &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
         case AIVM_OP_MAKE_FIELD_STRING: {
             AivmValue value;
             AivmValue key_value;
