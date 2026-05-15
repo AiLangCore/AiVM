@@ -970,6 +970,38 @@ static const char* snapshot_arena_backed_string(
     return *out_temp_copy;
 }
 
+static int snapshot_node_input_string(
+    AivmVm* vm,
+    const char* input,
+    const char** out_source,
+    char** out_temp_copy)
+{
+    size_t length = 0U;
+    size_t next_length = 0U;
+    if (out_source != NULL) {
+        *out_source = NULL;
+    }
+    if (out_temp_copy != NULL) {
+        *out_temp_copy = NULL;
+    }
+    if (vm == NULL || input == NULL || out_source == NULL || out_temp_copy == NULL) {
+        return 0;
+    }
+    while (input[length] != '\0') {
+        if (!size_add_checked(length, 1U, &next_length)) {
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string snapshot length overflow.");
+            return 0;
+        }
+        length = next_length;
+    }
+    *out_source = snapshot_arena_backed_string(vm, input, length, out_temp_copy);
+    if (*out_source == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string snapshot allocation failed.");
+        return 0;
+    }
+    return 1;
+}
+
 static char* copy_string_splice_to_arena(
     AivmVm* vm,
     const char* prefix,
@@ -2360,7 +2392,8 @@ static int mark_live_node_handles(
 static int compact_string_arena(AivmVm* vm)
 {
     uint8_t live[AIVM_VM_NODE_CAPACITY];
-    char new_arena[AIVM_VM_STRING_ARENA_CAPACITY];
+    char* old_arena;
+    char* new_arena = NULL;
     size_t new_used = 0U;
     size_t i;
 
@@ -2372,28 +2405,37 @@ static int compact_string_arena(AivmVm* vm)
     }
 
     memset(live, 0, sizeof(live));
-    memset(new_arena, 0, sizeof(new_arena));
+    new_arena = (char*)calloc(AIVM_VM_STRING_ARENA_CAPACITY, sizeof(new_arena[0]));
+    if (new_arena == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena compaction allocation failed.");
+        return 0;
+    }
     if (!mark_live_node_handles(vm, live, NULL, 0U)) {
+        free(new_arena);
         return 0;
     }
 
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->stack[i], new_arena, &new_used)) {
+            free(new_arena);
             return 0;
         }
     }
     for (i = 0U; i < vm->locals_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->locals[i], new_arena, &new_used)) {
+            free(new_arena);
             return 0;
         }
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->completed_tasks[i].result, new_arena, &new_used)) {
+            free(new_arena);
             return 0;
         }
     }
     for (i = 0U; i < vm->par_value_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->par_values[i], new_arena, &new_used)) {
+            free(new_arena);
             return 0;
         }
     }
@@ -2406,6 +2448,7 @@ static int compact_string_arena(AivmVm* vm)
         node = &vm->nodes[i];
         if (!compact_relocate_string_ptr(vm, &node->kind, new_arena, &new_used) ||
             !compact_relocate_string_ptr(vm, &node->id, new_arena, &new_used)) {
+            free(new_arena);
             return 0;
         }
         for (attr_i = 0U; attr_i < node->attr_count; attr_i += 1U) {
@@ -2414,24 +2457,26 @@ static int compact_string_arena(AivmVm* vm)
             if (!size_add_checked(node->attr_start, attr_i, &attr_slot) ||
                 attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during string compaction.");
+                free(new_arena);
                 return 0;
             }
             attr = &vm->node_attrs[attr_slot];
             if (!compact_relocate_string_ptr(vm, &attr->key, new_arena, &new_used)) {
+                free(new_arena);
                 return 0;
             }
             if ((attr->kind == AIVM_NODE_ATTR_IDENTIFIER || attr->kind == AIVM_NODE_ATTR_STRING) &&
                 !compact_relocate_string_ptr(vm, &attr->string_value, new_arena, &new_used)) {
+                free(new_arena);
                 return 0;
             }
         }
     }
 
-    memcpy(vm->string_arena, new_arena, new_used);
+    old_arena = vm->string_arena;
+    vm->string_arena = new_arena;
     vm->string_arena_used = new_used;
-    if (new_used < AIVM_VM_STRING_ARENA_CAPACITY) {
-        vm->string_arena[new_used] = '\0';
-    }
+    free(old_arena);
     return 1;
 }
 
@@ -2720,6 +2765,13 @@ static int create_node_record(
     int64_t* remapped_children = NULL;
     const int64_t* effective_children = children;
     int64_t* handle_map = NULL;
+    AivmNodeAttr* stable_attrs = NULL;
+    char** attr_key_copies = NULL;
+    char** attr_value_copies = NULL;
+    const char* kind_source = NULL;
+    const char* id_source = NULL;
+    char* kind_copy = NULL;
+    char* id_copy = NULL;
     size_t needed_attr_count = 0U;
     size_t needed_child_count = 0U;
     size_t needed_node_count = 0U;
@@ -2727,13 +2779,50 @@ static int create_node_record(
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
     }
+    if (attr_count > 0U && attrs == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node attrs must be non-null when attr_count is non-zero.");
+        return 0;
+    }
     remapped_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(int64_t));
     handle_map = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY + 1U, sizeof(int64_t));
-    if (remapped_children == NULL || handle_map == NULL) {
+    if (attr_count > 0U) {
+        stable_attrs = (AivmNodeAttr*)calloc(attr_count, sizeof(stable_attrs[0]));
+        attr_key_copies = (char**)calloc(attr_count, sizeof(attr_key_copies[0]));
+        attr_value_copies = (char**)calloc(attr_count, sizeof(attr_value_copies[0]));
+    }
+    if (remapped_children == NULL ||
+        handle_map == NULL ||
+        (attr_count > 0U && (stable_attrs == NULL || attr_key_copies == NULL || attr_value_copies == NULL))) {
         free(remapped_children);
         free(handle_map);
+        free(stable_attrs);
+        free(attr_key_copies);
+        free(attr_value_copies);
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node allocation scratch allocation failed.");
         return 0;
+    }
+    if (!snapshot_node_input_string(vm, kind, &kind_source, &kind_copy) ||
+        !snapshot_node_input_string(vm, id, &id_source, &id_copy)) {
+        goto fail;
+    }
+    for (i = 0U; i < attr_count; i += 1U) {
+        stable_attrs[i] = attrs[i];
+        if (!snapshot_node_input_string(
+                vm,
+                attrs[i].key == NULL ? "" : attrs[i].key,
+                &stable_attrs[i].key,
+                &attr_key_copies[i])) {
+            goto fail;
+        }
+        if (attrs[i].kind == AIVM_NODE_ATTR_IDENTIFIER || attrs[i].kind == AIVM_NODE_ATTR_STRING) {
+            if (!snapshot_node_input_string(
+                    vm,
+                    attrs[i].string_value == NULL ? "" : attrs[i].string_value,
+                    &stable_attrs[i].string_value,
+                    &attr_value_copies[i])) {
+                goto fail;
+            }
+        }
     }
     if (should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
         if (!compact_node_arenas_with_map(vm, children, child_count, handle_map)) {
@@ -2782,8 +2871,8 @@ static int create_node_record(
     }
 
     node = &vm->nodes[vm->node_count];
-    node->kind = copy_string_to_arena(vm, kind);
-    node->id = copy_string_to_arena(vm, id);
+    node->kind = copy_string_to_arena(vm, kind_source);
+    node->id = copy_string_to_arena(vm, id_source);
     if (node->kind == NULL || node->id == NULL) {
         goto fail;
     }
@@ -2793,7 +2882,7 @@ static int create_node_record(
     node->child_count = child_count;
 
     for (i = 0U; i < attr_count; i += 1U) {
-        AivmNodeAttr attr = attrs[i];
+        AivmNodeAttr attr = stable_attrs[i];
         size_t attr_slot = 0U;
         AivmNodeAttr* out_attr;
         if (!size_add_checked(vm->node_attr_count, i, &attr_slot) ||
@@ -2850,11 +2939,33 @@ static int create_node_record(
         }
     }
     *out_handle = (int64_t)vm->node_count;
+    for (i = 0U; i < attr_count; i += 1U) {
+        free(attr_key_copies[i]);
+        free(attr_value_copies[i]);
+    }
+    free(kind_copy);
+    free(id_copy);
+    free(stable_attrs);
+    free(attr_key_copies);
+    free(attr_value_copies);
     free(remapped_children);
     free(handle_map);
     return 1;
 
 fail:
+    for (i = 0U; i < attr_count; i += 1U) {
+        if (attr_key_copies != NULL) {
+            free(attr_key_copies[i]);
+        }
+        if (attr_value_copies != NULL) {
+            free(attr_value_copies[i]);
+        }
+    }
+    free(kind_copy);
+    free(id_copy);
+    free(stable_attrs);
+    free(attr_key_copies);
+    free(attr_value_copies);
     free(remapped_children);
     free(handle_map);
     return 0;

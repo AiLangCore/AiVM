@@ -129,6 +129,81 @@ typedef struct {
     size_t children;
 } NativeNodeKindSummary;
 
+static void native_debug_mark_node_handle(
+    const AivmVm* vm,
+    int64_t handle,
+    uint8_t* live,
+    int64_t* queue,
+    size_t* queue_write)
+{
+    size_t idx;
+    if (vm == NULL || live == NULL || queue == NULL || queue_write == NULL) {
+        return;
+    }
+    if (handle <= 0 || handle > (int64_t)vm->node_count) {
+        return;
+    }
+    idx = (size_t)(handle - 1);
+    if (live[idx] != 0U || *queue_write >= AIVM_VM_NODE_CAPACITY) {
+        return;
+    }
+    live[idx] = 1U;
+    queue[*queue_write] = handle;
+    *queue_write += 1U;
+}
+
+static void native_debug_mark_live_nodes(const AivmVm* vm, uint8_t* live)
+{
+    int64_t queue[AIVM_VM_NODE_CAPACITY];
+    size_t queue_read = 0U;
+    size_t queue_write = 0U;
+    size_t i;
+    if (vm == NULL || live == NULL) {
+        return;
+    }
+    memset(live, 0, AIVM_VM_NODE_CAPACITY * sizeof(live[0]));
+    native_debug_mark_node_handle(vm, vm->process_argv_node_handle, live, queue, &queue_write);
+    native_debug_mark_node_handle(vm, vm->ui_default_window_size_node_handle, live, queue, &queue_write);
+    native_debug_mark_node_handle(vm, vm->ui_empty_event_node_handle, live, queue, &queue_write);
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (vm->stack[i].type == AIVM_VAL_NODE) {
+            native_debug_mark_node_handle(vm, vm->stack[i].node_handle, live, queue, &queue_write);
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (vm->locals[i].type == AIVM_VAL_NODE) {
+            native_debug_mark_node_handle(vm, vm->locals[i].node_handle, live, queue, &queue_write);
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].result.type == AIVM_VAL_NODE) {
+            native_debug_mark_node_handle(vm, vm->completed_tasks[i].result.node_handle, live, queue, &queue_write);
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (vm->par_values[i].type == AIVM_VAL_NODE) {
+            native_debug_mark_node_handle(vm, vm->par_values[i].node_handle, live, queue, &queue_write);
+        }
+    }
+    while (queue_read < queue_write) {
+        int64_t handle = queue[queue_read];
+        const AivmNodeRecord* node;
+        size_t child_index;
+        queue_read += 1U;
+        if (handle <= 0 || handle > (int64_t)vm->node_count) {
+            continue;
+        }
+        node = &vm->nodes[(size_t)(handle - 1)];
+        for (child_index = 0U; child_index < node->child_count; child_index += 1U) {
+            size_t child_slot = node->child_start + child_index;
+            if (child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                continue;
+            }
+            native_debug_mark_node_handle(vm, vm->node_children[child_slot], live, queue, &queue_write);
+        }
+    }
+}
+
 static void native_debug_write_toml_string(FILE* f, const char* value)
 {
     const unsigned char* cursor;
@@ -165,6 +240,7 @@ static int native_debug_collect_node_kind_counts(
     size_t summary_capacity,
     size_t* out_summary_count)
 {
+    uint8_t live[AIVM_VM_NODE_CAPACITY];
     size_t i;
     if (out_summary_count != NULL) {
         *out_summary_count = 0U;
@@ -172,10 +248,14 @@ static int native_debug_collect_node_kind_counts(
     if (vm == NULL || summaries == NULL || summary_capacity == 0U || out_summary_count == NULL) {
         return 0;
     }
+    native_debug_mark_live_nodes(vm, live);
     for (i = 0U; i < vm->node_count; i += 1U) {
         const AivmNodeRecord* node = &vm->nodes[i];
         const char* kind = (node->kind == NULL || node->kind[0] == '\0') ? "unknown" : node->kind;
         size_t summary_index;
+        if (live[i] == 0U) {
+            continue;
+        }
         for (summary_index = 0U; summary_index < *out_summary_count; summary_index += 1U) {
             if (strcmp(summaries[summary_index].kind, kind) == 0) {
                 break;
