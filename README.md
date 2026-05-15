@@ -4,6 +4,8 @@ Standalone repository for the AiVM runtime layer.
 
 ![AiVM](assets/AiVM_Logo.png)
 
+For contributor setup and verification, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Status
 
 This repository owns the native C AiVM implementation. It is intentionally
