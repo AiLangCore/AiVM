@@ -24,7 +24,7 @@ mkdir -p "${TMP_NATIVE_DEBUG_MEM_DIR}"
   echo '  Func#f1(name=main params="argv" locals="") {'
   n=1
   inst_id=1
-  while [[ $n -le 600 ]]; do
+  while [[ $n -le 2200 ]]; do
     echo "    Inst#c${inst_id}(op=CONST a=0)"
     inst_id=$((inst_id + 1))
     echo "    Inst#m${inst_id}(op=MAKE_BLOCK)"
@@ -65,16 +65,16 @@ if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diag
   echo "debug memory smoke: expected gc attempt activity" >&2
   exit 1
 fi
-if ! grep -q "node_count = 512" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_count=512 in diagnostics.toml" >&2
+if ! grep -q "node_count = 2048" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_count=2048 in diagnostics.toml" >&2
   exit 1
 fi
-if ! grep -q "node_high_water = 512" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_high_water=512 in diagnostics.toml" >&2
+if ! grep -q "node_high_water = 2048" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_high_water=2048 in diagnostics.toml" >&2
   exit 1
 fi
-if ! grep -q "node_gc_pressure_threshold_nodes = 384" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_gc_pressure_threshold_nodes=384 in diagnostics.toml" >&2
+if ! grep -q "node_gc_pressure_threshold_nodes = 1536" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_gc_pressure_threshold_nodes=1536 in diagnostics.toml" >&2
   exit 1
 fi
 if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
