@@ -143,29 +143,54 @@ int main(void)
         !write_file(".tmp/pkg-manager-test/registry/packages/demo.toml", registry_record)) {
         return 5;
     }
+    if (snprintf(
+            registry_record,
+            sizeof(registry_record),
+            "schema = \"ailang.package.v1\"\n"
+            "name = \"build\"\n"
+            "repo = \".tmp/pkg-manager-test/package-src\"\n"
+            "packageRoot = \"pkg\"\n"
+            "types = [\"tool\"]\n"
+            "defaultVersion = \"0.1.0\"\n"
+            "\n"
+            "[versions.\"0.1.0\"]\n"
+            "ref = \"v0.1.0\"\n"
+            "commit = \"%s\"\n",
+            commit) >= (int)sizeof(registry_record) ||
+        !write_file(".tmp/pkg-manager-test/registry/packages/build.toml", registry_record)) {
+        return 6;
+    }
 
     memset(&options, 0, sizeof(options));
     options.project_dir = ".tmp/pkg-manager-test/project";
     options.registry_dir = ".tmp/pkg-manager-test/registry";
 
     if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error))) {
-        return 6;
+        return 7;
     }
     if (strstr(output, "demo\n") == NULL) {
-        return 7;
+        return 8;
+    }
+    if (ailang_package_manager_add(&options, "build", output, sizeof(output), error, sizeof(error)) ||
+        strstr(error, "compiled command 'build'") == NULL) {
+        return 9;
+    }
+    if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
+        strstr(output, "Include#dep_build") != NULL) {
+        return 10;
     }
     if (!ailang_package_manager_add(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "added demo 0.1.0") == NULL) {
-        return 8;
+        return 11;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Project#proj1") == NULL ||
         strstr(output, "Include#dep_demo(name=\"demo\" version=\"0.1.0\")") == NULL) {
-        return 9;
+        return 12;
     }
     if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "demo 0.1.0") == NULL) {
-        return 10;
+        return 13;
     }
 #ifndef _WIN32
     if (!ailang_package_manager_try_run_tool(
@@ -177,16 +202,16 @@ int main(void)
             error,
             sizeof(error)) ||
         tool_exit != 0) {
-        return 11;
+        return 14;
     }
 #endif
     if (!ailang_package_manager_remove(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "removed demo") == NULL) {
-        return 12;
+        return 15;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Include#dep_demo") != NULL) {
-        return 13;
+        return 16;
     }
     return 0;
 }

@@ -1106,6 +1106,7 @@ int ailang_package_manager_add(
     char* manifest = NULL;
     char* next_manifest = NULL;
     AilangPackageRecord record;
+    char conflict[256];
     if (output != NULL && output_len > 0U) {
         output[0] = '\0';
     }
@@ -1121,7 +1122,15 @@ int ailang_package_manager_add(
         free(manifest);
         return pm_set_error(error, error_len, "package already included: %s", name);
     }
-    if (!pm_load_record(registry, name, version, &record, error, error_len) ||
+    if (!pm_load_record(registry, name, version, &record, error, error_len)) {
+        free(manifest);
+        return 0;
+    }
+    if (pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
+        free(manifest);
+        return pm_set_error(error, error_len, "package tool conflicts with %s", conflict);
+    }
+    if (
         !pm_append_include_to_manifest(manifest, &record, &next_manifest) ||
         !pm_write_text(manifest_path, next_manifest)) {
         free(manifest);
