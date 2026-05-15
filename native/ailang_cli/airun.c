@@ -1564,6 +1564,32 @@ static int read_text_file(const char* path, char* out, size_t out_len)
     return 1;
 }
 
+static int read_text_file_alloc(const char* path, char** out_text)
+{
+    unsigned char* bytes = NULL;
+    size_t byte_count = 0U;
+    char* text;
+    if (path == NULL || out_text == NULL) {
+        return 0;
+    }
+    *out_text = NULL;
+    if (!read_binary_file(path, &bytes, &byte_count)) {
+        return 0;
+    }
+    text = (char*)malloc(byte_count + 1U);
+    if (text == NULL) {
+        free(bytes);
+        return 0;
+    }
+    if (byte_count > 0U) {
+        memcpy(text, bytes, byte_count);
+    }
+    text[byte_count] = '\0';
+    free(bytes);
+    *out_text = text;
+    return 1;
+}
+
 static int write_text_file(const char* path, const char* text)
 {
     FILE* f;
@@ -5178,14 +5204,17 @@ static int parse_bytecode_aos_to_program_file(
     AivmProgram* out_program,
     int allow_legacy_zero_b)
 {
-    char source[131072];
+    char* source = NULL;
+    int ok;
     if (aos_path == NULL || out_program == NULL) {
         return simple_fail("graph compile: invalid args");
     }
-    if (!read_text_file(aos_path, source, sizeof(source))) {
+    if (!read_text_file_alloc(aos_path, &source)) {
         return 0;
     }
-    return parse_bytecode_aos_to_program_text(source, out_program, allow_legacy_zero_b);
+    ok = parse_bytecode_aos_to_program_text(source, out_program, allow_legacy_zero_b);
+    free(source);
+    return ok;
 }
 
 static int source_file_looks_like_bytecode_aos(const char* aos_path)

@@ -22,16 +22,19 @@ mkdir -p "${TMP_NATIVE_DEBUG_MEM_DIR}"
   echo 'Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {'
   echo '  Const#k0(kind=string value="n")'
   echo '  Func#f1(name=main params="argv" locals="") {'
-  n=1
-  inst_id=1
-  while [[ $n -le 17000 ]]; do
-    echo "    Inst#c${inst_id}(op=CONST a=0)"
-    inst_id=$((inst_id + 1))
-    echo "    Inst#m${inst_id}(op=MAKE_BLOCK)"
-    inst_id=$((inst_id + 1))
-    n=$((n + 1))
-  done
-  echo "    Inst#h${inst_id}(op=HALT)"
+  echo '    Inst#i1(op=PUSH_INT a=0)'
+  echo '    Inst#i2(op=STORE_LOCAL a=0)'
+  echo '    Inst#i3(op=CONST a=0)'
+  echo '    Inst#i4(op=MAKE_BLOCK)'
+  echo '    Inst#i5(op=LOAD_LOCAL a=0)'
+  echo '    Inst#i6(op=PUSH_INT a=1)'
+  echo '    Inst#i7(op=ADD_INT)'
+  echo '    Inst#i8(op=STORE_LOCAL a=0)'
+  echo '    Inst#i9(op=LOAD_LOCAL a=0)'
+  echo '    Inst#i10(op=PUSH_INT a=17000)'
+  echo '    Inst#i11(op=EQ_INT)'
+  echo '    Inst#i12(op=JUMP_IF_FALSE a=2)'
+  echo '    Inst#i13(op=HALT)'
   echo '  }'
   echo '}'
 } > "${TMP_NATIVE_DEBUG_MEM_APP}"

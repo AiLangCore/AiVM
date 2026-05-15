@@ -22,14 +22,19 @@ $builder = New-Object System.Text.StringBuilder
 [void]$builder.AppendLine('Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {')
 [void]$builder.AppendLine('  Const#k0(kind=string value="n")')
 [void]$builder.AppendLine('  Func#f1(name=main params="argv" locals="") {')
-$instId = 1
-for ($n = 1; $n -le 17000; $n++) {
-  [void]$builder.AppendLine(("    Inst#c{0}(op=CONST a=0)" -f $instId))
-  $instId++
-  [void]$builder.AppendLine(("    Inst#m{0}(op=MAKE_BLOCK)" -f $instId))
-  $instId++
-}
-[void]$builder.AppendLine(("    Inst#h{0}(op=HALT)" -f $instId))
+[void]$builder.AppendLine('    Inst#i1(op=PUSH_INT a=0)')
+[void]$builder.AppendLine('    Inst#i2(op=STORE_LOCAL a=0)')
+[void]$builder.AppendLine('    Inst#i3(op=CONST a=0)')
+[void]$builder.AppendLine('    Inst#i4(op=MAKE_BLOCK)')
+[void]$builder.AppendLine('    Inst#i5(op=LOAD_LOCAL a=0)')
+[void]$builder.AppendLine('    Inst#i6(op=PUSH_INT a=1)')
+[void]$builder.AppendLine('    Inst#i7(op=ADD_INT)')
+[void]$builder.AppendLine('    Inst#i8(op=STORE_LOCAL a=0)')
+[void]$builder.AppendLine('    Inst#i9(op=LOAD_LOCAL a=0)')
+[void]$builder.AppendLine('    Inst#i10(op=PUSH_INT a=17000)')
+[void]$builder.AppendLine('    Inst#i11(op=EQ_INT)')
+[void]$builder.AppendLine('    Inst#i12(op=JUMP_IF_FALSE a=2)')
+[void]$builder.AppendLine('    Inst#i13(op=HALT)')
 [void]$builder.AppendLine('  }')
 [void]$builder.AppendLine('}')
 Set-Content -Path $tmpMemApp -Value $builder.ToString() -NoNewline
