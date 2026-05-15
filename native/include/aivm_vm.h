@@ -138,6 +138,7 @@ enum {
 };
 
 typedef struct {
+    unsigned int storage_magic;
     const AivmProgram* program;
     size_t instruction_pointer;
     AivmVmStatus status;
@@ -145,7 +146,7 @@ typedef struct {
     const char* error_detail;
     char error_detail_storage[4096];
 
-    AivmValue stack[AIVM_VM_STACK_CAPACITY];
+    AivmValue* stack;
     size_t stack_count;
     size_t stack_limit;
 
@@ -159,13 +160,13 @@ typedef struct {
     AivmOpcodeHistoryEntry recent_opcodes[24];
     size_t recent_opcode_count;
 
-    AivmValue locals[AIVM_VM_LOCALS_CAPACITY];
+    AivmValue* locals;
     size_t locals_count;
     size_t locals_limit;
-    char string_arena[AIVM_VM_STRING_ARENA_CAPACITY];
+    char* string_arena;
     size_t string_arena_used;
     size_t string_arena_limit;
-    uint8_t bytes_arena[AIVM_VM_BYTES_ARENA_CAPACITY];
+    uint8_t* bytes_arena;
     size_t bytes_arena_used;
     size_t bytes_arena_limit;
     const AivmSyscallBinding* syscall_bindings;
@@ -184,11 +185,11 @@ typedef struct {
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];
     size_t par_value_count;
     int64_t next_par_node_id;
-    AivmNodeRecord nodes[AIVM_VM_NODE_CAPACITY];
+    AivmNodeRecord* nodes;
     size_t node_count;
-    AivmNodeAttr node_attrs[AIVM_VM_NODE_ATTR_CAPACITY];
+    AivmNodeAttr* node_attrs;
     size_t node_attr_count;
-    int64_t node_children[AIVM_VM_NODE_CHILD_CAPACITY];
+    int64_t* node_children;
     size_t node_child_count;
     int64_t ui_default_window_size_node_handle;
     int64_t ui_empty_event_node_handle;
@@ -222,6 +223,7 @@ void aivm_init_with_syscalls_and_argv(
     const char* const* process_argv,
     size_t process_argv_count);
 void aivm_reset_state(AivmVm* vm);
+void aivm_dispose(AivmVm* vm);
 void aivm_halt(AivmVm* vm);
 int aivm_stack_push(AivmVm* vm, AivmValue value);
 int aivm_stack_pop(AivmVm* vm, AivmValue* out_value);

@@ -4,6 +4,8 @@
 #include <string.h>
 #include "sys/aivm_syscall_contracts.h"
 
+#define AIVM_VM_STORAGE_MAGIC 0xA117A11DU
+
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
     if (vm == NULL) {
@@ -33,6 +35,57 @@ static int size_sub_checked(size_t a, size_t b, size_t* out)
     }
     *out = a - b;
     return 1;
+}
+
+static int ensure_vm_storage(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    vm->storage_magic = AIVM_VM_STORAGE_MAGIC;
+    if (vm->stack == NULL) {
+        vm->stack = (AivmValue*)calloc(AIVM_VM_STACK_CAPACITY, sizeof(vm->stack[0]));
+    }
+    if (vm->locals == NULL) {
+        vm->locals = (AivmValue*)calloc(AIVM_VM_LOCALS_CAPACITY, sizeof(vm->locals[0]));
+    }
+    if (vm->string_arena == NULL) {
+        vm->string_arena = (char*)calloc(AIVM_VM_STRING_ARENA_CAPACITY, sizeof(vm->string_arena[0]));
+    }
+    if (vm->bytes_arena == NULL) {
+        vm->bytes_arena = (uint8_t*)calloc(AIVM_VM_BYTES_ARENA_CAPACITY, sizeof(vm->bytes_arena[0]));
+    }
+    if (vm->nodes == NULL) {
+        vm->nodes = (AivmNodeRecord*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(vm->nodes[0]));
+    }
+    if (vm->node_attrs == NULL) {
+        vm->node_attrs = (AivmNodeAttr*)calloc(AIVM_VM_NODE_ATTR_CAPACITY, sizeof(vm->node_attrs[0]));
+    }
+    if (vm->node_children == NULL) {
+        vm->node_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(vm->node_children[0]));
+    }
+    if (vm->stack == NULL ||
+        vm->locals == NULL ||
+        vm->string_arena == NULL ||
+        vm->bytes_arena == NULL ||
+        vm->nodes == NULL ||
+        vm->node_attrs == NULL ||
+        vm->node_children == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: VM storage allocation failed.");
+        return 0;
+    }
+    return 1;
+}
+
+static void prepare_vm_for_init(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return;
+    }
+    if (vm->storage_magic != AIVM_VM_STORAGE_MAGIC) {
+        memset(vm, 0, sizeof(*vm));
+        vm->storage_magic = AIVM_VM_STORAGE_MAGIC;
+    }
 }
 
 static void set_vm_local_out_of_range_error(
@@ -2521,9 +2574,9 @@ static int compact_node_arenas_with_map(
         }
     }
 
-    memcpy(vm->nodes, new_nodes, sizeof(vm->nodes));
-    memcpy(vm->node_attrs, new_attrs, sizeof(vm->node_attrs));
-    memcpy(vm->node_children, new_children, sizeof(vm->node_children));
+    memcpy(vm->nodes, new_nodes, AIVM_VM_NODE_CAPACITY * sizeof(vm->nodes[0]));
+    memcpy(vm->node_attrs, new_attrs, AIVM_VM_NODE_ATTR_CAPACITY * sizeof(vm->node_attrs[0]));
+    memcpy(vm->node_children, new_children, AIVM_VM_NODE_CHILD_CAPACITY * sizeof(vm->node_children[0]));
     vm->node_count = new_node_count;
     vm->node_attr_count = new_attr_count;
     vm->node_child_count = new_child_count;
@@ -2992,6 +3045,9 @@ void aivm_reset_state(AivmVm* vm)
     if (vm == NULL) {
         return;
     }
+    if (!ensure_vm_storage(vm)) {
+        return;
+    }
 
     vm->instruction_pointer = 0U;
     vm->status = AIVM_VM_STATUS_READY;
@@ -3044,11 +3100,38 @@ void aivm_reset_state(AivmVm* vm)
     vm->node_allocations_since_gc = 0U;
 }
 
+void aivm_dispose(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return;
+    }
+    free(vm->stack);
+    free(vm->locals);
+    free(vm->string_arena);
+    free(vm->bytes_arena);
+    free(vm->nodes);
+    free(vm->node_attrs);
+    free(vm->node_children);
+    vm->stack = NULL;
+    vm->locals = NULL;
+    vm->string_arena = NULL;
+    vm->bytes_arena = NULL;
+    vm->nodes = NULL;
+    vm->node_attrs = NULL;
+    vm->node_children = NULL;
+    vm->stack_count = 0U;
+    vm->locals_count = 0U;
+    vm->node_count = 0U;
+    vm->node_attr_count = 0U;
+    vm->node_child_count = 0U;
+}
+
 void aivm_init(AivmVm* vm, const AivmProgram* program)
 {
     if (vm == NULL) {
         return;
     }
+    prepare_vm_for_init(vm);
 
     vm->program = program;
     vm->syscall_bindings = NULL;
@@ -3078,6 +3161,7 @@ void aivm_init_with_syscalls_and_argv(
     if (vm == NULL) {
         return;
     }
+    prepare_vm_for_init(vm);
 
     vm->program = program;
     vm->syscall_bindings = bindings;

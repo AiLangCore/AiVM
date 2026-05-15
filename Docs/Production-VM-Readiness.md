@@ -59,3 +59,26 @@ profiles/resource limits rather than classify process execution as debug-only.
 
 Debug syscalls should be separated from production behavior. `aivm-debug` may
 bind diagnostic targets by default because it is intentionally diagnostic.
+
+## Memory Strategy
+
+AiVM uses deterministic ceilings, but large VM regions are heap-backed rather
+than embedded directly in `AivmVm`. The goal is to keep production behavior
+bounded without forcing every host process, test executable, or embedded API
+caller to carry a multi-megabyte stack object.
+
+- [x] Keep stack, locals, strings, bytes, node, attr, and child arenas under
+  explicit VM limits.
+- [x] Allocate large arena storage on the heap during VM initialization.
+- [x] Provide `aivm_dispose` for embedders that need deterministic release.
+- [x] Keep memory pressure telemetry in debug diagnostics.
+- [ ] Add named runtime profiles for production, debug, and compiler/tooling
+  workloads.
+- [ ] Add parser/compiler memory attribution before increasing node limits
+  again.
+- [ ] Reduce retained parser intermediate nodes so compiler source parsing does
+  not depend on repeatedly raising arena ceilings.
+
+Increasing arena capacities is not the default fix for compiler/parser
+failures. First measure retained node kinds and root reachability, then reduce
+temporary parser structures or shorten their lifetimes.

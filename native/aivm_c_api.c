@@ -112,6 +112,7 @@ AivmCResult aivm_c_execute_instructions_with_syscalls(
     result.error = vm->error;
     capture_error_detail(&result, vm);
     capture_exit_code(&result, vm);
+    aivm_dispose(vm);
     free(vm);
     return result;
 }
@@ -150,6 +151,7 @@ AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
         result.load_error_offset = 0U;
         result.status = AIVM_VM_STATUS_ERROR;
         result.error = AIVM_VM_ERR_INVALID_PROGRAM;
+        aivm_dispose(vm);
         free(vm);
         return result;
     }
@@ -168,6 +170,7 @@ AivmCResult aivm_c_execute_program_with_syscalls_and_argv(
     result.error = vm->error;
     capture_error_detail(&result, vm);
     capture_exit_code(&result, vm);
+    aivm_dispose(vm);
     free(vm);
     return result;
 }
@@ -218,6 +221,7 @@ AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
     if (load_result.status != AIVM_PROGRAM_OK) {
         result.status = AIVM_VM_STATUS_ERROR;
         result.error = AIVM_VM_ERR_INVALID_PROGRAM;
+        aivm_dispose(vm);
         free(vm);
         return result;
     }
@@ -234,6 +238,7 @@ AivmCResult aivm_c_execute_aibc1_with_syscalls_and_argv(
     result.error = vm->error;
     capture_error_detail(&result, vm);
     capture_exit_code(&result, vm);
+    aivm_dispose(vm);
     free(vm);
     return result;
 }
