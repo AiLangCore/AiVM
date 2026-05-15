@@ -51,6 +51,12 @@ execution through `aivm <program.aibc1>`. Project commands such as `build`,
 `publish`, and developer workflow modes are owned by AiLang tooling and should
 call into AiVM rather than expanding the production VM command surface.
 
+## Specifications
+
+- `Docs/Syscalls.md` defines the syscall boundary and syscall addition rules.
+- `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
+- `Docs/Production-VM-Readiness.md` tracks production hardening work.
+
 ## Versioning
 
 The CMake project declaration in `native/CMakeLists.txt` is the base semantic

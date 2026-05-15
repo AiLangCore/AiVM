@@ -17,14 +17,14 @@ first production-grade runtime.
 - [x] List all current syscall contracts.
 - [x] Add a check for duplicate syscall IDs and targets.
 - [x] Add a check that every syscall has docs and contract-test coverage.
-- [ ] Decide which debug/profiling targets are only available from
-  `aivm-debug`.
+- [ ] Beta: decide which debug/profiling targets are only available from
+  `aivm-debug`, then enforce that split in release builds.
 - [x] Distinguish unknown syscall, known-but-unbound syscall, invalid
   argument, timeout, resource-limit, and host-failure VM errors.
-- [ ] Add resource limits for filesystem reads/writes, network reads/writes,
-  process count, worker count, UI windows, debug artifacts, and syscall
-  execution time.
-- [ ] Document that OS users, containers, app sandboxes, and deployment
+- [ ] Beta: add named resource limit records for filesystem reads/writes,
+  network reads/writes, process count, worker count, UI windows, debug
+  artifacts, and syscall execution time.
+- [ ] Beta: document that OS users, containers, app sandboxes, and deployment
   environments are the production security boundary.
 
 Optional future sandboxing:
@@ -72,12 +72,31 @@ caller to carry a multi-megabyte stack object.
 - [x] Allocate large arena storage on the heap during VM initialization.
 - [x] Provide `aivm_dispose` for embedders that need deterministic release.
 - [x] Keep memory pressure telemetry in debug diagnostics.
-- [ ] Add named runtime profiles for production, debug, and compiler/tooling
-  workloads.
-- [ ] Add parser/compiler memory attribution before increasing node limits
+- [x] Add parser/compiler memory attribution before increasing node limits
   again.
-- [ ] Reduce retained parser intermediate nodes so compiler source parsing does
-  not depend on repeatedly raising arena ceilings.
+- [x] Add live node-kind attribution to debug diagnostics.
+- [x] Add regression coverage for string arena compaction preserving live node
+  strings.
+- [ ] Beta: add named runtime profiles for production, debug, and
+  compiler/tooling workloads.
+- [ ] Beta: reduce retained parser intermediate nodes so compiler source
+  parsing does not depend on repeatedly raising arena ceilings.
+
+## Tracked Beta Tasks
+
+These are the immediate hardening tasks before beta:
+
+- `aivm-debug` syscall profile: identify debug-only targets, make production
+  release binding explicit, and add a contract test.
+- Runtime profiles: define `production`, `debug`, and `tooling` limits, emit the
+  active profile in diagnostics, and document profile selection.
+- Resource limits: define stable limit records for file, network, process,
+  worker, UI, debug artifact, and syscall timeout behavior.
+- Parser retained nodes: use parser memory attribution to reduce temporary
+  token/result nodes retained during compiler source parsing.
+- Security boundary docs: document that AiVM is a runtime with explicit
+  syscalls, not a sandbox; deployment sandboxing is provided by the OS,
+  container, or app environment.
 
 Increasing arena capacities is not the default fix for compiler/parser
 failures. First measure retained node kinds and root reachability, then reduce
