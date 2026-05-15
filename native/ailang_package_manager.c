@@ -91,23 +91,31 @@ static int pm_appendf(char* out, size_t out_len, size_t* used, const char* fmt, 
 
 static int pm_file_exists(const char* path)
 {
-    struct stat st;
-    return path != NULL && stat(path, &st) == 0 &&
 #ifdef _WIN32
-        ((st.st_mode & _S_IFREG) != 0);
+    DWORD attrs;
+    if (path == NULL) {
+        return 0;
+    }
+    attrs = GetFileAttributesA(path);
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) == 0;
 #else
-        S_ISREG(st.st_mode);
+    struct stat st;
+    return path != NULL && stat(path, &st) == 0 && S_ISREG(st.st_mode);
 #endif
 }
 
 static int pm_directory_exists(const char* path)
 {
-    struct stat st;
-    return path != NULL && stat(path, &st) == 0 &&
 #ifdef _WIN32
-        ((st.st_mode & _S_IFDIR) != 0);
+    DWORD attrs;
+    if (path == NULL) {
+        return 0;
+    }
+    attrs = GetFileAttributesA(path);
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #else
-        S_ISDIR(st.st_mode);
+    struct stat st;
+    return path != NULL && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 #endif
 }
 
