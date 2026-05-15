@@ -3167,6 +3167,71 @@ static int test_make_node_empty_from_kind_and_id(void)
     return 0;
 }
 
+static int test_string_compaction_preserves_live_node_strings(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    char* arena_before_compaction;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_NODE_EMPTY, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_STR_CONCAT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_NODE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_NODE_ID, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "Program" },
+        { .type = AIVM_VAL_STRING, .string_value = "p1" },
+        { .type = AIVM_VAL_STRING, .string_value = "force" },
+        { .type = AIVM_VAL_STRING, .string_value = "compaction" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 13U,
+        .constants = constants,
+        .constant_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    while (vm.status != AIVM_VM_STATUS_HALTED &&
+           vm.status != AIVM_VM_STATUS_ERROR &&
+           vm.instruction_pointer < 4U) {
+        aivm_step(&vm);
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_RUNNING) != 0) {
+        return 1;
+    }
+    arena_before_compaction = vm.string_arena;
+    vm.string_arena_limit = vm.string_arena_used + 1U;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.string_arena != arena_before_compaction) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("p1")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("Program")) == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_append_attr_adds_lit_attr_to_node(void)
 {
     static AivmVm vm;
@@ -4293,6 +4358,9 @@ int main(void)
         return 1;
     }
     if (test_make_node_empty_from_kind_and_id() != 0) {
+        return 1;
+    }
+    if (test_string_compaction_preserves_live_node_strings() != 0) {
         return 1;
     }
     if (test_append_attr_adds_lit_attr_to_node() != 0) {
