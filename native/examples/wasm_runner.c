@@ -270,6 +270,7 @@ static const char* opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_FIELD_STRING: return "MAKE_FIELD_STRING";
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
         case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
+        case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
         default: return "UNKNOWN";
     }
 }

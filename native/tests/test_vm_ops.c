@@ -3160,6 +3160,58 @@ static int test_make_node_empty_from_kind_and_id(void)
     return 0;
 }
 
+static int test_append_attr_adds_lit_attr_to_node(void)
+{
+    AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_NODE_EMPTY, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_MAKE_LIT_STRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_APPEND_ATTR, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_ATTR_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_ATTR_VALUE_STRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "Export" },
+        { .type = AIVM_VAL_STRING, .string_value = "e1" },
+        { .type = AIVM_VAL_STRING, .string_value = "name" },
+        { .type = AIVM_VAL_STRING, .string_value = "start" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 14U,
+        .constants = constants,
+        .constant_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("start")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(out.type == AIVM_VAL_INT && out.int_value == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_make_node_converts_scalar_children_to_runtime_nodes(void)
 {
     AivmVm vm;
@@ -3617,6 +3669,46 @@ static int test_make_node_empty_requires_string_args(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "MAKE_NODE_EMPTY requires (string,string).") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_append_attr_requires_single_attr_node(void)
+{
+    AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_NODE_EMPTY, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_APPEND_ATTR, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "Export" },
+        { .type = AIVM_VAL_STRING, .string_value = "e1" },
+        { .type = AIVM_VAL_STRING, .string_value = "not_attr" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 6U,
+        .constants = constants,
+        .constant_count = 3U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "APPEND_ATTR requires single-attr node and capacity.") == 0) != 0) {
         return 1;
     }
     return 0;
@@ -4196,6 +4288,9 @@ int main(void)
     if (test_make_node_empty_from_kind_and_id() != 0) {
         return 1;
     }
+    if (test_append_attr_adds_lit_attr_to_node() != 0) {
+        return 1;
+    }
     if (test_make_node_converts_scalar_children_to_runtime_nodes() != 0) {
         return 1;
     }
@@ -4218,6 +4313,9 @@ int main(void)
         return 1;
     }
     if (test_make_node_empty_requires_string_args() != 0) {
+        return 1;
+    }
+    if (test_append_attr_requires_single_attr_node() != 0) {
         return 1;
     }
     if (test_make_lit_string_requires_string_id() != 0) {

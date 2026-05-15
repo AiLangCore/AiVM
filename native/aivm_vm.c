@@ -4465,6 +4465,82 @@ void aivm_step(AivmVm* vm)
             break;
         }
 
+        case AIVM_OP_APPEND_ATTR: {
+            AivmValue attr_value;
+            AivmValue node_value;
+            const AivmNodeRecord* base_node;
+            const AivmNodeRecord* attr_node;
+            AivmNodeAttr attrs[AIVM_VM_NODE_ATTR_CAPACITY];
+            int64_t children[AIVM_VM_NODE_CHILD_CAPACITY];
+            int64_t handle;
+            size_t needed_attr_count = 0U;
+            size_t i;
+            if (!aivm_stack_pop(vm, &attr_value) || !aivm_stack_pop(vm, &node_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (node_value.type != AIVM_VAL_NODE || attr_value.type != AIVM_VAL_NODE ||
+                !lookup_node(vm, node_value.node_handle, &base_node) ||
+                !lookup_node(vm, attr_value.node_handle, &attr_node)) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "APPEND_ATTR requires (node,node).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (attr_node->attr_count != 1U ||
+                !size_add_checked(base_node->attr_count, 1U, &needed_attr_count) ||
+                needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+                base_node->child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+                set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR requires single-attr node and capacity.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            for (i = 0U; i < base_node->attr_count; i += 1U) {
+                size_t attr_slot = 0U;
+                if (!size_add_checked(base_node->attr_start, i, &attr_slot) ||
+                    attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR attr slot was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                attrs[i] = vm->node_attrs[attr_slot];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
+            }
+            attrs[base_node->attr_count] = vm->node_attrs[attr_node->attr_start];
+            for (i = 0U; i < base_node->child_count; i += 1U) {
+                size_t child_slot = 0U;
+                if (!size_add_checked(base_node->child_start, i, &child_slot) ||
+                    child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR child slot was invalid.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                children[i] = vm->node_children[child_slot];
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
+            }
+            if (!create_node_record(
+                vm,
+                base_node->kind,
+                base_node->id,
+                attrs,
+                needed_attr_count,
+                children,
+                base_node->child_count,
+                &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_node(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
         case AIVM_OP_MAKE_ERR: {
             AivmValue node_id_value;
             AivmValue message_value;

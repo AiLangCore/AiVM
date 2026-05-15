@@ -4200,6 +4200,7 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_FIELD_STRING: return "MAKE_FIELD_STRING";
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
         case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
+        case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
         default: return "UNKNOWN";
     }
 }
@@ -4988,6 +4989,7 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(MAKE_FIELD_STRING)
     MAP_OP(MAKE_MAP)
     MAP_OP(MAKE_NODE_EMPTY)
+    MAP_OP(APPEND_ATTR)
 #undef MAP_OP
     return 0;
 }
@@ -6822,6 +6824,20 @@ static int simple_compile_expr_ext(
         if (!simple_compile_expr_ext(&base_node, program, locals, ctx) ||
             !simple_compile_expr_ext(&child_node, program, locals, ctx) ||
             !simple_emit_instruction(program, AIVM_OP_APPEND_CHILD, 0)) {
+            return 0;
+        }
+        return 1;
+    }
+    if (starts_with(node->kind, "AppendAttr")) {
+        SimpleNodeView base_node;
+        SimpleNodeView attr_node;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &base_node) ||
+            !simple_parse_next_node(base_node.next, node->body_end, &attr_node)) {
+            return simple_fail("AppendAttr requires (node,attr)");
+        }
+        if (!simple_compile_expr_ext(&base_node, program, locals, ctx) ||
+            !simple_compile_expr_ext(&attr_node, program, locals, ctx) ||
+            !simple_emit_instruction(program, AIVM_OP_APPEND_ATTR, 0)) {
             return 0;
         }
         return 1;
