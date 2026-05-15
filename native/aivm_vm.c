@@ -4508,6 +4508,7 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             attrs[base_node->attr_count] = vm->node_attrs[attr_node->attr_start];
+            attrs[base_node->attr_count].key = attr_node->id;
             for (i = 0U; i < base_node->child_count; i += 1U) {
                 size_t child_slot = 0U;
                 if (!size_add_checked(base_node->child_start, i, &child_slot) ||
