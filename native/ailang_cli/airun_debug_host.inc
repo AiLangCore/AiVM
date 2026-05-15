@@ -122,6 +122,145 @@ typedef struct {
     size_t reachable_children;
 } NativeNodeRootSummary;
 
+typedef struct {
+    const char* kind;
+    size_t nodes;
+    size_t attrs;
+    size_t children;
+} NativeNodeKindSummary;
+
+static void native_debug_write_toml_string(FILE* f, const char* value)
+{
+    const unsigned char* cursor;
+    if (f == NULL) {
+        return;
+    }
+    fputc('"', f);
+    if (value != NULL) {
+        cursor = (const unsigned char*)value;
+        while (*cursor != '\0') {
+            if (*cursor == '"' || *cursor == '\\') {
+                fputc('\\', f);
+                fputc((int)*cursor, f);
+            } else if (*cursor == '\n') {
+                fputs("\\n", f);
+            } else if (*cursor == '\r') {
+                fputs("\\r", f);
+            } else if (*cursor == '\t') {
+                fputs("\\t", f);
+            } else if (*cursor >= 32U && *cursor < 127U) {
+                fputc((int)*cursor, f);
+            } else {
+                fputc('_', f);
+            }
+            cursor += 1;
+        }
+    }
+    fputc('"', f);
+}
+
+static int native_debug_collect_node_kind_counts(
+    const AivmVm* vm,
+    NativeNodeKindSummary* summaries,
+    size_t summary_capacity,
+    size_t* out_summary_count)
+{
+    size_t i;
+    if (out_summary_count != NULL) {
+        *out_summary_count = 0U;
+    }
+    if (vm == NULL || summaries == NULL || summary_capacity == 0U || out_summary_count == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < vm->node_count; i += 1U) {
+        const AivmNodeRecord* node = &vm->nodes[i];
+        const char* kind = (node->kind == NULL || node->kind[0] == '\0') ? "unknown" : node->kind;
+        size_t summary_index;
+        for (summary_index = 0U; summary_index < *out_summary_count; summary_index += 1U) {
+            if (strcmp(summaries[summary_index].kind, kind) == 0) {
+                break;
+            }
+        }
+        if (summary_index == *out_summary_count) {
+            if (*out_summary_count >= summary_capacity) {
+                kind = "__overflow__";
+                for (summary_index = 0U; summary_index < *out_summary_count; summary_index += 1U) {
+                    if (strcmp(summaries[summary_index].kind, kind) == 0) {
+                        break;
+                    }
+                }
+                if (summary_index == *out_summary_count) {
+                    summary_index = summary_capacity - 1U;
+                    summaries[summary_index].kind = kind;
+                    summaries[summary_index].nodes = 0U;
+                    summaries[summary_index].attrs = 0U;
+                    summaries[summary_index].children = 0U;
+                }
+            } else {
+                summaries[summary_index].kind = kind;
+                summaries[summary_index].nodes = 0U;
+                summaries[summary_index].attrs = 0U;
+                summaries[summary_index].children = 0U;
+                *out_summary_count += 1U;
+            }
+        }
+        summaries[summary_index].nodes += 1U;
+        summaries[summary_index].attrs += node->attr_count;
+        summaries[summary_index].children += node->child_count;
+    }
+    return 1;
+}
+
+static void native_debug_sort_node_kind_counts(NativeNodeKindSummary* summaries, size_t summary_count)
+{
+    size_t i;
+    if (summaries == NULL) {
+        return;
+    }
+    for (i = 0U; i < summary_count; i += 1U) {
+        size_t max_index = i;
+        size_t j;
+        for (j = i + 1U; j < summary_count; j += 1U) {
+            if (summaries[j].nodes > summaries[max_index].nodes) {
+                max_index = j;
+            }
+        }
+        if (max_index != i) {
+            NativeNodeKindSummary tmp = summaries[i];
+            summaries[i] = summaries[max_index];
+            summaries[max_index] = tmp;
+        }
+    }
+}
+
+static void native_debug_write_node_kind_counts(FILE* f, const AivmVm* vm)
+{
+    NativeNodeKindSummary summaries[128];
+    size_t summary_count = 0U;
+    size_t i;
+    if (f == NULL) {
+        return;
+    }
+    memset(summaries, 0, sizeof(summaries));
+    (void)native_debug_collect_node_kind_counts(vm, summaries, 128U, &summary_count);
+    native_debug_sort_node_kind_counts(summaries, summary_count);
+    fprintf(f, "node_kind_counts = [");
+    for (i = 0U; i < summary_count; i += 1U) {
+        if (i > 0U) {
+            fprintf(f, ", ");
+        }
+        fprintf(f, "{ kind = ");
+        native_debug_write_toml_string(f, summaries[i].kind);
+        fprintf(
+            f,
+            ", nodes = %llu, attrs = %llu, children = %llu }",
+            (unsigned long long)summaries[i].nodes,
+            (unsigned long long)summaries[i].attrs,
+            (unsigned long long)summaries[i].children);
+    }
+    fprintf(f, "]\n");
+}
+
 static void native_debug_enqueue_root_handle(
     const AivmVm* vm,
     int64_t handle,
@@ -419,6 +558,7 @@ static int write_native_debug_bundle(
     fprintf(f, "node_root_ui_empty_event_reachable_nodes = %llu\n", (unsigned long long)root_ui_empty_event.reachable_nodes);
     fprintf(f, "node_root_ui_empty_event_reachable_attrs = %llu\n", (unsigned long long)root_ui_empty_event.reachable_attrs);
     fprintf(f, "node_root_ui_empty_event_reachable_children = %llu\n", (unsigned long long)root_ui_empty_event.reachable_children);
+    native_debug_write_node_kind_counts(f, vm);
     fclose(f);
 
     if (!join_path(options->out_dir, "syscalls.toml", path, sizeof(path))) {
@@ -520,6 +660,7 @@ static int write_native_debug_bundle(
         (unsigned long long)root_ui_empty_event.reachable_nodes,
         (unsigned long long)root_ui_empty_event.reachable_attrs,
         (unsigned long long)root_ui_empty_event.reachable_children);
+    native_debug_write_node_kind_counts(f, vm);
     if (g_native_net_last_failure.valid != 0) {
         fprintf(
             f,

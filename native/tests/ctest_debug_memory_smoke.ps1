@@ -55,6 +55,8 @@ if ($diag -notmatch 'node_count = 16384') { throw 'debug memory smoke: expected 
 if ($diag -notmatch 'node_high_water = 16384') { throw 'debug memory smoke: expected node_high_water=16384' }
 if ($diag -notmatch 'node_gc_pressure_threshold_nodes = 12288') { throw 'debug memory smoke: expected node_gc_pressure_threshold_nodes=12288' }
 if ($diag -notmatch 'node_roots = \{') { throw 'debug memory smoke: expected node_roots table' }
+if ($diag -notmatch 'node_kind_counts = \[') { throw 'debug memory smoke: expected node_kind_counts in diagnostics' }
+if ($diag -notmatch 'kind = "Lit"') { throw 'debug memory smoke: expected Lit node kind attribution' }
 if ($snap -notmatch 'node_gc_attempts = [1-9][0-9]*') { throw 'debug memory smoke: expected node_gc_attempts>0 in state snapshots' }
 if ($snap -notmatch 'node_root_stack_slots') { throw 'debug memory smoke: expected node_root_stack_slots in state snapshots' }
 
@@ -82,5 +84,6 @@ if ($okDiag -notmatch 'vm_code=AIVM000') { throw 'debug memory smoke: expected v
 if ($okDiag -notmatch 'node_gc_attempts = 0') { throw 'debug memory smoke: expected node_gc_attempts=0 in diagnostics' }
 if ($okSnap -notmatch 'node_root_stack_slots') { throw 'debug memory smoke: expected node_root_stack_slots in success snapshots' }
 if ($okDiag -notmatch 'node_roots = \{') { throw 'debug memory smoke: expected node_roots table in success diagnostics' }
+if ($okDiag -notmatch 'node_kind_counts = \[') { throw 'debug memory smoke: expected node_kind_counts in success diagnostics' }
 
 Write-Host 'debug memory smoke: PASS'

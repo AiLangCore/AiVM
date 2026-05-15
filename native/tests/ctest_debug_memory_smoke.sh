@@ -81,6 +81,14 @@ if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; th
   echo "debug memory smoke: expected node_roots table in diagnostics.toml" >&2
   exit 1
 fi
+if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_kind_counts in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q 'kind = "Lit"' "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected Lit node kind attribution" >&2
+  exit 1
+fi
 if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
   echo "debug memory smoke: expected node_gc_attempts>0 in state snapshots" >&2
   exit 1
@@ -124,6 +132,10 @@ if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots
 fi
 if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
   echo "debug memory smoke: expected node_roots table in success diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_kind_counts in success diagnostics.toml" >&2
   exit 1
 fi
 
