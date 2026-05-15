@@ -61,7 +61,7 @@ call into AiVM rather than expanding the production VM command surface.
 
 The CMake project declaration in `native/CMakeLists.txt` is the base semantic
 version for AiVM release automation. Release tags use `v` plus the derived
-version, for example `v0.0.1-alpha.12`.
+version, for example `v0.0.1-alpha.17`.
 
 ## Build and Test
 
