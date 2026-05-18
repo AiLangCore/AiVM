@@ -8,6 +8,9 @@ on:
       - develop
       - "codex/**"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   native:
     name: native-${{ matrix.os }}
