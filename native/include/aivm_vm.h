@@ -29,6 +29,25 @@ typedef enum {
     AIVM_VM_ERR_MEMORY_PRESSURE = 11
 } AivmVmError;
 
+typedef enum {
+    AIVM_RUNTIME_PROFILE_PRODUCTION = 0,
+    AIVM_RUNTIME_PROFILE_DEBUG = 1,
+    AIVM_RUNTIME_PROFILE_TOOLING = 2
+} AivmRuntimeProfile;
+
+typedef struct {
+    size_t stack_capacity;
+    size_t call_frame_capacity;
+    size_t locals_capacity;
+    size_t string_arena_capacity;
+    size_t bytes_arena_capacity;
+    size_t node_capacity;
+    size_t node_attr_capacity;
+    size_t node_child_capacity;
+    size_t task_capacity;
+    size_t par_value_capacity;
+} AivmRuntimeProfileLimits;
+
 typedef struct {
     size_t return_instruction_pointer;
     size_t frame_base;
@@ -55,6 +74,19 @@ typedef struct {
     int opcode;
     size_t stack_count;
 } AivmOpcodeHistoryEntry;
+
+#if defined(AIVM_DEBUG_RUNTIME)
+enum {
+    AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY = 64,
+    AIVM_VM_PROFILE_SYSCALL_TARGET_LENGTH = 96
+};
+
+typedef struct {
+    char target[AIVM_VM_PROFILE_SYSCALL_TARGET_LENGTH];
+    size_t count;
+    double elapsed_seconds;
+} AivmProfileSyscallTargetCount;
+#endif
 
 typedef enum {
     AIVM_NODE_ATTR_IDENTIFIER = 0,
@@ -140,6 +172,7 @@ enum {
 typedef struct {
     unsigned int storage_magic;
     const AivmProgram* program;
+    AivmRuntimeProfile runtime_profile;
     size_t instruction_pointer;
     AivmVmStatus status;
     AivmVmError error;
@@ -159,6 +192,14 @@ typedef struct {
     size_t recent_return_count;
     AivmOpcodeHistoryEntry recent_opcodes[24];
     size_t recent_opcode_count;
+#if defined(AIVM_DEBUG_RUNTIME)
+    size_t profile_instruction_count;
+    size_t profile_opcode_counts[64];
+    size_t profile_syscall_count;
+    double profile_syscall_elapsed_seconds;
+    AivmProfileSyscallTargetCount profile_syscall_targets[AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY];
+    size_t profile_syscall_target_count;
+#endif
 
     AivmValue* locals;
     size_t locals_count;
@@ -236,5 +277,8 @@ void aivm_run(AivmVm* vm);
 const char* aivm_vm_error_code(AivmVmError error);
 const char* aivm_vm_error_message(AivmVmError error);
 const char* aivm_vm_error_detail(const AivmVm* vm);
+const char* aivm_runtime_profile_name(AivmRuntimeProfile profile);
+AivmRuntimeProfile aivm_runtime_default_profile(void);
+AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile);
 
 #endif

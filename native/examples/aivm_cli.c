@@ -54,6 +54,9 @@
 static uint8_t* g_cli_bytes_scratch = NULL;
 static char* g_cli_string_scratch = NULL;
 static AivmVm* g_native_active_vm = NULL;
+#if defined(AIVM_DEBUG_RUNTIME)
+static FILE* g_debug_stdout_capture = NULL;
+#endif
 
 #define NATIVE_PROCESS_CAPACITY 32U
 #define NATIVE_PROCESS_READ_CHUNK 4096U
@@ -88,6 +91,212 @@ static NativeProcessState g_native_processes[NATIVE_PROCESS_CAPACITY];
 static uint8_t g_native_process_read_scratch[NATIVE_PROCESS_READ_CHUNK];
 
 static int read_file(const char* path, uint8_t** out_bytes, size_t* out_size);
+
+#if defined(AIVM_DEBUG_RUNTIME)
+static int ensure_directory(const char* path)
+{
+    char buffer[PATH_MAX];
+    size_t length;
+    size_t index;
+    if (path == NULL || path[0] == '\0') {
+        return 0;
+    }
+    length = strlen(path);
+    if (length >= sizeof(buffer)) {
+        return 0;
+    }
+    memcpy(buffer, path, length + 1U);
+    for (index = 1U; index < length; index += 1U) {
+        if (buffer[index] == '/' || buffer[index] == '\\') {
+            char saved = buffer[index];
+            buffer[index] = '\0';
+            if (buffer[0] != '\0') {
+#if defined(_WIN32)
+                if (_mkdir(buffer) != 0 && errno != EEXIST) {
+                    buffer[index] = saved;
+                    return 0;
+                }
+#else
+                if (mkdir(buffer, 0777) != 0 && errno != EEXIST) {
+                    buffer[index] = saved;
+                    return 0;
+                }
+#endif
+            }
+            buffer[index] = saved;
+        }
+    }
+#if defined(_WIN32)
+    if (_mkdir(buffer) == 0 || errno == EEXIST) {
+        return 1;
+    }
+#else
+    if (mkdir(buffer, 0777) == 0 || errno == EEXIST) {
+        return 1;
+    }
+#endif
+    return 0;
+}
+
+static int join_path(const char* dir, const char* name, char* out, size_t out_len)
+{
+    int written;
+    const char* separator = "/";
+#if defined(_WIN32)
+    separator = "\\";
+#endif
+    if (dir == NULL || name == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    written = snprintf(out, out_len, "%s%s%s", dir, separator, name);
+    return written >= 0 && (size_t)written < out_len;
+}
+
+static void write_toml_string(FILE* file, const char* text)
+{
+    const unsigned char* cursor = (const unsigned char*)((text == NULL) ? "" : text);
+    fputc('"', file);
+    while (*cursor != '\0') {
+        switch (*cursor) {
+            case '\\':
+                fputs("\\\\", file);
+                break;
+            case '"':
+                fputs("\\\"", file);
+                break;
+            case '\n':
+                fputs("\\n", file);
+                break;
+            case '\r':
+                fputs("\\r", file);
+                break;
+            case '\t':
+                fputs("\\t", file);
+                break;
+            default:
+                if (*cursor < 32U) {
+                    fprintf(file, "\\u%04x", (unsigned int)*cursor);
+                } else {
+                    fputc((int)*cursor, file);
+                }
+                break;
+        }
+        cursor += 1;
+    }
+    fputc('"', file);
+}
+
+static const char* cli_opcode_name(AivmOpcode opcode)
+{
+    switch (opcode) {
+        case AIVM_OP_NOP: return "NOP";
+        case AIVM_OP_HALT: return "HALT";
+        case AIVM_OP_STUB: return "STUB";
+        case AIVM_OP_PUSH_INT: return "PUSH_INT";
+        case AIVM_OP_POP: return "POP";
+        case AIVM_OP_STORE_LOCAL: return "STORE_LOCAL";
+        case AIVM_OP_LOAD_LOCAL: return "LOAD_LOCAL";
+        case AIVM_OP_ADD_INT: return "ADD_INT";
+        case AIVM_OP_JUMP: return "JUMP";
+        case AIVM_OP_JUMP_IF_FALSE: return "JUMP_IF_FALSE";
+        case AIVM_OP_PUSH_BOOL: return "PUSH_BOOL";
+        case AIVM_OP_CALL: return "CALL";
+        case AIVM_OP_RET: return "RET";
+        case AIVM_OP_EQ_INT: return "EQ_INT";
+        case AIVM_OP_EQ: return "EQ";
+        case AIVM_OP_CONST: return "CONST";
+        case AIVM_OP_STR_CONCAT: return "STR_CONCAT";
+        case AIVM_OP_TO_STRING: return "TO_STRING";
+        case AIVM_OP_STR_ESCAPE: return "STR_ESCAPE";
+        case AIVM_OP_RETURN: return "RETURN";
+        case AIVM_OP_STR_SUBSTRING: return "STR_SUBSTRING";
+        case AIVM_OP_STR_REMOVE: return "STR_REMOVE";
+        case AIVM_OP_CALL_SYS: return "CALL_SYS";
+        case AIVM_OP_ASYNC_CALL: return "ASYNC_CALL";
+        case AIVM_OP_ASYNC_CALL_SYS: return "ASYNC_CALL_SYS";
+        case AIVM_OP_AWAIT: return "AWAIT";
+        case AIVM_OP_PAR_BEGIN: return "PAR_BEGIN";
+        case AIVM_OP_PAR_FORK: return "PAR_FORK";
+        case AIVM_OP_PAR_JOIN: return "PAR_JOIN";
+        case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
+        case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
+        case AIVM_OP_NODE_KIND: return "NODE_KIND";
+        case AIVM_OP_NODE_ID: return "NODE_ID";
+        case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
+        case AIVM_OP_ATTR_KEY: return "ATTR_KEY";
+        case AIVM_OP_ATTR_VALUE_KIND: return "ATTR_VALUE_KIND";
+        case AIVM_OP_ATTR_VALUE_STRING: return "ATTR_VALUE_STRING";
+        case AIVM_OP_ATTR_VALUE_INT: return "ATTR_VALUE_INT";
+        case AIVM_OP_ATTR_VALUE_BOOL: return "ATTR_VALUE_BOOL";
+        case AIVM_OP_CHILD_COUNT: return "CHILD_COUNT";
+        case AIVM_OP_CHILD_AT: return "CHILD_AT";
+        case AIVM_OP_MAKE_BLOCK: return "MAKE_BLOCK";
+        case AIVM_OP_APPEND_CHILD: return "APPEND_CHILD";
+        case AIVM_OP_MAKE_ERR: return "MAKE_ERR";
+        case AIVM_OP_MAKE_LIT_STRING: return "MAKE_LIT_STRING";
+        case AIVM_OP_MAKE_LIT_INT: return "MAKE_LIT_INT";
+        case AIVM_OP_MAKE_LIT_BOOL: return "MAKE_LIT_BOOL";
+        case AIVM_OP_MAKE_NODE: return "MAKE_NODE";
+        case AIVM_OP_MAKE_FIELD_STRING: return "MAKE_FIELD_STRING";
+        case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
+        case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
+        case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
+        default: return "UNKNOWN";
+    }
+}
+
+static const char* cli_value_type_name(AivmValueType type)
+{
+    switch (type) {
+        case AIVM_VAL_VOID: return "void";
+        case AIVM_VAL_INT: return "int";
+        case AIVM_VAL_BOOL: return "bool";
+        case AIVM_VAL_NULL: return "null";
+        case AIVM_VAL_STRING: return "string";
+        case AIVM_VAL_BYTES: return "bytes";
+        case AIVM_VAL_NODE: return "node";
+        default: return "unknown";
+    }
+}
+
+static void format_value_preview(const AivmValue* value, char* out, size_t out_len)
+{
+    if (out == NULL || out_len == 0U) {
+        return;
+    }
+    out[0] = '\0';
+    if (value == NULL) {
+        (void)snprintf(out, out_len, "missing");
+        return;
+    }
+    switch (value->type) {
+        case AIVM_VAL_INT:
+            (void)snprintf(out, out_len, "int(%lld)", (long long)value->int_value);
+            break;
+        case AIVM_VAL_BOOL:
+            (void)snprintf(out, out_len, "bool(%s)", value->bool_value ? "true" : "false");
+            break;
+        case AIVM_VAL_NULL:
+            (void)snprintf(out, out_len, "null");
+            break;
+        case AIVM_VAL_STRING:
+            (void)snprintf(out, out_len, "string(\"%.48s\")", value->string_value == NULL ? "" : value->string_value);
+            break;
+        case AIVM_VAL_BYTES:
+            (void)snprintf(out, out_len, "bytes(len=%llu)", (unsigned long long)value->bytes_value.length);
+            break;
+        case AIVM_VAL_NODE:
+            (void)snprintf(out, out_len, "node(%lld)", (long long)value->node_handle);
+            break;
+        case AIVM_VAL_VOID:
+            (void)snprintf(out, out_len, "void");
+            break;
+        default:
+            (void)snprintf(out, out_len, "%s", cli_value_type_name(value->type));
+            break;
+    }
+}
+#endif
 
 static void airun_log_message(int level, const char* category, const char* fmt, ...)
 {
@@ -203,21 +412,51 @@ static int aivm_cli_stdout_write_line(
     switch (args[0].type) {
         case AIVM_VAL_STRING:
             printf("%s\n", args[0].string_value == NULL ? "" : args[0].string_value);
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "%s\n", args[0].string_value == NULL ? "" : args[0].string_value);
+            }
+#endif
             break;
         case AIVM_VAL_INT:
             printf("%lld\n", (long long)args[0].int_value);
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "%lld\n", (long long)args[0].int_value);
+            }
+#endif
             break;
         case AIVM_VAL_BOOL:
             printf("%s\n", args[0].bool_value ? "true" : "false");
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "%s\n", args[0].bool_value ? "true" : "false");
+            }
+#endif
             break;
         case AIVM_VAL_NULL:
             printf("null\n");
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "null\n");
+            }
+#endif
             break;
         case AIVM_VAL_VOID:
             printf("void\n");
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "void\n");
+            }
+#endif
             break;
         default:
             printf("<value>\n");
+#if defined(AIVM_DEBUG_RUNTIME)
+            if (g_debug_stdout_capture != NULL) {
+                fprintf(g_debug_stdout_capture, "<value>\n");
+            }
+#endif
             break;
     }
     *result = aivm_value_void();
@@ -635,6 +874,11 @@ static void print_usage(FILE* stream)
 #if defined(AIVM_DEBUG_RUNTIME)
     fprintf(stream, "       %s profile <program.aibc1> [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s benchmark [--iterations <n>] <program.aibc1> [args...]\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [args...]\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s explain <debug-run-dir>\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s suggest <debug-run-dir>\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s inspect <stack|memory|profile|syscalls> <debug-run-dir>\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s compare <left-debug-run-dir> <right-debug-run-dir>\n", AIVM_CLI_NAME);
 #endif
 }
 
@@ -686,16 +930,859 @@ static int read_file(const char* path, uint8_t** out_bytes, size_t* out_size)
     return 1;
 }
 
+#if defined(AIVM_DEBUG_RUNTIME)
+static void write_empty_debug_file(const char* artifact_dir, const char* file_name)
+{
+    char path[PATH_MAX];
+    FILE* file;
+    if (!join_path(artifact_dir, file_name, path, sizeof(path))) {
+        return;
+    }
+    file = fopen(path, "ab");
+    if (file != NULL) {
+        fclose(file);
+    }
+}
+
+static size_t debug_current_pc(const AivmProgram* program, const AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0U;
+    }
+    if (program != NULL && vm->instruction_pointer < program->instruction_count) {
+        return vm->instruction_pointer;
+    }
+    if (vm->recent_opcode_count > 0U) {
+        return vm->recent_opcodes[vm->recent_opcode_count - 1U].instruction_pointer;
+    }
+    return vm->instruction_pointer;
+}
+
+static const char* debug_current_opcode_name(const AivmProgram* program, const AivmVm* vm)
+{
+    if (vm == NULL) {
+        return "UNKNOWN";
+    }
+    if (program != NULL && vm->instruction_pointer < program->instruction_count) {
+        return cli_opcode_name(program->instructions[vm->instruction_pointer].opcode);
+    }
+    if (vm->recent_opcode_count > 0U) {
+        return cli_opcode_name((AivmOpcode)vm->recent_opcodes[vm->recent_opcode_count - 1U].opcode);
+    }
+    return "UNKNOWN";
+}
+
+static void write_debug_stack_trace(FILE* file, const AivmProgram* program, const AivmVm* vm)
+{
+    size_t frame;
+    size_t current_pc;
+    const char* current_opcode;
+    if (file == NULL || vm == NULL) {
+        return;
+    }
+    current_pc = debug_current_pc(program, vm);
+    current_opcode = debug_current_opcode_name(program, vm);
+    fprintf(file, "format = \"aivm_debug_stack_trace_v1\"\n");
+    fprintf(file, "current_pc = %llu\n", (unsigned long long)current_pc);
+    fprintf(file, "current_opcode = ");
+    write_toml_string(file, current_opcode);
+    fprintf(file, "\n");
+    fprintf(file, "frames = [\n");
+    fprintf(
+        file,
+        "  { index = 0, role = \"current\", function = \"main\", pc = %llu, opcode = ",
+        (unsigned long long)current_pc);
+    write_toml_string(file, current_opcode);
+    fprintf(file, ", locals_base = 0, return_pc = 0 },\n");
+    for (frame = 0U; frame < vm->call_frame_count; frame += 1U) {
+        const AivmCallFrame* call_frame = &vm->call_frames[vm->call_frame_count - frame - 1U];
+        fprintf(
+            file,
+            "  { index = %llu, role = \"caller\", function = \"unknown\", pc = %llu, opcode = \"UNKNOWN\", locals_base = %llu, return_pc = %llu },\n",
+            (unsigned long long)(frame + 1U),
+            (unsigned long long)call_frame->return_instruction_pointer,
+            (unsigned long long)call_frame->locals_base,
+            (unsigned long long)call_frame->return_instruction_pointer);
+    }
+    fprintf(file, "]\n");
+}
+
+static void write_debug_artifacts(
+    const char* artifact_dir,
+    const char* program_path,
+    const AivmProgram* program,
+    const AivmVm* vm,
+    int ok,
+    int exit_code,
+    double elapsed_seconds)
+{
+    char path[PATH_MAX];
+    FILE* file;
+    char stack0[96];
+    char stack1[96];
+    char local0[96];
+    char local1[96];
+    AivmRuntimeProfile runtime_profile = vm == NULL ? aivm_runtime_default_profile() : vm->runtime_profile;
+    AivmRuntimeProfileLimits profile_limits = aivm_runtime_profile_limits(runtime_profile);
+
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        return;
+    }
+    if (!ensure_directory(artifact_dir)) {
+        fprintf(stderr, "%s: failed to create debug artifact directory: %s\n", AIVM_CLI_NAME, artifact_dir);
+        return;
+    }
+
+    write_empty_debug_file(artifact_dir, "stdout.txt");
+    if (join_path(artifact_dir, "stderr.txt", path, sizeof(path))) {
+        file = fopen(path, "ab");
+        if (file != NULL) {
+            if (!ok && vm != NULL) {
+                fprintf(
+                    file,
+                    "aivm: execution failed: status=%d error=%d",
+                    (int)vm->status,
+                    (int)vm->error);
+                if (aivm_vm_error_detail(vm) != NULL && aivm_vm_error_detail(vm)[0] != '\0') {
+                    fprintf(file, " detail=%s", aivm_vm_error_detail(vm));
+                }
+                fprintf(file, "\n");
+            }
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "config.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_config_v1\"\n");
+            fprintf(file, "runtime = \"aivm-debug\"\n");
+            fprintf(file, "runtime_profile = ");
+            write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
+            fprintf(file, "\n");
+            fprintf(file, "abi = %u\n", (unsigned int)aivm_c_abi_version());
+            fprintf(file, "program = ");
+            write_toml_string(file, program_path);
+            fprintf(file, "\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "diagnostics.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_diagnostics_v1\"\n");
+            fprintf(file, "runtime_profile = ");
+            write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
+            fprintf(file, "\n");
+            fprintf(file, "status = ");
+            write_toml_string(file, ok ? "ok" : "error");
+            fprintf(file, "\n");
+            fprintf(file, "phase = \"execute\"\n");
+            fprintf(file, "exit_code = %d\n", exit_code);
+            fprintf(file, "vm_status = %d\n", vm == NULL ? 0 : (int)vm->status);
+            fprintf(file, "vm_error = %d\n", vm == NULL ? 0 : (int)vm->error);
+            fprintf(file, "vm_error_code = ");
+            write_toml_string(file, vm == NULL ? "AIVM000" : aivm_vm_error_code(vm->error));
+            fprintf(file, "\n");
+            fprintf(file, "vm_error_message = ");
+            write_toml_string(file, vm == NULL ? "" : aivm_vm_error_message(vm->error));
+            fprintf(file, "\n");
+            fprintf(file, "detail = ");
+            write_toml_string(file, vm == NULL ? "" : aivm_vm_error_detail(vm));
+            fprintf(file, "\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            write_debug_stack_trace(file, program, vm);
+            fclose(file);
+        }
+    }
+
+    stack0[0] = '\0';
+    stack1[0] = '\0';
+    local0[0] = '\0';
+    local1[0] = '\0';
+    if (vm != NULL && vm->stack_count > 0U) {
+        format_value_preview(&vm->stack[vm->stack_count - 1U], stack0, sizeof(stack0));
+    }
+    if (vm != NULL && vm->stack_count > 1U) {
+        format_value_preview(&vm->stack[vm->stack_count - 2U], stack1, sizeof(stack1));
+    }
+    if (vm != NULL && vm->locals_count > 0U) {
+        format_value_preview(&vm->locals[0], local0, sizeof(local0));
+    }
+    if (vm != NULL && vm->locals_count > 1U) {
+        format_value_preview(&vm->locals[1], local1, sizeof(local1));
+    }
+
+    if (join_path(artifact_dir, "vm_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_vm_trace_v1\"\n");
+            fprintf(file, "last = { pc = %llu, opcode = ",
+                (unsigned long long)debug_current_pc(program, vm));
+            write_toml_string(file, debug_current_opcode_name(program, vm));
+            fprintf(file, " }\n");
+            fprintf(file, "stack = { count = %llu, top0 = ",
+                (unsigned long long)(vm == NULL ? 0U : vm->stack_count));
+            write_toml_string(file, stack0);
+            fprintf(file, ", top1 = ");
+            write_toml_string(file, stack1);
+            fprintf(file, " }\n");
+            fprintf(file, "locals = { count = %llu, local0 = ",
+                (unsigned long long)(vm == NULL ? 0U : vm->locals_count));
+            write_toml_string(file, local0);
+            fprintf(file, ", local1 = ");
+            write_toml_string(file, local1);
+            fprintf(file, " }\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_memory_v1\"\n");
+            fprintf(file, "stack_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->stack_count));
+            fprintf(file, "locals_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->locals_count));
+            fprintf(file, "string_arena_used = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->string_arena_used));
+            fprintf(file, "string_arena_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->string_arena_high_water));
+            fprintf(file, "bytes_arena_used = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->bytes_arena_used));
+            fprintf(file, "bytes_arena_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->bytes_arena_high_water));
+            fprintf(file, "node_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_count));
+            fprintf(file, "node_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_high_water));
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu }\n",
+                (unsigned long long)profile_limits.stack_capacity,
+                (unsigned long long)profile_limits.call_frame_capacity,
+                (unsigned long long)profile_limits.locals_capacity,
+                (unsigned long long)profile_limits.string_arena_capacity,
+                (unsigned long long)profile_limits.bytes_arena_capacity,
+                (unsigned long long)profile_limits.node_capacity,
+                (unsigned long long)profile_limits.node_attr_capacity,
+                (unsigned long long)profile_limits.node_child_capacity,
+                (unsigned long long)profile_limits.task_capacity,
+                (unsigned long long)profile_limits.par_value_capacity);
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "profile.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            size_t opcode_index;
+            size_t syscall_index;
+            fprintf(file, "format = \"aivm_debug_profile_v1\"\n");
+            fprintf(file, "status = ");
+            write_toml_string(file, ok ? "ok" : "error");
+            fprintf(file, "\n");
+            fprintf(file, "elapsed_seconds = %.9f\n", elapsed_seconds);
+            fprintf(file, "instruction_count = %llu\n",
+                (unsigned long long)(vm == NULL ? 0U : vm->profile_instruction_count));
+            fprintf(file, "opcode_counts = [\n");
+            if (vm != NULL) {
+                for (opcode_index = 0U;
+                     opcode_index < (sizeof(vm->profile_opcode_counts) / sizeof(vm->profile_opcode_counts[0]));
+                     opcode_index += 1U) {
+                    if (vm->profile_opcode_counts[opcode_index] == 0U) {
+                        continue;
+                    }
+                    fprintf(file, "  { opcode = ");
+                    write_toml_string(file, cli_opcode_name((AivmOpcode)opcode_index));
+                    fprintf(file, ", count = %llu },\n",
+                        (unsigned long long)vm->profile_opcode_counts[opcode_index]);
+                }
+            }
+            fprintf(file, "]\n");
+            fprintf(file, "syscall_count = %llu\n",
+                (unsigned long long)(vm == NULL ? 0U : vm->profile_syscall_count));
+            fprintf(file, "syscall_elapsed_seconds = %.9f\n",
+                vm == NULL ? 0.0 : vm->profile_syscall_elapsed_seconds);
+            fprintf(file, "syscall_counts = [\n");
+            if (vm != NULL) {
+                for (syscall_index = 0U; syscall_index < vm->profile_syscall_target_count; syscall_index += 1U) {
+                    fprintf(file, "  { target = ");
+                    write_toml_string(file, vm->profile_syscall_targets[syscall_index].target);
+                    fprintf(file, ", count = %llu, elapsed_seconds = %.9f },\n",
+                        (unsigned long long)vm->profile_syscall_targets[syscall_index].count,
+                        vm->profile_syscall_targets[syscall_index].elapsed_seconds);
+                }
+            }
+            fprintf(file, "]\n");
+            fprintf(file, "note = \"Profiler timings use the host C clock and are diagnostic only.\"\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "syscall_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            size_t syscall_index;
+            fprintf(file, "format = \"aivm_debug_syscall_trace_v1\"\n");
+            fprintf(file, "syscall_count = %llu\n",
+                (unsigned long long)(vm == NULL ? 0U : vm->profile_syscall_count));
+            fprintf(file, "syscall_elapsed_seconds = %.9f\n",
+                vm == NULL ? 0.0 : vm->profile_syscall_elapsed_seconds);
+            fprintf(file, "syscalls = [\n");
+            if (vm != NULL) {
+                for (syscall_index = 0U; syscall_index < vm->profile_syscall_target_count; syscall_index += 1U) {
+                    fprintf(file, "  { target = ");
+                    write_toml_string(file, vm->profile_syscall_targets[syscall_index].target);
+                    fprintf(file, ", count = %llu, elapsed_seconds = %.9f },\n",
+                        (unsigned long long)vm->profile_syscall_targets[syscall_index].count,
+                        vm->profile_syscall_targets[syscall_index].elapsed_seconds);
+                }
+            }
+            fprintf(file, "]\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "suggestions.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_suggestions_v1\"\n");
+            fprintf(file, "next = [\"aivm-debug explain %s\", \"aivm-debug inspect stack %s\"]\n", artifact_dir, artifact_dir);
+            fclose(file);
+        }
+    }
+}
+
+static void write_debug_load_failure_artifacts(
+    const char* artifact_dir,
+    const char* program_path,
+    AivmProgramLoadResult load_result)
+{
+    char path[PATH_MAX];
+    FILE* file;
+    AivmRuntimeProfile runtime_profile = aivm_runtime_default_profile();
+    AivmRuntimeProfileLimits profile_limits = aivm_runtime_profile_limits(runtime_profile);
+
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        return;
+    }
+    if (!ensure_directory(artifact_dir)) {
+        fprintf(stderr, "%s: failed to create debug artifact directory: %s\n", AIVM_CLI_NAME, artifact_dir);
+        return;
+    }
+
+    write_empty_debug_file(artifact_dir, "stdout.txt");
+    if (join_path(artifact_dir, "stderr.txt", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "aivm: load failed: %s at byte %zu\n",
+                aivm_program_status_message(load_result.status),
+                load_result.error_offset);
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "config.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_config_v1\"\n");
+            fprintf(file, "runtime = \"aivm-debug\"\n");
+            fprintf(file, "runtime_profile = ");
+            write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
+            fprintf(file, "\n");
+            fprintf(file, "abi = %u\n", (unsigned int)aivm_c_abi_version());
+            fprintf(file, "program = ");
+            write_toml_string(file, program_path);
+            fprintf(file, "\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "diagnostics.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_diagnostics_v1\"\n");
+            fprintf(file, "runtime_profile = ");
+            write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
+            fprintf(file, "\n");
+            fprintf(file, "status = \"error\"\n");
+            fprintf(file, "phase = \"load\"\n");
+            fprintf(file, "exit_code = 2\n");
+            fprintf(file, "program_status = %d\n", (int)load_result.status);
+            fprintf(file, "program_error_code = ");
+            write_toml_string(file, aivm_program_status_code(load_result.status));
+            fprintf(file, "\n");
+            fprintf(file, "program_error_message = ");
+            write_toml_string(file, aivm_program_status_message(load_result.status));
+            fprintf(file, "\n");
+            fprintf(file, "program_error_offset = %llu\n", (unsigned long long)load_result.error_offset);
+            fprintf(file, "vm_status = 0\n");
+            fprintf(file, "vm_error = 0\n");
+            fprintf(file, "vm_error_code = \"AIVM000\"\n");
+            fprintf(file, "vm_error_message = \"No error.\"\n");
+            fprintf(file, "detail = ");
+            write_toml_string(file, aivm_program_status_message(load_result.status));
+            fprintf(file, "\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_stack_trace_v1\"\n");
+            fprintf(file, "current_pc = 0\n");
+            fprintf(file, "current_opcode = \"LOAD_FAILED\"\n");
+            fprintf(file, "frames = []\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "vm_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_vm_trace_v1\"\n");
+            fprintf(file, "last = { pc = 0, opcode = \"LOAD_FAILED\" }\n");
+            fprintf(file, "stack = { count = 0, top0 = \"\", top1 = \"\" }\n");
+            fprintf(file, "locals = { count = 0, local0 = \"\", local1 = \"\" }\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_memory_v1\"\n");
+            fprintf(file, "stack_count = 0\n");
+            fprintf(file, "locals_count = 0\n");
+            fprintf(file, "string_arena_used = 0\n");
+            fprintf(file, "string_arena_high_water = 0\n");
+            fprintf(file, "bytes_arena_used = 0\n");
+            fprintf(file, "bytes_arena_high_water = 0\n");
+            fprintf(file, "node_count = 0\n");
+            fprintf(file, "node_high_water = 0\n");
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu }\n",
+                (unsigned long long)profile_limits.stack_capacity,
+                (unsigned long long)profile_limits.call_frame_capacity,
+                (unsigned long long)profile_limits.locals_capacity,
+                (unsigned long long)profile_limits.string_arena_capacity,
+                (unsigned long long)profile_limits.bytes_arena_capacity,
+                (unsigned long long)profile_limits.node_capacity,
+                (unsigned long long)profile_limits.node_attr_capacity,
+                (unsigned long long)profile_limits.node_child_capacity,
+                (unsigned long long)profile_limits.task_capacity,
+                (unsigned long long)profile_limits.par_value_capacity);
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "profile.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_profile_v1\"\n");
+            fprintf(file, "status = \"load_failed\"\n");
+            fprintf(file, "elapsed_seconds = 0.000000000\n");
+            fprintf(file, "instruction_count = 0\n");
+            fprintf(file, "opcode_counts = []\n");
+            fprintf(file, "syscall_count = 0\n");
+            fprintf(file, "syscall_elapsed_seconds = 0.000000000\n");
+            fprintf(file, "syscall_counts = []\n");
+            fprintf(file, "note = \"Program load failed before VM execution.\"\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "syscall_trace.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_syscall_trace_v1\"\n");
+            fprintf(file, "syscall_count = 0\n");
+            fprintf(file, "syscall_elapsed_seconds = 0.000000000\n");
+            fprintf(file, "syscalls = []\n");
+            fclose(file);
+        }
+    }
+
+    if (join_path(artifact_dir, "suggestions.toml", path, sizeof(path))) {
+        file = fopen(path, "wb");
+        if (file != NULL) {
+            fprintf(file, "format = \"aivm_debug_suggestions_v1\"\n");
+            fprintf(file, "next = [\"aivm-debug explain %s\", \"verify the input is a valid AiBC v2 file\"]\n", artifact_dir);
+            fclose(file);
+        }
+    }
+}
+
+static void print_matching_toml_value(const char* path, const char* key, const char* label)
+{
+    FILE* file = fopen(path, "rb");
+    char line[1024];
+    size_t key_len = strlen(key);
+    if (file == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (strncmp(line, key, key_len) == 0) {
+            char* value = strchr(line, '=');
+            if (value != NULL) {
+                value += 1;
+                while (*value == ' ' || *value == '\t') {
+                    value += 1;
+                }
+                printf("%s: %s", label, value);
+                if (strchr(value, '\n') == NULL) {
+                    printf("\n");
+                }
+                break;
+            }
+        }
+    }
+    fclose(file);
+}
+
+static void print_matching_toml_prefix(const char* path, const char* prefix, const char* label)
+{
+    FILE* file = fopen(path, "rb");
+    char line[1024];
+    size_t prefix_len = strlen(prefix);
+    if (file == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (strncmp(line, prefix, prefix_len) == 0) {
+            printf("%s: %s", label, line);
+            if (strchr(line, '\n') == NULL) {
+                printf("\n");
+            }
+            break;
+        }
+    }
+    fclose(file);
+}
+
+static void print_all_matching_toml_prefix(const char* path, const char* prefix, const char* label)
+{
+    FILE* file = fopen(path, "rb");
+    char line[1024];
+    size_t prefix_len = strlen(prefix);
+    if (file == NULL) {
+        return;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (strncmp(line, prefix, prefix_len) == 0) {
+            printf("%s: %s", label, line);
+            if (strchr(line, '\n') == NULL) {
+                printf("\n");
+            }
+        }
+    }
+    fclose(file);
+}
+
+static int read_matching_toml_value(const char* path, const char* key, char* out, size_t out_len)
+{
+    FILE* file = fopen(path, "rb");
+    char line[1024];
+    size_t key_len = strlen(key);
+    if (out == NULL || out_len == 0U) {
+        if (file != NULL) {
+            fclose(file);
+        }
+        return 0;
+    }
+    out[0] = '\0';
+    if (file == NULL) {
+        return 0;
+    }
+    while (fgets(line, sizeof(line), file) != NULL) {
+        if (strncmp(line, key, key_len) == 0) {
+            char* value = strchr(line, '=');
+            size_t value_len;
+            if (value == NULL) {
+                continue;
+            }
+            value += 1;
+            while (*value == ' ' || *value == '\t') {
+                value += 1;
+            }
+            value_len = strlen(value);
+            while (value_len > 0U && (value[value_len - 1U] == '\n' || value[value_len - 1U] == '\r')) {
+                value_len -= 1U;
+            }
+            if (value_len >= out_len) {
+                value_len = out_len - 1U;
+            }
+            memcpy(out, value, value_len);
+            out[value_len] = '\0';
+            fclose(file);
+            return 1;
+        }
+    }
+    fclose(file);
+    return 0;
+}
+
+static int read_debug_value(
+    const char* artifact_dir,
+    const char* file_name,
+    const char* key,
+    char* out,
+    size_t out_len)
+{
+    char path[PATH_MAX];
+    if (!join_path(artifact_dir, file_name, path, sizeof(path))) {
+        if (out != NULL && out_len > 0U) {
+            out[0] = '\0';
+        }
+        return 0;
+    }
+    return read_matching_toml_value(path, key, out, out_len);
+}
+
+static int explain_debug_run(const char* artifact_dir)
+{
+    char path[PATH_MAX];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: explain requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug explain\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    if (join_path(artifact_dir, "diagnostics.toml", path, sizeof(path))) {
+        print_matching_toml_value(path, "runtime_profile", "runtime_profile");
+        print_matching_toml_value(path, "status", "status");
+        print_matching_toml_value(path, "phase", "phase");
+        print_matching_toml_value(path, "exit_code", "exit_code");
+        print_matching_toml_value(path, "program_error_code", "program_error_code");
+        print_matching_toml_value(path, "program_error_message", "program_error_message");
+        print_matching_toml_value(path, "program_error_offset", "program_error_offset");
+        print_matching_toml_value(path, "vm_error_code", "vm_error_code");
+        print_matching_toml_value(path, "vm_error_message", "vm_error_message");
+        print_matching_toml_value(path, "detail", "detail");
+    }
+    if (join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
+        print_matching_toml_value(path, "current_pc", "current_pc");
+        print_matching_toml_value(path, "current_opcode", "current_opcode");
+    }
+    if (join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
+        print_matching_toml_value(path, "stack_count", "stack_count");
+        print_matching_toml_value(path, "locals_count", "locals_count");
+        print_matching_toml_value(path, "node_count", "node_count");
+        print_matching_toml_value(path, "limits", "limits");
+    }
+    return 0;
+}
+
+static int suggest_debug_run(const char* artifact_dir)
+{
+    char status[128];
+    char phase[128];
+    char error_code[128];
+    char program_error_code[128];
+    char opcode[128];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: suggest requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    (void)read_debug_value(artifact_dir, "diagnostics.toml", "status", status, sizeof(status));
+    (void)read_debug_value(artifact_dir, "diagnostics.toml", "phase", phase, sizeof(phase));
+    (void)read_debug_value(artifact_dir, "diagnostics.toml", "vm_error_code", error_code, sizeof(error_code));
+    (void)read_debug_value(artifact_dir, "diagnostics.toml", "program_error_code", program_error_code, sizeof(program_error_code));
+    (void)read_debug_value(artifact_dir, "stack_trace.toml", "current_opcode", opcode, sizeof(opcode));
+
+    printf("aivm-debug suggest\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    printf("status: %s\n", status[0] == '\0' ? "\"unknown\"" : status);
+    printf("phase: %s\n", phase[0] == '\0' ? "\"unknown\"" : phase);
+    if (program_error_code[0] != '\0') {
+        printf("program_error_code: %s\n", program_error_code);
+    }
+    printf("vm_error_code: %s\n", error_code[0] == '\0' ? "\"unknown\"" : error_code);
+    printf("current_opcode: %s\n", opcode[0] == '\0' ? "\"unknown\"" : opcode);
+    printf("next:\n");
+    printf("- aivm-debug explain %s\n", artifact_dir);
+    if (strcmp(phase, "\"load\"") == 0) {
+        printf("- verify the input is a valid AiBC v2 file\n");
+        printf("- rebuild the program before debugging VM execution\n");
+    } else if (strcmp(status, "\"error\"") == 0 || (error_code[0] != '\0' && strcmp(error_code, "\"AIVM000\"") != 0)) {
+        printf("- aivm-debug inspect stack %s\n", artifact_dir);
+        printf("- aivm-debug inspect memory %s\n", artifact_dir);
+        printf("- inspect diagnostics.toml detail before changing code\n");
+    } else {
+        printf("- aivm-debug inspect profile %s\n", artifact_dir);
+        printf("- aivm-debug inspect syscalls %s\n", artifact_dir);
+    }
+    printf("- capture a second run and compare when validating a fix\n");
+    return 0;
+}
+
+static void print_compare_value(
+    const char* left_dir,
+    const char* right_dir,
+    const char* file_name,
+    const char* key,
+    const char* label)
+{
+    char left[256];
+    char right[256];
+    int has_left = read_debug_value(left_dir, file_name, key, left, sizeof(left));
+    int has_right = read_debug_value(right_dir, file_name, key, right, sizeof(right));
+    printf("%s: left=%s right=%s changed=%s\n",
+        label,
+        has_left ? left : "<missing>",
+        has_right ? right : "<missing>",
+        (has_left == has_right && has_left != 0 && strcmp(left, right) == 0) ? "false" : "true");
+}
+
+static int compare_debug_runs(const char* left_dir, const char* right_dir)
+{
+    if (left_dir == NULL || left_dir[0] == '\0' || right_dir == NULL || right_dir[0] == '\0') {
+        fprintf(stderr, "%s: compare requires two debug-run directories\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug compare\n");
+    printf("left: %s\n", left_dir);
+    printf("right: %s\n", right_dir);
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "status", "status");
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "phase", "phase");
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "exit_code", "exit_code");
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "program_error_code", "program_error_code");
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "vm_error_code", "vm_error_code");
+    print_compare_value(left_dir, right_dir, "diagnostics.toml", "detail", "detail");
+    print_compare_value(left_dir, right_dir, "stack_trace.toml", "current_pc", "current_pc");
+    print_compare_value(left_dir, right_dir, "stack_trace.toml", "current_opcode", "current_opcode");
+    print_compare_value(left_dir, right_dir, "memory.toml", "stack_count", "stack_count");
+    print_compare_value(left_dir, right_dir, "memory.toml", "locals_count", "locals_count");
+    print_compare_value(left_dir, right_dir, "memory.toml", "node_count", "node_count");
+    print_compare_value(left_dir, right_dir, "profile.toml", "instruction_count", "instruction_count");
+    print_compare_value(left_dir, right_dir, "profile.toml", "syscall_count", "syscall_count");
+    print_compare_value(left_dir, right_dir, "profile.toml", "syscall_elapsed_seconds", "syscall_elapsed_seconds");
+    return 0;
+}
+
+static int inspect_debug_stack(const char* artifact_dir)
+{
+    char path[PATH_MAX];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: inspect stack requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug inspect stack\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    if (!join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
+        return 1;
+    }
+    print_matching_toml_value(path, "current_pc", "current_pc");
+    print_matching_toml_value(path, "current_opcode", "current_opcode");
+    print_matching_toml_prefix(path, "  { index = 0,", "current_frame");
+    return 0;
+}
+
+static int inspect_debug_memory(const char* artifact_dir)
+{
+    char path[PATH_MAX];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: inspect memory requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug inspect memory\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    if (!join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
+        return 1;
+    }
+    print_matching_toml_value(path, "stack_count", "stack_count");
+    print_matching_toml_value(path, "locals_count", "locals_count");
+    print_matching_toml_value(path, "string_arena_used", "string_arena_used");
+    print_matching_toml_value(path, "string_arena_high_water", "string_arena_high_water");
+    print_matching_toml_value(path, "bytes_arena_used", "bytes_arena_used");
+    print_matching_toml_value(path, "bytes_arena_high_water", "bytes_arena_high_water");
+    print_matching_toml_value(path, "node_count", "node_count");
+    print_matching_toml_value(path, "node_high_water", "node_high_water");
+    print_matching_toml_value(path, "limits", "limits");
+    return 0;
+}
+
+static int inspect_debug_profile(const char* artifact_dir)
+{
+    char path[PATH_MAX];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: inspect profile requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug inspect profile\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    if (!join_path(artifact_dir, "profile.toml", path, sizeof(path))) {
+        return 1;
+    }
+    print_matching_toml_value(path, "status", "status");
+    print_matching_toml_value(path, "elapsed_seconds", "elapsed_seconds");
+    print_matching_toml_value(path, "instruction_count", "instruction_count");
+    print_all_matching_toml_prefix(path, "  { opcode =", "opcode_count");
+    print_matching_toml_value(path, "syscall_count", "syscall_count");
+    print_matching_toml_value(path, "syscall_elapsed_seconds", "syscall_elapsed_seconds");
+    print_all_matching_toml_prefix(path, "  { target =", "syscall_count_by_target");
+    print_matching_toml_value(path, "note", "note");
+    return 0;
+}
+
+static int inspect_debug_syscalls(const char* artifact_dir)
+{
+    char path[PATH_MAX];
+    if (artifact_dir == NULL || artifact_dir[0] == '\0') {
+        fprintf(stderr, "%s: inspect syscalls requires a debug-run directory\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    printf("aivm-debug inspect syscalls\n");
+    printf("artifact_dir: %s\n", artifact_dir);
+    if (!join_path(artifact_dir, "syscall_trace.toml", path, sizeof(path))) {
+        return 1;
+    }
+    print_matching_toml_value(path, "format", "format");
+    print_matching_toml_value(path, "syscall_count", "syscall_count");
+    print_matching_toml_value(path, "syscall_elapsed_seconds", "syscall_elapsed_seconds");
+    print_all_matching_toml_prefix(path, "  { target =", "syscall");
+    return 0;
+}
+
+static int inspect_debug_run(int argc, char** argv)
+{
+    if (argc != 4) {
+        print_usage(stderr);
+        return 64;
+    }
+    if (strcmp(argv[2], "stack") == 0) {
+        return inspect_debug_stack(argv[3]);
+    }
+    if (strcmp(argv[2], "memory") == 0) {
+        return inspect_debug_memory(argv[3]);
+    }
+    if (strcmp(argv[2], "profile") == 0) {
+        return inspect_debug_profile(argv[3]);
+    }
+    if (strcmp(argv[2], "syscalls") == 0) {
+        return inspect_debug_syscalls(argv[3]);
+    }
+    fprintf(stderr, "%s: unknown inspect target: %s\n", AIVM_CLI_NAME, argv[2]);
+    return 64;
+}
+#endif
+
 static int execute_bytes(
     const uint8_t* bytes,
     size_t byte_count,
     const char* const* process_argv,
-    size_t process_argv_count)
+    size_t process_argv_count,
+    const char* debug_artifact_dir,
+    const char* program_path)
 {
     AivmProgram program;
     static AivmVm vm;
     AivmProgramLoadResult load_result;
     int ok;
+#if defined(AIVM_DEBUG_RUNTIME)
+    clock_t profile_start;
+    clock_t profile_end;
+    double elapsed_seconds;
+#endif
     static const AivmSyscallBinding bindings[] = {
         { "sys.stdout.writeLine", aivm_cli_stdout_write_line },
         { "io.print", aivm_cli_stdout_write_line },
@@ -725,6 +1812,12 @@ static int execute_bytes(
 
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);
     if (load_result.status != AIVM_PROGRAM_OK) {
+#if defined(AIVM_DEBUG_RUNTIME)
+        write_debug_load_failure_artifacts(debug_artifact_dir, program_path, load_result);
+#else
+        (void)debug_artifact_dir;
+        (void)program_path;
+#endif
         fprintf(
             stderr,
             "aivm: load failed: %s at byte %zu\n",
@@ -734,6 +1827,9 @@ static int execute_bytes(
     }
 
     g_native_active_vm = &vm;
+#if defined(AIVM_DEBUG_RUNTIME)
+    profile_start = clock();
+#endif
     ok = aivm_execute_program_with_syscalls_and_argv(
         &program,
         bindings,
@@ -741,9 +1837,19 @@ static int execute_bytes(
         process_argv,
         process_argv_count,
         &vm);
+#if defined(AIVM_DEBUG_RUNTIME)
+    profile_end = clock();
+    elapsed_seconds = (double)(profile_end - profile_start) / (double)CLOCKS_PER_SEC;
+#endif
     g_native_active_vm = NULL;
 
     if (!ok) {
+#if defined(AIVM_DEBUG_RUNTIME)
+        write_debug_artifacts(debug_artifact_dir, program_path, &program, &vm, 0, 3, elapsed_seconds);
+#else
+        (void)debug_artifact_dir;
+        (void)program_path;
+#endif
         fprintf(
             stderr,
             "aivm: execution failed: status=%d error=%d",
@@ -758,9 +1864,15 @@ static int execute_bytes(
     if (vm.status == AIVM_VM_STATUS_HALTED && vm.stack_count > 0U) {
         AivmValue top = vm.stack[vm.stack_count - 1U];
         if (top.type == AIVM_VAL_INT) {
+#if defined(AIVM_DEBUG_RUNTIME)
+            write_debug_artifacts(debug_artifact_dir, program_path, &program, &vm, 1, (int)top.int_value, elapsed_seconds);
+#endif
             return (int)top.int_value;
         }
     }
+#if defined(AIVM_DEBUG_RUNTIME)
+    write_debug_artifacts(debug_artifact_dir, program_path, &program, &vm, 1, 0, elapsed_seconds);
+#endif
     return 0;
 }
 
@@ -773,12 +1885,94 @@ static int run_program(const char* path, const char* const* process_argv, size_t
     if (!read_file(path, &bytes, &byte_count)) {
         return 1;
     }
-    exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count);
+    exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count, NULL, path);
     free(bytes);
     return exit_code;
 }
 
 #if defined(AIVM_DEBUG_RUNTIME)
+static int debug_capture_run(int argc, char** argv)
+{
+    const char* artifact_dir = ".tmp/aivm-debug-run";
+    const char* program_path = NULL;
+    const char* const* process_argv = NULL;
+    size_t process_argv_count = 0U;
+    uint8_t* bytes;
+    size_t byte_count;
+    int exit_code;
+    int i;
+    char stdout_path[PATH_MAX];
+    char stderr_path[PATH_MAX];
+
+    if (argc < 5) {
+        print_usage(stderr);
+        return 64;
+    }
+    for (i = 4; i < argc; i += 1) {
+        if (strcmp(argv[i], "--out") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --out requires a directory\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            artifact_dir = argv[i + 1];
+            i += 1;
+        } else if (strncmp(argv[i], "--out=", 6U) == 0) {
+            artifact_dir = argv[i] + 6;
+        } else if (strcmp(argv[i], "--") == 0) {
+            if (program_path == NULL) {
+                fprintf(stderr, "%s: debug capture run requires a program before --\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            if (i + 1 < argc) {
+                process_argv = (const char* const*)&argv[i + 1];
+                process_argv_count = (size_t)(argc - i - 1);
+            }
+            break;
+        } else if (program_path == NULL) {
+            program_path = argv[i];
+        } else {
+            process_argv = (const char* const*)&argv[i];
+            process_argv_count = (size_t)(argc - i);
+            break;
+        }
+    }
+
+    if (program_path == NULL) {
+        print_usage(stderr);
+        return 64;
+    }
+    if (!read_file(program_path, &bytes, &byte_count)) {
+        return 1;
+    }
+    if (!ensure_directory(artifact_dir)) {
+        fprintf(stderr, "%s: failed to create debug artifact directory: %s\n", AIVM_CLI_NAME, artifact_dir);
+        free(bytes);
+        return 1;
+    }
+    if (join_path(artifact_dir, "stdout.txt", stdout_path, sizeof(stdout_path))) {
+        g_debug_stdout_capture = fopen(stdout_path, "wb");
+    }
+    if (join_path(artifact_dir, "stderr.txt", stderr_path, sizeof(stderr_path))) {
+        FILE* stderr_capture = fopen(stderr_path, "wb");
+        if (stderr_capture != NULL) {
+            fclose(stderr_capture);
+        }
+    }
+    exit_code = execute_bytes(
+        bytes,
+        byte_count,
+        process_argv,
+        process_argv_count,
+        artifact_dir,
+        program_path);
+    if (g_debug_stdout_capture != NULL) {
+        fclose(g_debug_stdout_capture);
+        g_debug_stdout_capture = NULL;
+    }
+    free(bytes);
+    return exit_code;
+}
+
 static int parse_positive_ulong(const char* text, unsigned long* out_value)
 {
     char* end;
@@ -842,7 +2036,7 @@ static int benchmark_program(int argc, char** argv)
 
     start = clock();
     for (i = 0UL; i < iterations; i += 1UL) {
-        exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count);
+        exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count, NULL, path);
         if (exit_code != 0) {
             free(bytes);
             return exit_code;
@@ -876,6 +2070,36 @@ int main(int argc, char** argv)
         return 0;
     }
 #if defined(AIVM_DEBUG_RUNTIME)
+    if (argc >= 2 && strcmp(argv[1], "explain") == 0) {
+        if (argc != 3) {
+            print_usage(stderr);
+            return 64;
+        }
+        return explain_debug_run(argv[2]);
+    }
+    if (argc >= 2 && strcmp(argv[1], "suggest") == 0) {
+        if (argc != 3) {
+            print_usage(stderr);
+            return 64;
+        }
+        return suggest_debug_run(argv[2]);
+    }
+    if (argc >= 2 && strcmp(argv[1], "compare") == 0) {
+        if (argc != 4) {
+            print_usage(stderr);
+            return 64;
+        }
+        return compare_debug_runs(argv[2], argv[3]);
+    }
+    if (argc >= 2 && strcmp(argv[1], "inspect") == 0) {
+        return inspect_debug_run(argc, argv);
+    }
+    if (argc >= 4 &&
+        strcmp(argv[1], "debug") == 0 &&
+        strcmp(argv[2], "capture") == 0 &&
+        strcmp(argv[3], "run") == 0) {
+        return debug_capture_run(argc, argv);
+    }
     if (argc >= 3 && strcmp(argv[1], "profile") == 0) {
         const char* const* process_argv = (argc > 3) ? (const char* const*)&argv[3] : NULL;
         size_t process_argv_count = (argc > 3) ? (size_t)(argc - 3) : 0U;

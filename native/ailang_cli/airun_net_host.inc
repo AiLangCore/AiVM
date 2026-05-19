@@ -524,6 +524,11 @@ static void native_net_reset(void)
         }
     }
     for (i = 0U; i < NATIVE_NET_ASYNC_CAPACITY; i += 1U) {
+        if (!g_native_net_async_ops[i].used) {
+            memset(&g_native_net_async_ops[i], 0, sizeof(g_native_net_async_ops[i]));
+            g_native_net_async_ops[i].worker_socket = NATIVE_INVALID_SOCKET;
+            continue;
+        }
         g_native_net_async_ops[i].canceled = 1;
         native_net_async_maybe_finalize_worker(&g_native_net_async_ops[i]);
         native_net_async_close_worker_socket(&g_native_net_async_ops[i]);

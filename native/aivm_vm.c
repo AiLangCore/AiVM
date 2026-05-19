@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(AIVM_DEBUG_RUNTIME)
+#include <time.h>
+#endif
 #include "sys/aivm_syscall_contracts.h"
 
 #define AIVM_VM_STORAGE_MAGIC 0xA117A11DU
@@ -86,6 +89,46 @@ static void prepare_vm_for_init(AivmVm* vm)
         memset(vm, 0, sizeof(*vm));
         vm->storage_magic = AIVM_VM_STORAGE_MAGIC;
     }
+}
+
+const char* aivm_runtime_profile_name(AivmRuntimeProfile profile)
+{
+    switch (profile) {
+        case AIVM_RUNTIME_PROFILE_PRODUCTION:
+            return "production";
+        case AIVM_RUNTIME_PROFILE_DEBUG:
+            return "debug";
+        case AIVM_RUNTIME_PROFILE_TOOLING:
+            return "tooling";
+        default:
+            return "unknown";
+    }
+}
+
+AivmRuntimeProfile aivm_runtime_default_profile(void)
+{
+#if defined(AIVM_DEBUG_RUNTIME)
+    return AIVM_RUNTIME_PROFILE_DEBUG;
+#else
+    return AIVM_RUNTIME_PROFILE_PRODUCTION;
+#endif
+}
+
+AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
+{
+    AivmRuntimeProfileLimits limits;
+    limits.stack_capacity = AIVM_VM_STACK_CAPACITY;
+    limits.call_frame_capacity = AIVM_VM_CALLFRAME_CAPACITY;
+    limits.locals_capacity = AIVM_VM_LOCALS_CAPACITY;
+    limits.string_arena_capacity = AIVM_VM_STRING_ARENA_CAPACITY;
+    limits.bytes_arena_capacity = AIVM_VM_BYTES_ARENA_CAPACITY;
+    limits.node_capacity = AIVM_VM_NODE_CAPACITY;
+    limits.node_attr_capacity = AIVM_VM_NODE_ATTR_CAPACITY;
+    limits.node_child_capacity = AIVM_VM_NODE_CHILD_CAPACITY;
+    limits.task_capacity = AIVM_VM_TASK_CAPACITY;
+    limits.par_value_capacity = AIVM_VM_PAR_VALUE_CAPACITY;
+    (void)profile;
+    return limits;
 }
 
 static void set_vm_local_out_of_range_error(
@@ -426,6 +469,37 @@ static void record_recent_opcode(
         vm->recent_opcode_count += 1U;
     }
 }
+
+#if defined(AIVM_DEBUG_RUNTIME)
+static void record_profile_syscall(AivmVm* vm, const char* target, double elapsed_seconds)
+{
+    size_t index;
+    if (vm == NULL || target == NULL) {
+        return;
+    }
+    vm->profile_syscall_count += 1U;
+    vm->profile_syscall_elapsed_seconds += elapsed_seconds;
+    for (index = 0U; index < vm->profile_syscall_target_count; index += 1U) {
+        if (strcmp(vm->profile_syscall_targets[index].target, target) == 0) {
+            vm->profile_syscall_targets[index].count += 1U;
+            vm->profile_syscall_targets[index].elapsed_seconds += elapsed_seconds;
+            return;
+        }
+    }
+    if (vm->profile_syscall_target_count >= AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY) {
+        return;
+    }
+    index = vm->profile_syscall_target_count;
+    (void)snprintf(
+        vm->profile_syscall_targets[index].target,
+        sizeof(vm->profile_syscall_targets[index].target),
+        "%s",
+        target);
+    vm->profile_syscall_targets[index].count = 1U;
+    vm->profile_syscall_targets[index].elapsed_seconds = elapsed_seconds;
+    vm->profile_syscall_target_count += 1U;
+}
+#endif
 
 
 static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContractStatus contract_status);
@@ -1420,6 +1494,11 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
     int allow_positional_recovery = 0;
     size_t i;
+#if defined(AIVM_DEBUG_RUNTIME)
+    clock_t syscall_start;
+    clock_t syscall_end;
+    double syscall_elapsed_seconds;
+#endif
 
     if (vm == NULL || out_result == NULL) {
         return 0;
@@ -1582,6 +1661,9 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         return call_debug_task_reclaim_stats(vm, out_result);
     }
 
+#if defined(AIVM_DEBUG_RUNTIME)
+    syscall_start = clock();
+#endif
     syscall_status = aivm_syscall_dispatch_checked_with_contract(
         vm->syscall_bindings,
         vm->syscall_binding_count,
@@ -1590,6 +1672,11 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         effective_arg_count,
         out_result,
         &contract_status);
+#if defined(AIVM_DEBUG_RUNTIME)
+    syscall_end = clock();
+    syscall_elapsed_seconds = (double)(syscall_end - syscall_start) / (double)CLOCKS_PER_SEC;
+    record_profile_syscall(vm, target_value.string_value, syscall_elapsed_seconds);
+#endif
     if (syscall_status != AIVM_SYSCALL_OK) {
         if (syscall_status == AIVM_SYSCALL_ERR_INVALID) {
             (void)snprintf(
@@ -3171,6 +3258,14 @@ void aivm_reset_state(AivmVm* vm)
     vm->recent_call_count = 0U;
     vm->recent_return_count = 0U;
     vm->recent_opcode_count = 0U;
+#if defined(AIVM_DEBUG_RUNTIME)
+    vm->profile_instruction_count = 0U;
+    memset(vm->profile_opcode_counts, 0, sizeof(vm->profile_opcode_counts));
+    vm->profile_syscall_count = 0U;
+    vm->profile_syscall_elapsed_seconds = 0.0;
+    memset(vm->profile_syscall_targets, 0, sizeof(vm->profile_syscall_targets));
+    vm->profile_syscall_target_count = 0U;
+#endif
     vm->locals_count = 0U;
     vm->locals_limit = AIVM_VM_LOCALS_INITIAL_CAPACITY;
     vm->string_arena_used = 0U;
@@ -3245,6 +3340,7 @@ void aivm_init(AivmVm* vm, const AivmProgram* program)
     prepare_vm_for_init(vm);
 
     vm->program = program;
+    vm->runtime_profile = aivm_runtime_default_profile();
     vm->syscall_bindings = NULL;
     vm->syscall_binding_count = 0U;
     vm->process_argv = NULL;
@@ -3275,6 +3371,7 @@ void aivm_init_with_syscalls_and_argv(
     prepare_vm_for_init(vm);
 
     vm->program = program;
+    vm->runtime_profile = aivm_runtime_default_profile();
     vm->syscall_bindings = bindings;
     vm->syscall_binding_count = binding_count;
     vm->process_argv = process_argv;
@@ -3564,6 +3661,12 @@ void aivm_step(AivmVm* vm)
     vm->error_detail = NULL;
     instruction = &vm->program->instructions[vm->instruction_pointer];
     record_recent_opcode(vm, vm->instruction_pointer, (int)instruction->opcode, vm->stack_count);
+#if defined(AIVM_DEBUG_RUNTIME)
+    vm->profile_instruction_count += 1U;
+    if ((size_t)instruction->opcode < (sizeof(vm->profile_opcode_counts) / sizeof(vm->profile_opcode_counts[0]))) {
+        vm->profile_opcode_counts[(size_t)instruction->opcode] += 1U;
+    }
+#endif
 
     switch (instruction->opcode) {
         case AIVM_OP_NOP:

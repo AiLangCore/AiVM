@@ -60,6 +60,16 @@ profiles/resource limits rather than classify process execution as debug-only.
 Debug syscalls should be separated from production behavior. `aivm-debug` may
 bind diagnostic targets by default because it is intentionally diagnostic.
 
+Full debugger, profiler, stack-trace, capture, replay, and agent-inspection
+capabilities are required project tooling, but they belong to `aivm-debug` and
+debug/profile command surfaces rather than the stripped production VM. The
+canonical direction is documented in `SPEC/DEBUGGING.md`.
+
+The current debug-tooling slice is allowed to temporarily lead the work only
+until the required items in `SPEC/DEBUGGING.md` under
+`Return-To-Production-Readiness Checklist` are checked and `./test-aivm-c.sh`
+passes. After that, return to this production readiness checklist.
+
 ## Memory Strategy
 
 AiVM uses deterministic ceilings, but large VM regions are heap-backed rather
@@ -97,8 +107,12 @@ requirement.
 - [ ] Beta: add immutable message passing through deterministic queue dispatch.
 - [ ] Beta: document immutable shared module cache direction.
 - [ ] Beta: document large-object/blob storage direction.
-- [ ] Beta: add named runtime profiles for production, debug, and
+- [x] Document named runtime profiles for production, debug, and
   compiler/tooling workloads.
+- [x] Emit the active runtime profile and VM limit records in debug artifact
+  diagnostics.
+- [ ] Beta: add profile selection beyond default production/debug build
+  behavior.
 - [ ] Post-beta: research deterministic generational arenas only after beta
   memory/threading requirements are stable.
 
@@ -132,8 +146,11 @@ These are the immediate hardening tasks before beta:
 
 - `aivm-debug` syscall profile: identify debug-only targets, make production
   release binding explicit, and add a contract test.
-- Runtime profiles: define `production`, `debug`, and `tooling` limits, emit the
-  active profile in diagnostics, and document profile selection.
+- Debugger/profiler contract: implement the `SPEC/DEBUGGING.md` target surface
+  for stack traces, profiler artifacts, debugger stepping/inspection, and
+  agent-readable summaries.
+- Runtime profiles: profile names and diagnostic emission are wired; remaining
+  work is explicit profile selection and any non-default tooling limits.
 - Resource limits: define stable limit records for file, network, process,
   worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary

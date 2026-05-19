@@ -35,6 +35,22 @@ Current:
   - `airun debug dns <host> [port]`
   - success prints `Ok#ok1(type=string value="<ipv4>")`
   - failure prints `Err#err1(code=NET001 ...)` with `detail="dns_failed:..."`
+- Target debug/runtime direction is specified in `../../SPEC/DEBUGGING.md`.
+  Production `aivm` remains limited; `aivm-debug` owns full debugger,
+  profiler, stack trace, capture, replay, and agent-readable artifact support.
+- Initial native `aivm-debug` artifact support is available:
+  - `aivm-debug debug capture run <app.aibc1> --out <debug-run-dir>`
+  - `aivm-debug explain <debug-run-dir>`
+  - `aivm-debug inspect stack <debug-run-dir>`
+  - `aivm-debug inspect memory <debug-run-dir>`
+  - `aivm-debug inspect profile <debug-run-dir>`
+  - `aivm-debug inspect syscalls <debug-run-dir>`
+  - `aivm-debug suggest <debug-run-dir>`
+  - `aivm-debug compare <left-debug-run-dir> <right-debug-run-dir>`
+  - current artifacts include `config.toml`, `diagnostics.toml`,
+    `stdout.txt`, `stderr.txt`, `vm_trace.toml`, `syscall_trace.toml`,
+    `stack_trace.toml`, `profile.toml`, `memory.toml`, and
+    `suggestions.toml`.
 - `--inject-script` uses one command per line with the same `debug interact run` vocabulary:
   - `click 124,138`
   - `text 76103`
