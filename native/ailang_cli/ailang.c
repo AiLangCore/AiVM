@@ -5996,24 +5996,31 @@ static int simple_resolve_path(const char* base_file, const char* import_path, c
 static int simple_find_project_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len)
 {
     char source_dir[PATH_MAX];
-    char parent_dir[PATH_MAX];
+    char current[PATH_MAX];
     char manifest_path[PATH_MAX];
+    char lock_path[PATH_MAX];
     if (source_file == NULL || out_project_dir == NULL || out_len == 0U) {
         return 0;
     }
     if (!dirname_of(source_file, source_dir, sizeof(source_dir))) {
         return 0;
     }
-    if (join_path(source_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) &&
-        file_exists(manifest_path)) {
-        return snprintf(out_project_dir, out_len, "%s", source_dir) >= 0 &&
-               strlen(source_dir) < out_len;
+    if (snprintf(current, sizeof(current), "%s", source_dir) >= (int)sizeof(current)) {
+        return 0;
     }
-    if (dirname_of(source_dir, parent_dir, sizeof(parent_dir)) &&
-        join_path(parent_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) &&
-        file_exists(manifest_path)) {
-        return snprintf(out_project_dir, out_len, "%s", parent_dir) >= 0 &&
-               strlen(parent_dir) < out_len;
+    for (;;) {
+        char parent_dir[PATH_MAX];
+        if ((join_path(current, "project.aiproj", manifest_path, sizeof(manifest_path)) && file_exists(manifest_path)) ||
+            (join_path(current, "ailang.lock.toml", lock_path, sizeof(lock_path)) && file_exists(lock_path))) {
+            return snprintf(out_project_dir, out_len, "%s", current) >= 0 &&
+                   strlen(current) < out_len;
+        }
+        if (!dirname_of(current, parent_dir, sizeof(parent_dir)) || strcmp(parent_dir, current) == 0) {
+            break;
+        }
+        if (snprintf(current, sizeof(current), "%s", parent_dir) >= (int)sizeof(current)) {
+            return 0;
+        }
     }
     return snprintf(out_project_dir, out_len, "%s", source_dir) >= 0 &&
            strlen(source_dir) < out_len;
