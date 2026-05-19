@@ -7,9 +7,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$airun = Join-Path $RepoRoot 'tools/airun.exe'
-if (-not (Test-Path $airun)) {
-  Write-Host "skip: missing $airun"
+$ailang = Join-Path $RepoRoot 'tools/ailang.exe'
+if (-not (Test-Path $ailang)) {
+  Write-Host "skip: missing $ailang"
   exit 0
 }
 if (-not (Test-Path $ParityCli)) {
@@ -29,7 +29,7 @@ function Run-Case {
   )
 
   $actual = Join-Path $tmp "$Name.out"
-  & $airun run $Input --vm=c 1>$actual 2>&1
+  & $ailang run $Input --vm=c 1>$actual 2>&1
   $actualExit = $LASTEXITCODE
   if ($actualExit -ne $ExpectedExit) {
     throw "task edge parity mismatch ($Name): exit $actualExit expected $ExpectedExit"

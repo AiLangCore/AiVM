@@ -9,8 +9,9 @@ host syscall adapters, and launcher packaging until command behavior is
 rewritten in AiLang above the VM boundary.
 
 Current:
-- Canonical client-tool execution chain is `AiLang -> compiled AiVectra -> AiRun -> compiled app`.
-- `airun.c` provides the deterministic native C runtime executable for `tools/airun`.
+- Canonical client-tool execution chain is `ailang -> aivm -> compiled app`.
+- `ailang.c` provides the temporary deterministic native C bootstrap
+  executable for `tools/ailang`.
 - C VM is the default runtime (no flag required).
 - `--vm=c` is an explicit alias of the default runtime.
 - `--vm=cvN` is reserved for future C VM profile/version selection; currently it maps to `c`.
@@ -18,12 +19,12 @@ Current:
 - `build.sh` is the canonical bootstrap entrypoint on Unix-like hosts.
 - `build.ps1` is the canonical bootstrap entrypoint on Windows hosts.
 - `.aibc1` runtime execution is C-only.
-- `build` command is available: `airun build <program|project-dir> [--out <dir>] [--no-cache]` and emits `app.aibc1`.
+- `build` command is available: `ailang build <program|project-dir> [--out <dir>] [--no-cache]` and emits `app.aibc1`.
 - `run` supports deterministic build cache bypass and compiled-app argv passthrough:
-  - `airun run <program|project-dir> [--no-cache] [--] [app-args...]`
+  - `ailang run <program|project-dir> [--no-cache] [--] [app-args...]`
   - higher-layer compiled CLIs must preserve indefinite subcommand depth in app argv
 - For `debug * run`, place app argv after `--` once any native debug flags (`--out`, `--log-level`, injected input) are present:
-  - `airun debug capture run <app.aibc1> --out <dir> -- debug snapshot`
+  - `ailang debug capture run <app.aibc1> --out <dir> -- debug snapshot`
 - Built-in live debug sequencing is available for interactive apps:
   - `--inject-click <x,y>`
   - `--inject-text <text>`
@@ -32,7 +33,7 @@ Current:
   - `--inject-close`
   - `--inject-script <path>`
 - Built-in host DNS diagnostics are available:
-  - `airun debug dns <host> [port]`
+  - `ailang debug dns <host> [port]`
   - success prints `Ok#ok1(type=string value="<ipv4>")`
   - failure prints `Err#err1(code=NET001 ...)` with `detail="dns_failed:..."`
 - Target debug/runtime direction is specified in `../../SPEC/DEBUGGING.md`.
@@ -59,7 +60,7 @@ Current:
   - `key enter`
   - `wait 30`
   - `close`
-- `clean` command clears native build cache for a project: `airun clean [program|project-dir]`.
+- `clean` command clears native build cache for a project: `ailang clean [program|project-dir]`.
 - Canonical higher-layer CLI option syntax is GNU-style `--full-name` / `-f`; slash-prefixed flags are not part of the AiVectra CLI contract.
 - Source/project `run` compiles through native C paths only (no backend delegation).
 - `.aibundle` runtime execution is native-only (Bytecode# bundle shape).

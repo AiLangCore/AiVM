@@ -5,38 +5,38 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$airun = Join-Path $RepoRoot 'tools/airun.exe'
-if (-not (Test-Path $airun)) {
-  Write-Host "skip: missing $airun"
+$ailang = Join-Path $RepoRoot 'tools/ailang.exe'
+if (-not (Test-Path $ailang)) {
+  Write-Host "skip: missing $ailang"
   exit 0
 }
 
-$tmp = Join-Path $RepoRoot '.tmp/ctest-airun-smoke-win'
+$tmp = Join-Path $RepoRoot '.tmp/ctest-ailang-smoke-win'
 if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 $casePath = Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_main_params.aos'
-& $airun run $casePath --vm=c | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'airun smoke: vm=c run failed' }
+& $ailang run $casePath --vm=c | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'ailang smoke: vm=c run failed' }
 
 $publishDir = Join-Path $tmp 'publish-main-params'
 $publishErr = Join-Path $tmp 'publish-main-params.err'
-& $airun publish $casePath --out $publishDir 1>$null 2>$publishErr
+& $ailang publish $casePath --out $publishDir 1>$null 2>$publishErr
 if ($LASTEXITCODE -ne 0) {
   $msg = if (Test-Path $publishErr) { Get-Content -Raw $publishErr } else { '' }
   if ($msg -match 'Failed to copy runtime for target RID') {
-    Write-Host 'airun smoke: skipping native publish checks (runtime RID artifact missing)'
+    Write-Host 'ailang smoke: skipping native publish checks (runtime RID artifact missing)'
     exit 0
   }
-  throw 'airun smoke: publish failed'
+  throw 'ailang smoke: publish failed'
 }
-if (-not (Test-Path (Join-Path $publishDir 'app.aibc1'))) { throw 'airun smoke: publish missing app.aibc1' }
-if (-not (Test-Path (Join-Path $publishDir 'vm_c_execute_src_main_params.exe'))) { throw 'airun smoke: publish missing executable' }
+if (-not (Test-Path (Join-Path $publishDir 'app.aibc1'))) { throw 'ailang smoke: publish missing app.aibc1' }
+if (-not (Test-Path (Join-Path $publishDir 'vm_c_execute_src_main_params.exe'))) { throw 'ailang smoke: publish missing executable' }
 if ((Test-Path (Join-Path $publishDir 'run.ps1')) -or (Test-Path (Join-Path $publishDir 'run.cmd')) -or (Test-Path (Join-Path $publishDir 'run.sh'))) {
-  throw 'airun smoke: unexpected launcher files for native publish'
+  throw 'ailang smoke: unexpected launcher files for native publish'
 }
 & (Join-Path $publishDir 'vm_c_execute_src_main_params.exe') | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'airun smoke: published executable failed' }
+if ($LASTEXITCODE -ne 0) { throw 'ailang smoke: published executable failed' }
 
 $hostRid = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'windows-arm64' } else { 'windows-x64' }
 $projectDir = Join-Path $tmp 'project-target'
@@ -56,20 +56,20 @@ Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
 "@ | Set-Content -Path (Join-Path $projectDir 'main.aos') -NoNewline
 
 $projectErr = Join-Path $tmp 'project-target.err'
-& $airun publish $projectDir --out $projectOut 1>$null 2>$projectErr
+& $ailang publish $projectDir --out $projectOut 1>$null 2>$projectErr
 if ($LASTEXITCODE -ne 0) {
   $msg = if (Test-Path $projectErr) { Get-Content -Raw $projectErr } else { '' }
   if ($msg -match 'Failed to copy runtime for target RID') {
-    Write-Host 'airun smoke: skipping publishTarget manifest check (runtime RID artifact missing)'
+    Write-Host 'ailang smoke: skipping publishTarget manifest check (runtime RID artifact missing)'
   } else {
-    throw 'airun smoke: publishTarget manifest publish failed'
+    throw 'ailang smoke: publishTarget manifest publish failed'
   }
 } elseif (-not (Test-Path (Join-Path $projectOut 'projtarget.exe'))) {
-  throw 'airun smoke: publishTarget manifest missing projtarget.exe'
+  throw 'ailang smoke: publishTarget manifest missing projtarget.exe'
 }
 
-$airunHelp = & $airun 2>&1
-if ($airunHelp -match '(^|\r?\n)\s+build(\s|$)' -and $airunHelp -match '(^|\r?\n)\s+clean(\s|$)') {
+$ailangHelp = & $ailang 2>&1
+if ($ailangHelp -match '(^|\r?\n)\s+build(\s|$)' -and $ailangHelp -match '(^|\r?\n)\s+clean(\s|$)') {
   $cacheProject = Join-Path $tmp 'cache-project'
   $cacheOutNo = Join-Path $tmp 'cache-out-no'
   $cacheOutYes = Join-Path $tmp 'cache-out-yes'
@@ -92,19 +92,19 @@ Program#p1 {
 }
 "@ | Set-Content -Path (Join-Path $cacheProject 'app.aos') -NoNewline
 
-  & $airun clean $cacheProject | Out-Null
-  & $airun build --no-cache $cacheProject --out $cacheOutNo | Out-Null
-  if (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/airun') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue) {
-    throw 'airun smoke: --no-cache unexpectedly populated cache'
+  & $ailang clean $cacheProject | Out-Null
+  & $ailang build --no-cache $cacheProject --out $cacheOutNo | Out-Null
+  if (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/ailang') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue) {
+    throw 'ailang smoke: --no-cache unexpectedly populated cache'
   }
-  & $airun build $cacheProject --out $cacheOutYes | Out-Null
-  if (-not (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/airun') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue)) {
-    throw 'airun smoke: cached build did not write cache artifact'
+  & $ailang build $cacheProject --out $cacheOutYes | Out-Null
+  if (-not (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/ailang') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue)) {
+    throw 'ailang smoke: cached build did not write cache artifact'
   }
-  & $airun clean $cacheProject | Out-Null
-  if (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/airun') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue) {
-    throw 'airun smoke: clean did not remove cache artifact'
+  & $ailang clean $cacheProject | Out-Null
+  if (Get-ChildItem -Path (Join-Path $cacheProject '.toolchain/cache/ailang') -Filter app.aibc1 -Recurse -ErrorAction SilentlyContinue) {
+    throw 'ailang smoke: clean did not remove cache artifact'
   }
 }
 
-Write-Host 'airun smoke: PASS'
+Write-Host 'ailang smoke: PASS'

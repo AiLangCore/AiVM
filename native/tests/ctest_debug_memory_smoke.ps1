@@ -5,9 +5,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$airun = Join-Path $RepoRoot 'tools/airun.exe'
-if (-not (Test-Path $airun)) {
-  Write-Host "skip: missing $airun"
+$ailang = Join-Path $RepoRoot 'tools/ailang.exe'
+if (-not (Test-Path $ailang)) {
+  Write-Host "skip: missing $ailang"
   exit 0
 }
 
@@ -39,7 +39,7 @@ $builder = New-Object System.Text.StringBuilder
 [void]$builder.AppendLine('}')
 Set-Content -Path $tmpMemApp -Value $builder.ToString() -NoNewline
 
-& $airun debug run $tmpMemApp --out $tmpMemOut | Out-Null
+& $ailang debug run $tmpMemApp --out $tmpMemOut | Out-Null
 if ($LASTEXITCODE -eq 0) {
   throw 'debug memory smoke: expected memory-pressure failure'
 }
@@ -79,7 +79,7 @@ Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
 }
 "@ | Set-Content -Path $tmpOkApp -NoNewline
 
-& $airun debug run $tmpOkApp --out $tmpOkOut | Out-Null
+& $ailang debug run $tmpOkApp --out $tmpOkOut | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'debug memory smoke: expected successful debug run' }
 $okConfig = Get-Content -Raw (Join-Path $tmpOkOut 'config.toml')
 $okDiag = Get-Content -Raw (Join-Path $tmpOkOut 'diagnostics.toml')

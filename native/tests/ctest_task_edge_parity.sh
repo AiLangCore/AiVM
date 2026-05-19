@@ -13,9 +13,9 @@ if [[ ! -x "${PARITY_CLI_BIN}" ]]; then
   exit 2
 fi
 
-AIRUN_BIN="${ROOT_DIR}/tools/airun"
-if [[ ! -x "${AIRUN_BIN}" ]]; then
-  echo "skip: missing ${AIRUN_BIN}"
+AILANG_BIN="${ROOT_DIR}/tools/ailang"
+if [[ ! -x "${AILANG_BIN}" ]]; then
+  echo "skip: missing ${AILANG_BIN}"
   exit 0
 fi
 
@@ -32,7 +32,7 @@ run_case() {
   local actual_exit=0
 
   set +e
-  "${AIRUN_BIN}" run "${input}" --vm=c > "${actual}" 2>&1
+  "${AILANG_BIN}" run "${input}" --vm=c > "${actual}" 2>&1
   actual_exit=$?
   set -e
 

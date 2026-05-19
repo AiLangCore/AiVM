@@ -507,7 +507,7 @@ static int write_native_debug_bundle(
     fprintf(f, "mode = \"debug-run-native\"\n");
     fprintf(f, "debug_mode = \"%s\"\n", (options->debug_mode == NULL) ? "off" : options->debug_mode);
     fprintf(f, "app_path = \"%s\"\n", (options->input_path == NULL) ? "" : options->input_path);
-    fprintf(f, "runtime_name = \"airun-native-c\"\n");
+    fprintf(f, "runtime_name = \"ailang-native-c\"\n");
     fprintf(f, "runtime_abi = %u\n", aivm_c_abi_version());
     fprintf(f, "runtime_exe = \"%s\"\n", g_airun_runtime_exe_path[0] == '\0' ? "" : g_airun_runtime_exe_path);
     fprintf(f, "status = \"%s\"\n", (vm != NULL && vm->status == AIVM_VM_STATUS_ERROR) ? "error" : "ok");
@@ -686,7 +686,7 @@ static int write_native_debug_bundle(
     } else {
         fprintf(f, "diagnostics = []\n");
     }
-    fprintf(f, "runtime = { name = \"airun-native-c\", abi = %u, exe = \"%s\" }\n",
+    fprintf(f, "runtime = { name = \"ailang-native-c\", abi = %u, exe = \"%s\" }\n",
         aivm_c_abi_version(),
         g_airun_runtime_exe_path[0] == '\0' ? "" : g_airun_runtime_exe_path);
     fprintf(f, "memory = { string_arena_used = %llu, string_arena_high_water = %llu, bytes_arena_used = %llu, bytes_arena_high_water = %llu, node_count = %llu, node_high_water = %llu, node_attr_count = %llu, node_attr_high_water = %llu, node_child_count = %llu, node_child_high_water = %llu, node_gc_compactions = %llu, node_gc_attempts = %llu, node_gc_reclaimed_nodes = %llu, node_gc_allocations_since_gc = %llu, node_gc_interval_allocations = %d, node_gc_pressure_threshold_nodes = %d, node_gc_pressure_threshold_attrs = %d, node_gc_pressure_threshold_children = %d, string_arena_pressure_count = %llu, bytes_arena_pressure_count = %llu, node_arena_pressure_count = %llu }\n",

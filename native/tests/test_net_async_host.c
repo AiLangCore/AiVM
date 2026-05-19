@@ -1,6 +1,6 @@
 #define AIRUN_ALLOW_INTERNAL_UI_FALLBACK 1
 #define main airun_embedded_main_for_test
-#include "../../../AiCLI/native/airun.c"
+#include "../ailang_cli/ailang.c"
 #undef main
 
 #define CHECK(cond) \

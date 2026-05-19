@@ -7,9 +7,9 @@ if [[ -z "${ROOT_DIR}" ]]; then
   exit 2
 fi
 
-AIRUN_BIN="${ROOT_DIR}/tools/airun"
-if [[ ! -x "${AIRUN_BIN}" ]]; then
-  echo "skip: missing ${AIRUN_BIN}"
+AILANG_BIN="${ROOT_DIR}/tools/ailang"
+if [[ ! -x "${AILANG_BIN}" ]]; then
+  echo "skip: missing ${AILANG_BIN}"
   exit 0
 fi
 
@@ -39,7 +39,7 @@ mkdir -p "${TMP_NATIVE_DEBUG_MEM_DIR}"
   echo '}'
 } > "${TMP_NATIVE_DEBUG_MEM_APP}"
 
-if "${AIRUN_BIN}" debug run "${TMP_NATIVE_DEBUG_MEM_APP}" --out "${TMP_NATIVE_DEBUG_MEM_OUT}" >/dev/null 2>&1; then
+if "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_MEM_APP}" --out "${TMP_NATIVE_DEBUG_MEM_OUT}" >/dev/null 2>&1; then
   echo "debug memory smoke: expected memory-pressure failure" >&2
   exit 1
 fi
@@ -113,7 +113,7 @@ Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
   }
 }
 EOF
-if ! "${AIRUN_BIN}" debug run "${TMP_NATIVE_DEBUG_OK_APP}" --out "${TMP_NATIVE_DEBUG_OK_OUT}" >/dev/null 2>&1; then
+if ! "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_OK_APP}" --out "${TMP_NATIVE_DEBUG_OK_OUT}" >/dev/null 2>&1; then
   echo "debug memory smoke: expected successful debug run" >&2
   exit 1
 fi

@@ -1,6 +1,6 @@
 #define AIRUN_UI_HOST_EXTERNAL 1
 #define main airun_embedded_main_for_test
-#include "../../../AiCLI/native/airun.c"
+#include "../ailang_cli/ailang.c"
 #undef main
 
 #include <string.h>

@@ -1,5 +1,5 @@
 # name	max_vm_ticks
-# Calibrated from native deterministic bench run on 2026-03-03 (`airun bench --iterations 10 --human`).
+# Calibrated from native deterministic bench run on 2026-03-03 (`ailang bench --iterations 10 --human`).
 # Format: benchmark_name<TAB>max_vm_ticks
 runtime_loop	20
 compiler_parse_program	90

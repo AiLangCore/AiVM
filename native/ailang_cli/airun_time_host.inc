@@ -28,7 +28,7 @@ static int native_syscall_identity_0(
         value = "x64";
 #endif
     } else if (strcmp(target, "sys.runtime") == 0) {
-        value = "airun-native-c";
+        value = "ailang-native-c";
     } else if (strcmp(target, "sys.os.version") == 0) {
 #ifdef _WIN32
         value = "windows";

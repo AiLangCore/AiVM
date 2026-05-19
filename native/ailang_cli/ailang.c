@@ -2254,7 +2254,7 @@ static void print_usage(void)
         "  cvN    reserved future C VM profile/version selector (currently maps to c)\n");
 #else
     fprintf(stderr,
-        "Usage: airun <command> [options]\n"
+        "Usage: ailang <command> [options]\n"
         "\n"
         "Commands:\n"
         "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
@@ -6441,7 +6441,7 @@ static int ensure_cache_root_for_source(const char* source_aos, char* out_root, 
     }
     if (!join_path(project_dir, ".toolchain", toolchain_dir, sizeof(toolchain_dir)) ||
         !join_path(toolchain_dir, "cache", cache_dir, sizeof(cache_dir)) ||
-        !join_path(cache_dir, "airun", out_root, out_root_len)) {
+        !join_path(cache_dir, "ailang", out_root, out_root_len)) {
         return 0;
     }
     if (!ensure_directory(toolchain_dir) || !ensure_directory(cache_dir) || !ensure_directory(out_root)) {
@@ -6507,7 +6507,7 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
         if (trace != NULL && trace[0] != '\0') {
             fprintf(
                 stderr,
-                "[airun-native-compile] collect-node kind=%s source=%s start=%llu next=%llu end=%llu\n",
+                "[ailang-native-compile] collect-node kind=%s source=%s start=%llu next=%llu end=%llu\n",
                 node.kind,
                 path,
                 (unsigned long long)(cursor - ctx->sources[(size_t)source_index].text),
@@ -6532,7 +6532,7 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
                 parse_attr_span(node.attrs, "name", export_name, sizeof(export_name))) {
                 (void)snprintf(ctx->entry_export, sizeof(ctx->entry_export), "%s", export_name);
                 if (trace != NULL && trace[0] != '\0') {
-                    fprintf(stderr, "[airun-native-compile] collect-export=%s source=%s\n", ctx->entry_export, path);
+                    fprintf(stderr, "[ailang-native-compile] collect-export=%s source=%s\n", ctx->entry_export, path);
                 }
             }
             cursor = node.next;
@@ -6554,7 +6554,7 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
                     return simple_failf("collect: failed adding function %s from %s", let_name, path);
                 }
                 if (trace != NULL && trace[0] != '\0') {
-                    fprintf(stderr, "[airun-native-compile] collect-fn=%s source=%s\n", let_name, path);
+                    fprintf(stderr, "[ailang-native-compile] collect-fn=%s source=%s\n", let_name, path);
                 }
             }
             cursor = node.next;
@@ -7018,7 +7018,7 @@ static int simple_compile_expr_ext(
     {
         const char* trace = getenv("AIVM_NATIVE_BUILD_TRACE");
         if (trace != NULL && trace[0] != '\0') {
-            fprintf(stderr, "[airun-native-compile] fallback-expr kind=%s\n", node->kind);
+            fprintf(stderr, "[ailang-native-compile] fallback-expr kind=%s\n", node->kind);
         }
     }
     return simple_compile_expr_node(node, program, locals->names, &locals->count);
@@ -7305,7 +7305,7 @@ static int simple_compile_fn_by_index(SimpleCompileContext* ctx, size_t fn_index
     if (trace != NULL && trace[0] != '\0') {
         fprintf(
             stderr,
-            "[airun-native-compile] fn-start=%s inst_before=%llu\n",
+            "[ailang-native-compile] fn-start=%s inst_before=%llu\n",
             fn->name,
             (unsigned long long)before_count);
     }
@@ -7345,7 +7345,7 @@ static int simple_compile_fn_by_index(SimpleCompileContext* ctx, size_t fn_index
     if (trace != NULL && trace[0] != '\0') {
         fprintf(
             stderr,
-            "[airun-native-compile] fn=%s inst_before=%llu inst_after=%llu\n",
+            "[ailang-native-compile] fn=%s inst_before=%llu inst_after=%llu\n",
             fn->name,
             (unsigned long long)before_count,
             (unsigned long long)ctx->program->instruction_count);
@@ -7808,7 +7808,7 @@ static AIRUN_MAYBE_UNUSED int handle_serve(int argc, char** argv)
     (void)argc;
     (void)argv;
     fprintf(stderr,
-        "Err#err1(code=DEV008 message=\"serve is not part of native airun runtime surface.\" nodeId=command)\n");
+        "Err#err1(code=DEV008 message=\"serve is not part of native ailang runtime surface.\" nodeId=command)\n");
     return 2;
 }
 
@@ -9036,7 +9036,7 @@ static AIRUN_MAYBE_UNUSED int handle_clean(int argc, char** argv)
     char project_dir[PATH_MAX];
     char toolchain_dir[PATH_MAX];
     char cache_dir[PATH_MAX];
-    char airun_cache_dir[PATH_MAX];
+    char ailang_cache_dir[PATH_MAX];
     int i;
 
     for (i = 2; i < argc; i += 1) {
@@ -9058,19 +9058,19 @@ static AIRUN_MAYBE_UNUSED int handle_clean(int argc, char** argv)
     if (!resolve_project_dir_for_cache(target, project_dir, sizeof(project_dir)) ||
         !join_path(project_dir, ".toolchain", toolchain_dir, sizeof(toolchain_dir)) ||
         !join_path(toolchain_dir, "cache", cache_dir, sizeof(cache_dir)) ||
-        !join_path(cache_dir, "airun", airun_cache_dir, sizeof(airun_cache_dir))) {
+        !join_path(cache_dir, "ailang", ailang_cache_dir, sizeof(ailang_cache_dir))) {
         fprintf(stderr,
             "Err#err1(code=RUN001 message=\"Failed to resolve cache path.\" nodeId=clean)\n");
         return 2;
     }
 
-    if (!directory_exists(airun_cache_dir)) {
+    if (!directory_exists(ailang_cache_dir)) {
         printf("Ok#ok1(type=bool value=true)\n");
         return 0;
     }
-    if (!delete_directory_recursive_portable(airun_cache_dir)) {
+    if (!delete_directory_recursive_portable(ailang_cache_dir)) {
         fprintf(stderr,
-            "Err#err1(code=RUN001 message=\"Failed to delete airun cache directory.\" nodeId=clean)\n");
+            "Err#err1(code=RUN001 message=\"Failed to delete ailang cache directory.\" nodeId=clean)\n");
         return 2;
     }
     printf("Ok#ok1(type=bool value=true)\n");
@@ -9592,9 +9592,7 @@ int main(int argc, char** argv)
         exe_base = path_basename_ptr(exe_path);
         if (exe_base != NULL &&
             strcmp(exe_base, "ailang") != 0 &&
-            strcmp(exe_base, "ailang.exe") != 0 &&
-            strcmp(exe_base, "airun") != 0 &&
-            strcmp(exe_base, "airun.exe") != 0) {
+            strcmp(exe_base, "ailang.exe") != 0) {
             if (join_path(exe_dir, "www", bundled_www_dir, sizeof(bundled_www_dir)) &&
                 join_path(bundled_www_dir, "index.html", bundled_www_index, sizeof(bundled_www_index)) &&
                 file_exists(bundled_www_index)) {

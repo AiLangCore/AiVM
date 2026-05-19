@@ -481,9 +481,9 @@ if (BUILD_TESTING)
     if (AIVM_BUILD_HOST_TESTS)
         if (WIN32)
             add_test(
-                NAME aivm_test_airun_smoke
+                NAME aivm_test_ailang_smoke
                 COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_airun_smoke.ps1
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_ailang_smoke.ps1
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
@@ -501,9 +501,9 @@ if (BUILD_TESTING)
             )
         else()
             add_test(
-                NAME aivm_test_airun_smoke
+                NAME aivm_test_ailang_smoke
                 COMMAND bash
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_airun_smoke.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_ailang_smoke.sh
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
@@ -574,7 +574,7 @@ if (BUILD_TESTING)
             aivm_test_net_async_host
             aivm_test_host_open_default
             aivm_test_process_lifecycle_stress
-            aivm_test_airun_smoke
+            aivm_test_ailang_smoke
             PROPERTIES LABELS "integration;host"
         )
         set_tests_properties(

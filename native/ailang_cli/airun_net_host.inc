@@ -1635,7 +1635,7 @@ static int remote_session_ensure_ready(void)
     aivm_remote_server_session_init(&g_remote_server_session);
     memset(&hello, 0, sizeof(hello));
     hello.proto_version = 1U;
-    (void)snprintf(hello.client_name, sizeof(hello.client_name), "%s", "airun-native");
+    (void)snprintf(hello.client_name, sizeof(hello.client_name), "%s", "ailang-native");
     hello.requested_caps_count = g_remote_server_config.allowed_caps_count;
     for (i = 0U; i < hello.requested_caps_count; i += 1U) {
         (void)snprintf(
