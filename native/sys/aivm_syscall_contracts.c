@@ -176,6 +176,22 @@ const AivmSyscallContract* aivm_syscall_contract_find_by_id(uint32_t id)
     return NULL;
 }
 
+int aivm_syscall_contract_is_debug_target(const char* target)
+{
+    static const char prefix[] = "sys.debug.";
+
+    if (target == NULL) {
+        return 0;
+    }
+    return strncmp(target, prefix, sizeof(prefix) - 1U) == 0;
+}
+
+int aivm_syscall_contract_should_bind_in_production(const char* target)
+{
+    return aivm_syscall_contract_find_by_target(target) != NULL &&
+           !aivm_syscall_contract_is_debug_target(target);
+}
+
 AivmContractStatus aivm_syscall_contract_validate(
     const char* target,
     const AivmValue* args,

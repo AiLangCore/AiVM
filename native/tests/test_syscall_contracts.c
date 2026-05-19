@@ -648,6 +648,30 @@ int main(void)
     if (expect(return_type == AIVM_VAL_NODE) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_is_debug_target("sys.debug.mode") == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_is_debug_target("sys.debug.captureFrameBegin") == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_is_debug_target("sys.debug.taskReclaimStats") == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_is_debug_target("sys.process.spawn") == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_is_debug_target(NULL) == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_should_bind_in_production("sys.debug.mode") == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_should_bind_in_production("sys.process.spawn") == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_should_bind_in_production("sys.unknown") == 0) != 0) {
+        return 1;
+    }
 
     ui_window_args[0] = aivm_value_string("Hello");
     ui_window_args[1] = aivm_value_int(800);

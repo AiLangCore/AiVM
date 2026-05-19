@@ -38,6 +38,8 @@ AivmContractStatus aivm_syscall_contract_validate_id(
 
 const AivmSyscallContract* aivm_syscall_contract_find_by_target(const char* target);
 const AivmSyscallContract* aivm_syscall_contract_find_by_id(uint32_t id);
+int aivm_syscall_contract_is_debug_target(const char* target);
+int aivm_syscall_contract_should_bind_in_production(const char* target);
 const char* aivm_contract_status_code(AivmContractStatus status);
 const char* aivm_contract_status_message(AivmContractStatus status);
 

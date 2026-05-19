@@ -288,6 +288,11 @@ not become a general-purpose library escape hatch.
 Production `aivm` should not bind debug/profile-only targets by default.
 `aivm-debug` may bind them by default.
 
+The debug/profile-only syscall set is all `sys.debug.*` targets. Contract
+metadata remains available to validation and tooling, but production release
+hosts must not bind those targets unless the user explicitly enters a debug
+command/runtime surface.
+
 Debug-only syscall groups:
 
 - frame/UI capture

@@ -17,7 +17,7 @@ first production-grade runtime.
 - [x] List all current syscall contracts.
 - [x] Add a check for duplicate syscall IDs and targets.
 - [x] Add a check that every syscall has docs and contract-test coverage.
-- [ ] Beta: decide which debug/profiling targets are only available from
+- [x] Beta: decide which debug/profiling targets are only available from
   `aivm-debug`, then enforce that split in release builds.
 - [x] Distinguish unknown syscall, known-but-unbound syscall, invalid
   argument, timeout, resource-limit, and host-failure VM errors.
@@ -144,8 +144,9 @@ UI/Semantic thread integration and UI mutation rules.
 
 These are the immediate hardening tasks before beta:
 
-- `aivm-debug` syscall profile: identify debug-only targets, make production
-  release binding explicit, and add a contract test.
+- `aivm-debug` syscall profile: all `sys.debug.*` targets are debug/profile-only;
+  the transitional native host no longer binds them for normal production runs,
+  and contract tests cover debug-target classification.
 - Debugger/profiler contract: implement the `SPEC/DEBUGGING.md` target surface
   for stack traces, profiler artifacts, debugger stepping/inspection, and
   agent-readable summaries.

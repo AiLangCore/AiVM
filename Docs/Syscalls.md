@@ -39,6 +39,11 @@ freeze the surface. Until a major or minor release is official, review/remove
 items should be moved, renamed, or deleted completely rather than preserved
 through compatibility layers.
 
+All `sys.debug.*` targets are debug/profile-only. They remain documented
+contracts because bytecode validation and debug tooling need stable target
+metadata, but production release hosts must not bind them by default.
+`aivm-debug` and debug command surfaces may bind them.
+
 ### Host-Boundary
 
 These targets cross an OS, process, filesystem, network, UI, worker, host,
@@ -125,6 +130,14 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.worker.result` | `worker` | Reads host worker result. |
 | `sys.worker.error` | `worker` | Reads host worker error. |
 | `sys.worker.cancel` | `worker` | Cancels host worker execution. |
+
+### Debug/Profile Only
+
+These targets cross the host debug/profiling boundary. They are not production
+release bindings.
+
+| Target | Capability | Justification |
+| --- | --- | --- |
 | `sys.debug.emit` | `debug` | Emits host debug/profiling data. |
 | `sys.debug.mode` | `debug` | Reads host debug runtime mode. |
 | `sys.debug.captureFrameBegin` | `debug` | Records host debug frame state. |

@@ -4436,6 +4436,7 @@ static int run_native_compiled_program(
     const NativeDebugOptions* debug_options)
 {
     AivmSyscallBinding bindings[107];
+    size_t binding_count;
     static AivmVm vm;
     int ok;
     int exit_code = 0;
@@ -4688,29 +4689,36 @@ static int run_native_compiled_program(
     bindings[98].handler = native_syscall_crypto_hmac_sha256;
     bindings[99].target = "sys.crypto.randomBytes";
     bindings[99].handler = native_syscall_crypto_random_bytes;
-    bindings[100].target = "sys.debug.mode";
-    bindings[100].handler = native_syscall_debug_mode;
-    bindings[101].target = "sys.debug.captureFrameBegin";
-    bindings[101].handler = native_syscall_debug_capture_frame_begin;
-    bindings[102].target = "sys.debug.captureDraw";
-    bindings[102].handler = native_syscall_debug_capture_draw;
-    bindings[103].target = "sys.debug.captureFrameEnd";
-    bindings[103].handler = native_syscall_debug_capture_frame_end;
-    bindings[104].target = "sys.host.openDefault";
-    bindings[104].handler = native_syscall_host_open_default;
-    bindings[105].target = "sys.image.decodeToRgbaBase64";
-    bindings[105].handler = native_syscall_image_decode_to_rgba_base64;
-    bindings[106].target = "sys.bytes.fromUtf8String";
-    bindings[106].handler = native_syscall_bytes_from_utf8_string;
+    bindings[100].target = "sys.host.openDefault";
+    bindings[100].handler = native_syscall_host_open_default;
+    bindings[101].target = "sys.image.decodeToRgbaBase64";
+    bindings[101].handler = native_syscall_image_decode_to_rgba_base64;
+    bindings[102].target = "sys.bytes.fromUtf8String";
+    bindings[102].handler = native_syscall_bytes_from_utf8_string;
+    binding_count = 103U;
+    if (debug_options != NULL) {
+        bindings[binding_count].target = "sys.debug.mode";
+        bindings[binding_count].handler = native_syscall_debug_mode;
+        binding_count += 1U;
+        bindings[binding_count].target = "sys.debug.captureFrameBegin";
+        bindings[binding_count].handler = native_syscall_debug_capture_frame_begin;
+        binding_count += 1U;
+        bindings[binding_count].target = "sys.debug.captureDraw";
+        bindings[binding_count].handler = native_syscall_debug_capture_draw;
+        binding_count += 1U;
+        bindings[binding_count].target = "sys.debug.captureFrameEnd";
+        bindings[binding_count].handler = native_syscall_debug_capture_frame_end;
+        binding_count += 1U;
+    }
     if (g_airun_log_level >= AIRUN_LOG_TRACE) {
-        native_prepare_traced_bindings(bindings, 107U);
+        native_prepare_traced_bindings(bindings, binding_count);
     } else {
         g_native_trace_real_binding_count = 0U;
     }
     ok = aivm_execute_program_with_syscalls_and_argv(
         program,
         bindings,
-        107U,
+        binding_count,
         process_argv,
         process_argv_count,
         &vm);
