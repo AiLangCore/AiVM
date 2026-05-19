@@ -1374,6 +1374,7 @@ static int native_syscall_stdout_write_line(
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
     printf("%s\n", args[0].string_value);
+    fflush(stdout);
     *result = aivm_value_void();
     return AIVM_SYSCALL_OK;
 }
