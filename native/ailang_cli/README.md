@@ -40,6 +40,8 @@ Current:
   profiler, stack trace, capture, replay, and agent-readable artifact support.
 - Initial native `aivm-debug` artifact support is available:
   - `aivm-debug debug capture run <app.aibc1> --out <debug-run-dir>`
+  - optional profile selection:
+    `--profile production|debug|tooling` (default: `debug`)
   - `aivm-debug explain <debug-run-dir>`
   - `aivm-debug inspect stack <debug-run-dir>`
   - `aivm-debug inspect memory <debug-run-dir>`

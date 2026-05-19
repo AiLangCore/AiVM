@@ -111,7 +111,7 @@ requirement.
   compiler/tooling workloads.
 - [x] Emit the active runtime profile and VM limit records in debug artifact
   diagnostics.
-- [ ] Beta: add profile selection beyond default production/debug build
+- [x] Beta: add profile selection beyond default production/debug build
   behavior.
 - [ ] Post-beta: research deterministic generational arenas only after beta
   memory/threading requirements are stable.
@@ -149,8 +149,9 @@ These are the immediate hardening tasks before beta:
 - Debugger/profiler contract: implement the `SPEC/DEBUGGING.md` target surface
   for stack traces, profiler artifacts, debugger stepping/inspection, and
   agent-readable summaries.
-- Runtime profiles: profile names and diagnostic emission are wired; remaining
-  work is explicit profile selection and any non-default tooling limits.
+- Runtime profiles: profile names, diagnostic emission, and explicit
+  `aivm-debug debug capture run --profile production|debug|tooling` selection
+  are wired; remaining work is any non-default tooling limits.
 - Resource limits: define stable limit records for file, network, process,
   worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary

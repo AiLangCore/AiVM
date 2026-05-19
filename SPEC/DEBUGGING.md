@@ -47,6 +47,9 @@ contracts:
 - `debug capture run`: emit deterministic run artifact bundle. Initial native
   support exists for `.aibc1` programs:
   `aivm-debug debug capture run <program.aibc1> --out <debug-run-dir>`.
+  Capture accepts `--profile production|debug|tooling`; this stamps the
+  selected runtime profile and limit record into artifacts without changing the
+  stripped production `aivm` command surface.
 - `debug profile`: emit timing, allocation, arena, syscall, and hot-path data.
   Initial profile data is written into debug capture bundles as
   `profile.toml` with elapsed runtime, executed instruction count, per-opcode

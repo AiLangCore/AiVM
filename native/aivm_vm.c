@@ -105,6 +105,26 @@ const char* aivm_runtime_profile_name(AivmRuntimeProfile profile)
     }
 }
 
+int aivm_runtime_profile_from_name(const char* name, AivmRuntimeProfile* out_profile)
+{
+    if (name == NULL || out_profile == NULL) {
+        return 0;
+    }
+    if (strcmp(name, "production") == 0) {
+        *out_profile = AIVM_RUNTIME_PROFILE_PRODUCTION;
+        return 1;
+    }
+    if (strcmp(name, "debug") == 0) {
+        *out_profile = AIVM_RUNTIME_PROFILE_DEBUG;
+        return 1;
+    }
+    if (strcmp(name, "tooling") == 0) {
+        *out_profile = AIVM_RUNTIME_PROFILE_TOOLING;
+        return 1;
+    }
+    return 0;
+}
+
 AivmRuntimeProfile aivm_runtime_default_profile(void)
 {
 #if defined(AIVM_DEBUG_RUNTIME)

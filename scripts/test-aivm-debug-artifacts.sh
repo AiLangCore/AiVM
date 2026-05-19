@@ -20,6 +20,8 @@ LOAD_FAIL_PROGRAM="${TMP_DIR}/bad-magic.aibc1"
 FAIL_RUN="${TMP_DIR}/fail-run"
 OK_RUN="${TMP_DIR}/ok-run"
 LOAD_FAIL_RUN="${TMP_DIR}/load-fail-run"
+TOOLING_RUN="${TMP_DIR}/tooling-run"
+PRODUCTION_LOAD_FAIL_RUN="${TMP_DIR}/production-load-fail-run"
 
 printf '%b' \
   '\x41\x49\x42\x43\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00'\
@@ -70,6 +72,36 @@ if [[ "${ok_rc}" -ne 42 ]]; then
   exit 1
 fi
 
+set +e
+"${AIVM_DEBUG}" debug capture run "${OK_PROGRAM}" --profile tooling --out "${TOOLING_RUN}" >"${TMP_DIR}/tooling.stdout" 2>"${TMP_DIR}/tooling.stderr"
+tooling_rc=$?
+set -e
+
+if [[ "${tooling_rc}" -ne 42 ]]; then
+  echo "expected tooling capture rc=42, got ${tooling_rc}" >&2
+  exit 1
+fi
+
+set +e
+"${AIVM_DEBUG}" debug capture run "${LOAD_FAIL_PROGRAM}" --profile=production --out "${PRODUCTION_LOAD_FAIL_RUN}" >"${TMP_DIR}/production-load-fail.stdout" 2>"${TMP_DIR}/production-load-fail.stderr"
+production_load_fail_rc=$?
+set -e
+
+if [[ "${production_load_fail_rc}" -ne 2 ]]; then
+  echo "expected production-profile load-failing capture rc=2, got ${production_load_fail_rc}" >&2
+  exit 1
+fi
+
+set +e
+"${AIVM_DEBUG}" debug capture run "${OK_PROGRAM}" --profile invalid --out "${TMP_DIR}/invalid-profile-run" >"${TMP_DIR}/invalid-profile.stdout" 2>"${TMP_DIR}/invalid-profile.stderr"
+invalid_profile_rc=$?
+set -e
+
+if [[ "${invalid_profile_rc}" -ne 64 ]]; then
+  echo "expected invalid profile rc=64, got ${invalid_profile_rc}" >&2
+  exit 1
+fi
+
 for artifact in \
   config.toml \
   diagnostics.toml \
@@ -85,10 +117,13 @@ do
   test -f "${LOAD_FAIL_RUN}/${artifact}"
   test -f "${FAIL_RUN}/${artifact}"
   test -f "${OK_RUN}/${artifact}"
+  test -f "${TOOLING_RUN}/${artifact}"
+  test -f "${PRODUCTION_LOAD_FAIL_RUN}/${artifact}"
 done
 
 grep -q 'phase = "load"' "${LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'runtime_profile = "debug"' "${LOAD_FAIL_RUN}/diagnostics.toml"
+grep -q 'runtime_profile = "production"' "${PRODUCTION_LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'program_error_code = "AIVMP003"' "${LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'current_opcode = "LOAD_FAILED"' "${LOAD_FAIL_RUN}/stack_trace.toml"
 grep -q 'instruction_count = 0' "${LOAD_FAIL_RUN}/profile.toml"
@@ -110,10 +145,13 @@ grep -q 'aivm: execution failed:' "${FAIL_RUN}/stderr.txt"
 grep -q 'status = "ok"' "${OK_RUN}/diagnostics.toml"
 grep -q 'phase = "execute"' "${OK_RUN}/diagnostics.toml"
 grep -q 'runtime_profile = "debug"' "${OK_RUN}/diagnostics.toml"
+grep -q 'runtime_profile = "tooling"' "${TOOLING_RUN}/diagnostics.toml"
 grep -q 'exit_code = 42' "${OK_RUN}/diagnostics.toml"
 grep -q 'instruction_count = 2' "${OK_RUN}/profile.toml"
 grep -q 'opcode = "PUSH_INT", count = 1' "${OK_RUN}/profile.toml"
 grep -q 'opcode = "HALT", count = 1' "${OK_RUN}/profile.toml"
+grep -q 'instruction_count = 2' "${TOOLING_RUN}/profile.toml"
+grep -q -- '--profile must be production, debug, or tooling' "${TMP_DIR}/invalid-profile.stderr"
 
 "${AIVM_DEBUG}" explain "${FAIL_RUN}" >"${TMP_DIR}/explain.txt"
 grep -q 'runtime_profile: "debug"' "${TMP_DIR}/explain.txt"

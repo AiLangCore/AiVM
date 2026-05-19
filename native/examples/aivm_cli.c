@@ -874,7 +874,7 @@ static void print_usage(FILE* stream)
 #if defined(AIVM_DEBUG_RUNTIME)
     fprintf(stream, "       %s profile <program.aibc1> [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s benchmark [--iterations <n>] <program.aibc1> [args...]\n", AIVM_CLI_NAME);
-    fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [args...]\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [--profile <production|debug|tooling>] [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s explain <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s suggest <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s inspect <stack|memory|profile|syscalls> <debug-run-dir>\n", AIVM_CLI_NAME);
@@ -1255,11 +1255,11 @@ static void write_debug_artifacts(
 static void write_debug_load_failure_artifacts(
     const char* artifact_dir,
     const char* program_path,
+    AivmRuntimeProfile runtime_profile,
     AivmProgramLoadResult load_result)
 {
     char path[PATH_MAX];
     FILE* file;
-    AivmRuntimeProfile runtime_profile = aivm_runtime_default_profile();
     AivmRuntimeProfileLimits profile_limits = aivm_runtime_profile_limits(runtime_profile);
 
     if (artifact_dir == NULL || artifact_dir[0] == '\0') {
@@ -1772,7 +1772,8 @@ static int execute_bytes(
     const char* const* process_argv,
     size_t process_argv_count,
     const char* debug_artifact_dir,
-    const char* program_path)
+    const char* program_path,
+    AivmRuntimeProfile runtime_profile)
 {
     AivmProgram program;
     static AivmVm vm;
@@ -1813,10 +1814,11 @@ static int execute_bytes(
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);
     if (load_result.status != AIVM_PROGRAM_OK) {
 #if defined(AIVM_DEBUG_RUNTIME)
-        write_debug_load_failure_artifacts(debug_artifact_dir, program_path, load_result);
+        write_debug_load_failure_artifacts(debug_artifact_dir, program_path, runtime_profile, load_result);
 #else
         (void)debug_artifact_dir;
         (void)program_path;
+        (void)runtime_profile;
 #endif
         fprintf(
             stderr,
@@ -1830,13 +1832,16 @@ static int execute_bytes(
 #if defined(AIVM_DEBUG_RUNTIME)
     profile_start = clock();
 #endif
-    ok = aivm_execute_program_with_syscalls_and_argv(
+    aivm_init_with_syscalls_and_argv(
+        &vm,
         &program,
         bindings,
         sizeof(bindings) / sizeof(bindings[0]),
         process_argv,
-        process_argv_count,
-        &vm);
+        process_argv_count);
+    vm.runtime_profile = runtime_profile;
+    aivm_run(&vm);
+    ok = vm.status != AIVM_VM_STATUS_ERROR;
 #if defined(AIVM_DEBUG_RUNTIME)
     profile_end = clock();
     elapsed_seconds = (double)(profile_end - profile_start) / (double)CLOCKS_PER_SEC;
@@ -1885,7 +1890,14 @@ static int run_program(const char* path, const char* const* process_argv, size_t
     if (!read_file(path, &bytes, &byte_count)) {
         return 1;
     }
-    exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count, NULL, path);
+    exit_code = execute_bytes(
+        bytes,
+        byte_count,
+        process_argv,
+        process_argv_count,
+        NULL,
+        path,
+        aivm_runtime_default_profile());
     free(bytes);
     return exit_code;
 }
@@ -1897,6 +1909,7 @@ static int debug_capture_run(int argc, char** argv)
     const char* program_path = NULL;
     const char* const* process_argv = NULL;
     size_t process_argv_count = 0U;
+    AivmRuntimeProfile runtime_profile = aivm_runtime_default_profile();
     uint8_t* bytes;
     size_t byte_count;
     int exit_code;
@@ -1918,6 +1931,17 @@ static int debug_capture_run(int argc, char** argv)
             i += 1;
         } else if (strncmp(argv[i], "--out=", 6U) == 0) {
             artifact_dir = argv[i] + 6;
+        } else if (strcmp(argv[i], "--profile") == 0) {
+            if (i + 1 >= argc || !aivm_runtime_profile_from_name(argv[i + 1], &runtime_profile)) {
+                fprintf(stderr, "%s: --profile must be production, debug, or tooling\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            i += 1;
+        } else if (strncmp(argv[i], "--profile=", 10U) == 0) {
+            if (!aivm_runtime_profile_from_name(argv[i] + 10, &runtime_profile)) {
+                fprintf(stderr, "%s: --profile must be production, debug, or tooling\n", AIVM_CLI_NAME);
+                return 64;
+            }
         } else if (strcmp(argv[i], "--") == 0) {
             if (program_path == NULL) {
                 fprintf(stderr, "%s: debug capture run requires a program before --\n", AIVM_CLI_NAME);
@@ -1964,7 +1988,8 @@ static int debug_capture_run(int argc, char** argv)
         process_argv,
         process_argv_count,
         artifact_dir,
-        program_path);
+        program_path,
+        runtime_profile);
     if (g_debug_stdout_capture != NULL) {
         fclose(g_debug_stdout_capture);
         g_debug_stdout_capture = NULL;
@@ -2036,7 +2061,14 @@ static int benchmark_program(int argc, char** argv)
 
     start = clock();
     for (i = 0UL; i < iterations; i += 1UL) {
-        exit_code = execute_bytes(bytes, byte_count, process_argv, process_argv_count, NULL, path);
+        exit_code = execute_bytes(
+            bytes,
+            byte_count,
+            process_argv,
+            process_argv_count,
+            NULL,
+            path,
+            aivm_runtime_default_profile());
         if (exit_code != 0) {
             free(bytes);
             return exit_code;
