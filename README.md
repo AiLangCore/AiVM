@@ -11,6 +11,16 @@ For contributor setup and verification, see [CONTRIBUTING.md](CONTRIBUTING.md).
 This repository owns the native C AiVM implementation. It is intentionally
 independent from the AiLang compiler and AiVectra UI SDK.
 
+Current public beta: `v0.0.1-beta.1`.
+
+Install the public AiLangCore SDK, including `aivm`:
+
+```bash
+curl -fsSL https://ailang.codes/install.sh | sh
+export PATH="$HOME/.ailang/bin:$PATH"
+aivm --version
+```
+
 The native C VM lives under:
 
 ```text
@@ -63,7 +73,7 @@ call into AiVM rather than expanding the production VM command surface.
 
 The CMake project declaration in `native/CMakeLists.txt` is the base semantic
 version for AiVM release automation. Release tags use `v` plus the derived
-version, for example `v0.0.1-alpha.17`.
+version, for example `v0.0.1-beta.1`.
 
 ## Build and Test
 
