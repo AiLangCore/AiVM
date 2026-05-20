@@ -52,6 +52,11 @@ runtime metadata, not language semantics. It gives release builds, debug builds,
 future sandbox profiles, and agent tooling a single place to reason about the
 host boundary a syscall crosses.
 
+The VM owns a runtime capability policy object. Production profile policy allows
+normal host-boundary groups and denies `debug`; debug/tooling profiles allow
+`debug` as well. A denied capability fails before host dispatch with `AIVMS008`.
+Future CLI flags may expose explicit allow/deny controls.
+
 Current groups are:
 
 - `core`: temporary deterministic helpers that should move into AiLang core

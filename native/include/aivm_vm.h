@@ -229,6 +229,7 @@ typedef struct {
     uint8_t* bytes_arena;
     size_t bytes_arena_used;
     size_t bytes_arena_limit;
+    AivmSyscallCapabilityPolicy syscall_policy;
     const AivmSyscallBinding* syscall_bindings;
     size_t syscall_binding_count;
     const char* const* process_argv;
@@ -301,5 +302,6 @@ int aivm_runtime_profile_from_name(const char* name, AivmRuntimeProfile* out_pro
 AivmRuntimeProfile aivm_runtime_default_profile(void);
 AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile);
 void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile);
+void aivm_set_syscall_policy(AivmVm* vm, const AivmSyscallCapabilityPolicy* policy);
 
 #endif

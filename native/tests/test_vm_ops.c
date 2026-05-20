@@ -2022,6 +2022,7 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
     };
 
     aivm_init(&vm, &program);
+    aivm_set_runtime_profile(&vm, AIVM_RUNTIME_PROFILE_DEBUG);
     vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
     vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {

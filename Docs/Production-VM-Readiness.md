@@ -48,7 +48,7 @@ first production-grade runtime.
 Optional future sandboxing:
 
 - [x] Add per-syscall capability groups to the contract metadata.
-- [ ] Add a runtime capability policy object.
+- [x] Add a runtime capability policy object.
 - [ ] Add CLI flags for explicitly enabling or denying capability groups.
 
 ## Deterministic Library Migration

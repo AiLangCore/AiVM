@@ -206,6 +206,22 @@ static int handler_crypto_base64_encode(
     return AIVM_SYSCALL_ERR_INVALID;
 }
 
+static int handler_debug_mode(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    (void)args;
+    if (arg_count == 0U) {
+        *result = aivm_value_string("debug");
+        return AIVM_SYSCALL_OK;
+    }
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_ERR_INVALID;
+}
+
 static int handler_worker_poll(
     const char* target,
     const AivmValue* args,
@@ -296,6 +312,7 @@ int main(void)
     AivmValue rect_args[6];
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
     AivmSyscallStatus status;
+    AivmSyscallCapabilityPolicy policy;
     static const AivmSyscallBinding bindings[] = {
         { "sys.echo", handler_echo }
     };
@@ -328,6 +345,9 @@ int main(void)
         { "sys.worker.result", handler_worker_result },
         { "sys.worker.error", handler_worker_error },
         { "sys.worker.cancel", handler_worker_cancel }
+    };
+    static const AivmSyscallBinding debug_bindings[] = {
+        { "sys.debug.mode", handler_debug_mode }
     };
 
     status = aivm_syscall_invoke(NULL, "sys.echo", NULL, 0U, &result);
@@ -431,6 +451,35 @@ int main(void)
         return 1;
     }
     if (expect(strcmp(aivm_syscall_status_message(status), "Syscall target is known but has no host binding.") == 0) != 0) {
+        return 1;
+    }
+    aivm_syscall_policy_allow_production_default(&policy);
+    status = aivm_syscall_dispatch_checked_with_policy(debug_bindings, 1U, &policy, "sys.debug.mode", NULL, 0U, &result, &contract_status);
+    if (expect(status == AIVM_SYSCALL_ERR_CAPABILITY_DENIED) != 0) {
+        return 1;
+    }
+    if (expect(contract_status == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_syscall_status_code(status), "AIVMS008") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_syscall_status_message(status), "Syscall capability is denied by runtime policy.") == 0) != 0) {
+        return 1;
+    }
+    aivm_syscall_policy_allow_group(&policy, AIVM_SYSCALL_CAPABILITY_DEBUG);
+    status = aivm_syscall_dispatch_checked_with_policy(debug_bindings, 1U, &policy, "sys.debug.mode", NULL, 0U, &result, &contract_status);
+    if (expect(status == AIVM_SYSCALL_OK) != 0) {
+        return 1;
+    }
+    if (expect(result.type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_policy_allows(&policy, AIVM_SYSCALL_CAPABILITY_DEBUG) == 1) != 0) {
+        return 1;
+    }
+    aivm_syscall_policy_deny_group(&policy, AIVM_SYSCALL_CAPABILITY_DEBUG);
+    if (expect(aivm_syscall_policy_allows(&policy, AIVM_SYSCALL_CAPABILITY_DEBUG) == 0) != 0) {
         return 1;
     }
     arg = aivm_value_string("hello");

@@ -230,6 +230,7 @@ The `AIVMS` family reports syscall dispatch failures.
 | `AIVMS005` | Syscall return type violated the contract. |
 | `AIVMS006` | Syscall target is known but has no host binding. |
 | `AIVMS007` | Syscall resource limit exceeded. |
+| `AIVMS008` | Syscall capability is denied by runtime policy. |
 | `AIVMS999` | Unknown syscall dispatch status. |
 
 `AIVMS004` is paired with the `AIVMC` contract family.

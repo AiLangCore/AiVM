@@ -4,6 +4,80 @@
 
 #include "sys/aivm_syscall_contracts.h"
 
+uint64_t aivm_syscall_capability_mask(AivmSyscallCapabilityGroup capability)
+{
+    if (capability <= AIVM_SYSCALL_CAPABILITY_NONE ||
+        capability > AIVM_SYSCALL_CAPABILITY_DEBUG) {
+        return 0U;
+    }
+    return ((uint64_t)1U) << (uint64_t)capability;
+}
+
+void aivm_syscall_policy_allow_none(AivmSyscallCapabilityPolicy* policy)
+{
+    if (policy == NULL) {
+        return;
+    }
+    policy->allowed_capability_mask = 0U;
+}
+
+void aivm_syscall_policy_allow_all(AivmSyscallCapabilityPolicy* policy)
+{
+    AivmSyscallCapabilityGroup capability;
+    if (policy == NULL) {
+        return;
+    }
+    policy->allowed_capability_mask = 0U;
+    for (capability = AIVM_SYSCALL_CAPABILITY_CORE;
+         capability <= AIVM_SYSCALL_CAPABILITY_DEBUG;
+         capability = (AivmSyscallCapabilityGroup)(capability + 1)) {
+        policy->allowed_capability_mask |= aivm_syscall_capability_mask(capability);
+    }
+}
+
+void aivm_syscall_policy_allow_production_default(AivmSyscallCapabilityPolicy* policy)
+{
+    if (policy == NULL) {
+        return;
+    }
+    aivm_syscall_policy_allow_all(policy);
+    aivm_syscall_policy_deny_group(policy, AIVM_SYSCALL_CAPABILITY_DEBUG);
+}
+
+void aivm_syscall_policy_allow_group(
+    AivmSyscallCapabilityPolicy* policy,
+    AivmSyscallCapabilityGroup capability)
+{
+    if (policy == NULL) {
+        return;
+    }
+    policy->allowed_capability_mask |= aivm_syscall_capability_mask(capability);
+}
+
+void aivm_syscall_policy_deny_group(
+    AivmSyscallCapabilityPolicy* policy,
+    AivmSyscallCapabilityGroup capability)
+{
+    if (policy == NULL) {
+        return;
+    }
+    policy->allowed_capability_mask &= ~aivm_syscall_capability_mask(capability);
+}
+
+int aivm_syscall_policy_allows(
+    const AivmSyscallCapabilityPolicy* policy,
+    AivmSyscallCapabilityGroup capability)
+{
+    uint64_t mask = aivm_syscall_capability_mask(capability);
+    if (mask == 0U) {
+        return 0;
+    }
+    if (policy == NULL) {
+        return 1;
+    }
+    return (policy->allowed_capability_mask & mask) != 0U;
+}
+
 AivmSyscallStatus aivm_syscall_invoke(
     AivmSyscallHandler handler,
     const char* target,
@@ -56,9 +130,10 @@ AivmSyscallStatus aivm_syscall_dispatch(
     return AIVM_SYSCALL_ERR_NOT_FOUND;
 }
 
-AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
+AivmSyscallStatus aivm_syscall_dispatch_checked_with_policy(
     const AivmSyscallBinding* bindings,
     size_t binding_count,
+    const AivmSyscallCapabilityPolicy* policy,
     const char* target,
     const AivmValue* args,
     size_t arg_count,
@@ -67,6 +142,7 @@ AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
 {
     AivmValueType expected_return_type = AIVM_VAL_VOID;
     AivmContractStatus contract_status;
+    AivmSyscallCapabilityGroup capability;
     AivmSyscallStatus invoke_status;
 
     if (result == NULL) {
@@ -88,6 +164,12 @@ AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
         *out_contract_status = AIVM_CONTRACT_OK;
     }
 
+    capability = aivm_syscall_contract_capability(target);
+    if (!aivm_syscall_policy_allows(policy, capability)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CAPABILITY_DENIED;
+    }
+
     if (bindings == NULL || binding_count == 0U) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_UNBOUND;
@@ -107,6 +189,26 @@ AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
     }
 
     return AIVM_SYSCALL_OK;
+}
+
+AivmSyscallStatus aivm_syscall_dispatch_checked_with_contract(
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result,
+    AivmContractStatus* out_contract_status)
+{
+    return aivm_syscall_dispatch_checked_with_policy(
+        bindings,
+        binding_count,
+        NULL,
+        target,
+        args,
+        arg_count,
+        result,
+        out_contract_status);
 }
 
 AivmSyscallStatus aivm_syscall_dispatch_checked(
@@ -146,6 +248,8 @@ const char* aivm_syscall_status_code(AivmSyscallStatus status)
             return "AIVMS006";
         case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
             return "AIVMS007";
+        case AIVM_SYSCALL_ERR_CAPABILITY_DENIED:
+            return "AIVMS008";
         default:
             return "AIVMS999";
     }
@@ -170,6 +274,8 @@ const char* aivm_syscall_status_message(AivmSyscallStatus status)
             return "Syscall target is known but has no host binding.";
         case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
             return "Syscall resource limit exceeded.";
+        case AIVM_SYSCALL_ERR_CAPABILITY_DENIED:
+            return "Syscall capability is denied by runtime policy.";
         default:
             return "Unknown syscall dispatch status.";
     }

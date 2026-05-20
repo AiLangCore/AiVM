@@ -167,6 +167,19 @@ void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile)
     vm->runtime_profile = profile;
     limits = aivm_runtime_profile_limits(profile);
     vm->syscall_elapsed_limit_ms = limits.syscall_elapsed_ms;
+    if (profile == AIVM_RUNTIME_PROFILE_PRODUCTION) {
+        aivm_syscall_policy_allow_production_default(&vm->syscall_policy);
+    } else {
+        aivm_syscall_policy_allow_all(&vm->syscall_policy);
+    }
+}
+
+void aivm_set_syscall_policy(AivmVm* vm, const AivmSyscallCapabilityPolicy* policy)
+{
+    if (vm == NULL || policy == NULL) {
+        return;
+    }
+    vm->syscall_policy = *policy;
 }
 
 static void set_vm_local_out_of_range_error(
@@ -1694,13 +1707,23 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
             set_vm_error(vm, AIVM_VM_ERR_SYSCALL, syscall_contract_failure_detail(contract_status));
             return 0;
         }
+        if (!aivm_syscall_policy_allows(&vm->syscall_policy, AIVM_SYSCALL_CAPABILITY_DEBUG)) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "AIVMS008: Syscall capability is denied by runtime policy. target=%.72s capability=debug",
+                target_value.string_value);
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+            return 0;
+        }
         return call_debug_task_reclaim_stats(vm, out_result);
     }
 
     syscall_start = clock();
-    syscall_status = aivm_syscall_dispatch_checked_with_contract(
+    syscall_status = aivm_syscall_dispatch_checked_with_policy(
         vm->syscall_bindings,
         vm->syscall_binding_count,
+        &vm->syscall_policy,
         target_value.string_value,
         args,
         effective_arg_count,
@@ -1766,6 +1789,16 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
                 sizeof(vm->error_detail_storage),
                 "AIVMS006: Syscall target is known but has no host binding. target=%.72s",
                 target_value.string_value);
+            set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+            return 0;
+        }
+        if (syscall_status == AIVM_SYSCALL_ERR_CAPABILITY_DENIED) {
+            (void)snprintf(
+                vm->error_detail_storage,
+                sizeof(vm->error_detail_storage),
+                "AIVMS008: Syscall capability is denied by runtime policy. target=%.72s capability=%s",
+                target_value.string_value,
+                aivm_syscall_capability_name(aivm_syscall_contract_capability(target_value.string_value)));
             set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
             return 0;
         }
@@ -1837,6 +1870,8 @@ static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContract
             return "AIVMS006: Syscall target is known but has no host binding.";
         case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
             return "AIVMS007: Syscall resource limit exceeded.";
+        case AIVM_SYSCALL_ERR_CAPABILITY_DENIED:
+            return "AIVMS008: Syscall capability is denied by runtime policy.";
         case AIVM_SYSCALL_OK:
             return "AIVMS000: Syscall dispatch succeeded.";
         default:
