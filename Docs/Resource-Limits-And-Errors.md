@@ -100,7 +100,7 @@ Tracked host-resource limit records:
 | `file_write_bytes` | 16777216 | Current `sys.fs.file.write`; `sys.fs.file.writeChunk` | Enforced for whole-file write and write chunks. |
 | `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as the maximum read request size per call. |
 | `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as the maximum write payload size per call. |
-| `process_count` | 32 | `sys.process.*` child processes | Defined; enforcement pending. |
+| `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
 | `worker_count` | 64 | worker/task execution resources | Defined; enforcement pending. |
 | `ui_window_count` | 16 | host UI windows | Defined; enforcement pending. |
 | `debug_artifact_bytes` | 67108864 | `aivm-debug` artifact output | Defined; enforcement pending. |
@@ -131,6 +131,11 @@ Current network primitives are already handle-based for TCP and UDP. Read
 request sizes above `network_read_bytes` and write payloads above
 `network_write_bytes` fail with `AIVMS007` before socket-handle lookup or async
 operation allocation.
+
+Process spawning enforces `process_count` before the host child process is
+created. When the selected runtime profile's live process budget is exhausted,
+`sys.process.spawn` fails with `AIVMS007`. Finished processes release their
+handle slot after exit is observed and buffered stdout/stderr has been drained.
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app

@@ -1,4 +1,5 @@
 #define AIRUN_ALLOW_INTERNAL_UI_FALLBACK 1
+#define AIRUN_TEST_HOST_RESOURCE_LIMIT_PROCESS_COUNT 2
 #define main airun_embedded_main_for_test
 #include "../ailang_cli/ailang.c"
 #undef main
@@ -199,6 +200,62 @@ static int interleaved_fail_and_cancel_cleanup_stress(void)
     return 0;
 }
 
+static int process_count_limit_rejects_spawn_before_host_create(void)
+{
+    AivmProgram program;
+    static AivmVm vm;
+    AivmValue spawn_args[4];
+    AivmValue one_arg[1];
+    AivmValue result;
+    AivmSyscallStatus status;
+    int64_t first_handle;
+    int64_t second_handle;
+
+    aivm_program_clear(&program);
+    aivm_init_with_syscalls(&vm, &program, NULL, 0U);
+    g_native_active_vm = &vm;
+
+#ifdef _WIN32
+    spawn_args[0] = aivm_value_string("cmd /c ping -n 4 127.0.0.1 >NUL");
+#else
+    spawn_args[0] = aivm_value_string("sleep 2");
+#endif
+    spawn_args[1] = aivm_value_node(0);
+    spawn_args[2] = aivm_value_string("");
+    spawn_args[3] = aivm_value_node(0);
+
+    status = native_syscall_process_spawn("sys.process.spawn", spawn_args, 4U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value > 0);
+    first_handle = result.int_value;
+
+    status = native_syscall_process_spawn("sys.process.spawn", spawn_args, 4U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value > 0);
+    second_handle = result.int_value;
+
+    status = native_syscall_process_spawn("sys.process.spawn", spawn_args, 4U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
+    CHECK(strcmp(aivm_syscall_status_code(status), "AIVMS007") == 0);
+
+    one_arg[0] = aivm_value_int(first_handle);
+    status = native_syscall_process_kill("sys.process.kill", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    status = native_syscall_process_wait("sys.process.wait", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+
+    one_arg[0] = aivm_value_int(second_handle);
+    status = native_syscall_process_kill("sys.process.kill", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    status = native_syscall_process_wait("sys.process.wait", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+
+    g_native_active_vm = NULL;
+    return 0;
+}
+
 static int bytes_contains(const uint8_t* haystack, size_t haystack_len, const char* needle)
 {
     size_t needle_len;
@@ -348,6 +405,10 @@ static int wait_drains_child_output_without_deadlock(void)
 int main(void)
 {
     int i;
+    if (process_count_limit_rejects_spawn_before_host_create() != 0) {
+        return 1;
+    }
+
     for (i = 0; i < ((int)NATIVE_PROCESS_CAPACITY * 2); i += 1) {
         if (spawn_and_wait_zero_exit() != 0) {
             return 1;

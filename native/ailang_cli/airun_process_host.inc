@@ -211,6 +211,42 @@ static NativeProcessState* native_process_lookup(int64_t handle_value)
     return &g_native_processes[index];
 }
 
+static size_t native_process_active_count(void)
+{
+    size_t index;
+    size_t count = 0U;
+    for (index = 0U; index < NATIVE_PROCESS_CAPACITY; index += 1U) {
+        if (g_native_processes[index].used) {
+            count += 1U;
+        }
+    }
+    return count;
+}
+
+#ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_PROCESS_COUNT
+static size_t native_process_host_resource_limit(size_t profile_value)
+{
+    (void)profile_value;
+    return (size_t)AIRUN_TEST_HOST_RESOURCE_LIMIT_PROCESS_COUNT;
+}
+#else
+static size_t native_process_host_resource_limit(size_t profile_value)
+{
+    return profile_value;
+}
+#endif
+
+static size_t native_process_active_runtime_limit(void)
+{
+    AivmRuntimeProfile profile = aivm_runtime_default_profile();
+    AivmRuntimeProfileLimits limits;
+    if (g_native_active_vm != NULL) {
+        profile = g_native_active_vm->runtime_profile;
+    }
+    limits = aivm_runtime_profile_limits(profile);
+    return native_process_host_resource_limit(limits.process_count);
+}
+
 static int64_t native_process_allocate_slot(void)
 {
     size_t index;
@@ -439,6 +475,10 @@ static int native_syscall_process_spawn(
     if (g_native_active_vm == NULL) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (native_process_active_count() >= native_process_active_runtime_limit()) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
 #ifdef _WIN32
     {
