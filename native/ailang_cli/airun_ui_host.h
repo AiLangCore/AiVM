@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "aivm_vm.h"
+
 typedef struct {
     char type[16];
     char target_id[48];
@@ -14,6 +16,10 @@ typedef struct {
     int modifiers;
     int repeat;
 } NativeHostUiEvent;
+
+enum {
+    NATIVE_HOST_UI_WINDOW_CAPACITY = AIVM_VM_UI_WINDOW_COUNT
+};
 
 void native_host_ui_reset(void);
 void native_host_ui_shutdown(void);

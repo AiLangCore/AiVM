@@ -23,7 +23,7 @@ typedef struct {
     int has_pending_event;
 } NativeUiWindowsSlot;
 
-static NativeUiWindowsSlot g_native_ui_windows[8];
+static NativeUiWindowsSlot g_native_ui_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
 static int64_t g_native_ui_next_handle = 1;
 static int g_native_ui_class_registered = 0;
 static const wchar_t* g_native_ui_class_name = L"AiLangNativeUiWindow";

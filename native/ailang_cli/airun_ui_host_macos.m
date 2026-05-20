@@ -16,7 +16,7 @@ typedef struct {
     int close_pending;
 } NativeUiWindowSlot;
 
-static NativeUiWindowSlot g_native_ui_windows[8];
+static NativeUiWindowSlot g_native_ui_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
 static int64_t g_native_ui_next_handle = 1;
 static int g_native_ui_app_initialized = 0;
 static NativeHostUiEvent g_native_ui_event_queue[64];

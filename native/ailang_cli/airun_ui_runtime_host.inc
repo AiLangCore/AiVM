@@ -3,7 +3,7 @@ static char g_native_ui_event_type[16] = "none";
 static char g_native_ui_event_key[48] = "";
 static char g_native_ui_event_text[128] = "";
 static char g_native_ui_event_target_id[48] = "";
-static int64_t g_native_ui_active_window_handles[8];
+static int64_t g_native_ui_active_window_handles[NATIVE_HOST_UI_WINDOW_CAPACITY];
 static const char* g_native_debug_mode = "off";
 static int g_native_scene_capture_enabled = 0;
 static FILE* g_native_scene_capture_file = NULL;
@@ -269,6 +269,42 @@ static int native_ui_runtime_is_active_handle(int64_t handle)
     return 0;
 }
 
+static size_t native_ui_runtime_active_window_count(void)
+{
+    size_t i;
+    size_t count = 0U;
+    for (i = 0U; i < sizeof(g_native_ui_active_window_handles) / sizeof(g_native_ui_active_window_handles[0]); i += 1U) {
+        if (g_native_ui_active_window_handles[i] != 0) {
+            count += 1U;
+        }
+    }
+    return count;
+}
+
+#ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_UI_WINDOW_COUNT
+static size_t native_ui_host_resource_limit(size_t profile_value)
+{
+    (void)profile_value;
+    return (size_t)AIRUN_TEST_HOST_RESOURCE_LIMIT_UI_WINDOW_COUNT;
+}
+#else
+static size_t native_ui_host_resource_limit(size_t profile_value)
+{
+    return profile_value;
+}
+#endif
+
+static size_t native_ui_active_runtime_window_limit(void)
+{
+    AivmRuntimeProfile profile = aivm_runtime_default_profile();
+    AivmRuntimeProfileLimits limits;
+    if (g_native_active_vm != NULL) {
+        profile = g_native_active_vm->runtime_profile;
+    }
+    limits = aivm_runtime_profile_limits(profile);
+    return native_ui_host_resource_limit(limits.ui_window_count);
+}
+
 static int native_ui_runtime_register_handle(int64_t handle)
 {
     size_t i;
@@ -428,6 +464,10 @@ static int native_syscall_ui_create_window(
         args[2].type != AIVM_VAL_INT) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (native_ui_runtime_active_window_count() >= native_ui_active_runtime_window_limit()) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
     {
         int64_t handle = 0;
@@ -1007,4 +1047,3 @@ static int native_syscall_ui_get_window_size(
     }
     return AIVM_SYSCALL_OK;
 }
-

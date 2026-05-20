@@ -24,7 +24,7 @@ static Display* g_native_ui_display = NULL;
 static int g_native_ui_screen = 0;
 static Colormap g_native_ui_colormap = 0;
 static int64_t g_native_ui_next_handle = 1;
-static NativeUiLinuxWindowSlot g_native_ui_windows[8];
+static NativeUiLinuxWindowSlot g_native_ui_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
 
 static int native_ui_linux_init(void)
 {

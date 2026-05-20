@@ -1,4 +1,5 @@
 #define AIRUN_UI_HOST_EXTERNAL 1
+#define AIRUN_TEST_HOST_RESOURCE_LIMIT_UI_WINDOW_COUNT 2
 #define main airun_embedded_main_for_test
 #include "../ailang_cli/ailang.c"
 #undef main
@@ -6,6 +7,7 @@
 #include <string.h>
 
 static int g_create_window_calls = 0;
+static int64_t g_next_window_handle = 1;
 static int g_draw_image_calls = 0;
 static int g_poll_event_calls = 0;
 static int64_t g_last_draw_handle = 0;
@@ -26,7 +28,8 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
     (void)height;
     g_create_window_calls += 1;
     if (out_handle != NULL) {
-        *out_handle = 1;
+        *out_handle = g_next_window_handle;
+        g_next_window_handle += 1;
     }
     return 1;
 }
@@ -146,6 +149,7 @@ int main(void)
 {
     AivmProgram program;
     AivmValue create_args[3];
+    AivmValue close_args[1];
     AivmValue draw_args[6];
     AivmValue poll_args[1];
     AivmValue result;
@@ -167,6 +171,17 @@ int main(void)
     CHECK(result.int_value == 1);
     CHECK(g_create_window_calls == 1);
     handle = result.int_value;
+
+    status = native_syscall_ui_create_window("sys.ui.createWindow", create_args, 3U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == 2);
+    CHECK(g_create_window_calls == 2);
+
+    status = native_syscall_ui_create_window("sys.ui.createWindow", create_args, 3U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
+    CHECK(strcmp(aivm_syscall_status_code(status), "AIVMS007") == 0);
+    CHECK(g_create_window_calls == 2);
 
     draw_args[0] = aivm_value_int(handle);
     draw_args[1] = aivm_value_int(3);
@@ -210,6 +225,16 @@ int main(void)
     CHECK(strcmp(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_TARGET_ID].string_value, "start_button") == 0);
     CHECK(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_X].int_value == 12);
     CHECK(vm.node_attrs[node->attr_start + NATIVE_UI_EVENT_ATTR_Y].int_value == 34);
+
+    close_args[0] = aivm_value_int(2);
+    status = native_syscall_ui_void_1("sys.ui.closeWindow", close_args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+
+    status = native_syscall_ui_create_window("sys.ui.createWindow", create_args, 3U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value == 3);
+    CHECK(g_create_window_calls == 3);
 
     return 0;
 }
