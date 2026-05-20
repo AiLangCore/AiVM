@@ -46,6 +46,15 @@ typedef struct {
     size_t node_child_capacity;
     size_t task_capacity;
     size_t par_value_capacity;
+    size_t file_read_bytes;
+    size_t file_write_bytes;
+    size_t network_read_bytes;
+    size_t network_write_bytes;
+    size_t process_count;
+    size_t worker_count;
+    size_t ui_window_count;
+    size_t debug_artifact_bytes;
+    size_t syscall_elapsed_ms;
 } AivmRuntimeProfileLimits;
 
 typedef struct {
@@ -155,6 +164,15 @@ enum {
     AIVM_VM_TASK_CAPACITY = 256,
     AIVM_VM_PAR_CONTEXT_CAPACITY = 64,
     AIVM_VM_PAR_VALUE_CAPACITY = 1024,
+    AIVM_VM_FILE_READ_BYTES = 16 * 1024 * 1024,
+    AIVM_VM_FILE_WRITE_BYTES = 16 * 1024 * 1024,
+    AIVM_VM_NETWORK_READ_BYTES = 1024 * 1024,
+    AIVM_VM_NETWORK_WRITE_BYTES = 1024 * 1024,
+    AIVM_VM_PROCESS_COUNT = 32,
+    AIVM_VM_WORKER_COUNT = 64,
+    AIVM_VM_UI_WINDOW_COUNT = 16,
+    AIVM_VM_DEBUG_ARTIFACT_BYTES = 64 * 1024 * 1024,
+    AIVM_VM_SYSCALL_ELAPSED_MS = 30000,
     AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS = 64,
     AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR = 3,
     AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR = 4,

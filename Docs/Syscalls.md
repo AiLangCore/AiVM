@@ -189,7 +189,8 @@ Before the production VM is sponsorship-ready:
   are the production security boundary.
 - Distinguish unknown, known-but-unbound, invalid-argument, timeout,
   resource-limit, and host-failure errors.
-- Add resource limits for filesystem, process, network, worker, UI, and debug
+- Replace all-at-once host operations with bounded primitives first, then add
+  resource limits for filesystem, process, network, worker, UI, and debug
   artifact operations.
 - Separate debug-only syscalls from production `aivm`; bind them from
   `aivm-debug` where appropriate.

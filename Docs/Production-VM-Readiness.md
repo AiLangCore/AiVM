@@ -23,9 +23,19 @@ first production-grade runtime.
   argument, timeout, resource-limit, and host-failure VM errors.
 - [x] Document beta resource-limit records and error-code families in
   `Docs/Resource-Limits-And-Errors.md`.
-- [ ] Beta: enforce named resource limit records for filesystem reads/writes,
-  network reads/writes, process count, worker count, UI windows, debug
-  artifacts, and syscall execution time.
+- [ ] Beta: replace unbounded/all-at-once host operations with bounded
+  primitives first, then enforce named resource limit records for filesystem
+  reads/writes, network reads/writes, process count, worker count, UI windows,
+  debug artifacts, and syscall execution time.
+  - [x] Define named host-resource limit records in runtime profiles.
+  - [x] Enforce `file_read_bytes` and `file_write_bytes` on the current
+    whole-file filesystem syscalls.
+  - [ ] Design and implement handle/chunk filesystem primitives so large files
+    stream through bounded chunks instead of raising whole-file limits.
+  - [ ] Design and implement handle/chunk network primitives with bounded
+    read/write chunks and total accounting.
+  - [ ] Add process, worker, UI window, debug artifact, and syscall elapsed
+    limit enforcement.
 - [x] Beta: document that OS users, containers, app sandboxes, and deployment
   environments are the production security boundary.
 
@@ -156,8 +166,10 @@ These are the immediate hardening tasks before beta:
   `aivm-debug debug capture run --profile production|debug|tooling` selection
   are wired; remaining work is any non-default tooling limits.
 - Resource limits: beta documentation exists in
-  `Docs/Resource-Limits-And-Errors.md`; remaining work is enforcement for file,
-  network, process, worker, UI, debug artifact, and syscall timeout behavior.
+  `Docs/Resource-Limits-And-Errors.md`; current whole-file filesystem
+  read/write syscalls enforce profile limits. Remaining work is to replace
+  large all-at-once APIs with handle/chunk primitives, then enforce network,
+  process, worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

@@ -136,6 +136,44 @@ static int native_syscall_fs_dir_create(
 static unsigned char* g_native_file_bytes_scratch = NULL;
 static size_t g_native_file_bytes_scratch_capacity = 0U;
 
+#ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES
+static size_t native_host_resource_limit(size_t profile_value)
+{
+    (void)profile_value;
+    return (size_t)AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES;
+}
+#else
+static size_t native_host_resource_limit(size_t profile_value)
+{
+    return profile_value;
+}
+#endif
+
+static AivmRuntimeProfileLimits native_active_runtime_limits(void)
+{
+    AivmRuntimeProfile profile = aivm_runtime_default_profile();
+    if (g_native_active_vm != NULL) {
+        profile = g_native_active_vm->runtime_profile;
+    }
+    return aivm_runtime_profile_limits(profile);
+}
+
+static int native_file_size_bytes(const char* path, size_t* out_size)
+{
+    struct stat st;
+    if (path == NULL || out_size == NULL || stat(path, &st) != 0) {
+        return 0;
+    }
+    if (st.st_size < 0) {
+        return 0;
+    }
+    if ((uintmax_t)st.st_size > (uintmax_t)SIZE_MAX) {
+        return 0;
+    }
+    *out_size = (size_t)st.st_size;
+    return 1;
+}
+
 static int native_ensure_file_bytes_scratch(size_t needed)
 {
     unsigned char* grown;
@@ -175,6 +213,15 @@ static int native_syscall_fs_file_read(
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
+    {
+        AivmRuntimeProfileLimits limits = native_active_runtime_limits();
+        size_t limit = native_host_resource_limit(limits.file_read_bytes);
+        size_t file_size = 0U;
+        if (native_file_size_bytes(args[0].string_value, &file_size) && file_size > limit) {
+            result->type = AIVM_VAL_VOID;
+            return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+        }
+    }
     if (!read_binary_file(args[0].string_value, &bytes, &byte_count)) {
         *result = aivm_value_bytes(NULL, 0U);
         return AIVM_SYSCALL_OK;
@@ -209,6 +256,14 @@ static int native_syscall_fs_file_write(
         args[1].type != AIVM_VAL_BYTES) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    {
+        AivmRuntimeProfileLimits limits = native_active_runtime_limits();
+        size_t limit = native_host_resource_limit(limits.file_write_bytes);
+        if (args[1].bytes_value.length > limit) {
+            result->type = AIVM_VAL_VOID;
+            return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+        }
     }
     fp = fopen(args[0].string_value, "wb");
     if (fp == NULL) {

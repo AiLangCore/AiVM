@@ -266,7 +266,7 @@ if (BUILD_TESTING)
         add_executable(aivm_test_bytes_host
             tests/test_bytes_host.c
         )
-        target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core)
+        target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_bytes_host PRIVATE ws2_32 psapi)
         endif()
@@ -274,7 +274,7 @@ if (BUILD_TESTING)
         add_executable(aivm_test_ui_image_host
             tests/test_ui_image_host.c
         )
-        target_link_libraries(aivm_test_ui_image_host PRIVATE aivm_core)
+        target_link_libraries(aivm_test_ui_image_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_ui_image_host PRIVATE ws2_32 psapi)
         endif()
@@ -282,7 +282,7 @@ if (BUILD_TESTING)
         add_executable(aivm_test_net_async_host
             tests/test_net_async_host.c
         )
-        target_link_libraries(aivm_test_net_async_host PRIVATE aivm_core)
+        target_link_libraries(aivm_test_net_async_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_net_async_host PRIVATE ws2_32 psapi)
         endif()
@@ -290,9 +290,17 @@ if (BUILD_TESTING)
         add_executable(aivm_test_host_open_default
             tests/test_host_open_default.c
         )
-        target_link_libraries(aivm_test_host_open_default PRIVATE aivm_core)
+        target_link_libraries(aivm_test_host_open_default PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_host_open_default PRIVATE ws2_32 psapi)
+        endif()
+
+        add_executable(aivm_test_host_resource_limits
+            tests/test_host_resource_limits.c
+        )
+        target_link_libraries(aivm_test_host_resource_limits PRIVATE aivm_core ailang_package_manager)
+        if (WIN32)
+            target_link_libraries(aivm_test_host_resource_limits PRIVATE ws2_32 psapi)
         endif()
     endif()
 
@@ -320,7 +328,7 @@ if (BUILD_TESTING)
         add_executable(aivm_test_process_lifecycle_stress
             tests/test_process_lifecycle_stress.c
         )
-        target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core)
+        target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE ws2_32 psapi)
         endif()
@@ -348,6 +356,13 @@ if (BUILD_TESTING)
             )
             target_link_libraries(
                 aivm_test_host_open_default PRIVATE
+                "-framework AppKit"
+                "-framework Foundation"
+                "-framework Security"
+                "-framework CoreFoundation"
+            )
+            target_link_libraries(
+                aivm_test_host_resource_limits PRIVATE
                 "-framework AppKit"
                 "-framework Foundation"
                 "-framework Security"
@@ -401,6 +416,7 @@ if (BUILD_TESTING)
             target_compile_options(aivm_test_ui_image_host PRIVATE /W4)
             target_compile_options(aivm_test_net_async_host PRIVATE /W4)
             target_compile_options(aivm_test_host_open_default PRIVATE /W4)
+            target_compile_options(aivm_test_host_resource_limits PRIVATE /W4)
         endif()
         target_compile_options(aivm_test_remote_channel PRIVATE /W4)
         target_compile_options(aivm_test_remote_session PRIVATE /W4)
@@ -432,6 +448,7 @@ if (BUILD_TESTING)
             target_compile_options(aivm_test_ui_image_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
             target_compile_options(aivm_test_net_async_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
             target_compile_options(aivm_test_host_open_default PRIVATE -Wall -Wextra -Wpedantic -Werror)
+            target_compile_options(aivm_test_host_resource_limits PRIVATE -Wall -Wextra -Wpedantic -Werror)
         endif()
         target_compile_options(aivm_test_remote_channel PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_remote_session PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -464,6 +481,7 @@ if (BUILD_TESTING)
         add_test(NAME aivm_test_ui_image_host COMMAND aivm_test_ui_image_host)
         add_test(NAME aivm_test_net_async_host COMMAND aivm_test_net_async_host)
         add_test(NAME aivm_test_host_open_default COMMAND aivm_test_host_open_default)
+        add_test(NAME aivm_test_host_resource_limits COMMAND aivm_test_host_resource_limits)
     endif()
     add_test(NAME aivm_test_remote_channel COMMAND aivm_test_remote_channel)
     add_test(NAME aivm_test_remote_session COMMAND aivm_test_remote_session)
@@ -573,6 +591,7 @@ if (BUILD_TESTING)
             aivm_test_ui_image_host
             aivm_test_net_async_host
             aivm_test_host_open_default
+            aivm_test_host_resource_limits
             aivm_test_process_lifecycle_stress
             aivm_test_ailang_smoke
             PROPERTIES LABELS "integration;host"

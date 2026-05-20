@@ -1156,7 +1156,7 @@ static void write_debug_artifacts(
             fprintf(file, "bytes_arena_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->bytes_arena_high_water));
             fprintf(file, "node_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_count));
             fprintf(file, "node_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_high_water));
-            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu }\n",
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
                 (unsigned long long)profile_limits.stack_capacity,
                 (unsigned long long)profile_limits.call_frame_capacity,
                 (unsigned long long)profile_limits.locals_capacity,
@@ -1166,7 +1166,16 @@ static void write_debug_artifacts(
                 (unsigned long long)profile_limits.node_attr_capacity,
                 (unsigned long long)profile_limits.node_child_capacity,
                 (unsigned long long)profile_limits.task_capacity,
-                (unsigned long long)profile_limits.par_value_capacity);
+                (unsigned long long)profile_limits.par_value_capacity,
+                (unsigned long long)profile_limits.file_read_bytes,
+                (unsigned long long)profile_limits.file_write_bytes,
+                (unsigned long long)profile_limits.network_read_bytes,
+                (unsigned long long)profile_limits.network_write_bytes,
+                (unsigned long long)profile_limits.process_count,
+                (unsigned long long)profile_limits.worker_count,
+                (unsigned long long)profile_limits.ui_window_count,
+                (unsigned long long)profile_limits.debug_artifact_bytes,
+                (unsigned long long)profile_limits.syscall_elapsed_ms);
             fclose(file);
         }
     }
@@ -1360,7 +1369,7 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "bytes_arena_high_water = 0\n");
             fprintf(file, "node_count = 0\n");
             fprintf(file, "node_high_water = 0\n");
-            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu }\n",
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
                 (unsigned long long)profile_limits.stack_capacity,
                 (unsigned long long)profile_limits.call_frame_capacity,
                 (unsigned long long)profile_limits.locals_capacity,
@@ -1370,7 +1379,16 @@ static void write_debug_load_failure_artifacts(
                 (unsigned long long)profile_limits.node_attr_capacity,
                 (unsigned long long)profile_limits.node_child_capacity,
                 (unsigned long long)profile_limits.task_capacity,
-                (unsigned long long)profile_limits.par_value_capacity);
+                (unsigned long long)profile_limits.par_value_capacity,
+                (unsigned long long)profile_limits.file_read_bytes,
+                (unsigned long long)profile_limits.file_write_bytes,
+                (unsigned long long)profile_limits.network_read_bytes,
+                (unsigned long long)profile_limits.network_write_bytes,
+                (unsigned long long)profile_limits.process_count,
+                (unsigned long long)profile_limits.worker_count,
+                (unsigned long long)profile_limits.ui_window_count,
+                (unsigned long long)profile_limits.debug_artifact_bytes,
+                (unsigned long long)profile_limits.syscall_elapsed_ms);
             fclose(file);
         }
     }

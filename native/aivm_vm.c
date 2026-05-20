@@ -147,6 +147,15 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.node_child_capacity = AIVM_VM_NODE_CHILD_CAPACITY;
     limits.task_capacity = AIVM_VM_TASK_CAPACITY;
     limits.par_value_capacity = AIVM_VM_PAR_VALUE_CAPACITY;
+    limits.file_read_bytes = AIVM_VM_FILE_READ_BYTES;
+    limits.file_write_bytes = AIVM_VM_FILE_WRITE_BYTES;
+    limits.network_read_bytes = AIVM_VM_NETWORK_READ_BYTES;
+    limits.network_write_bytes = AIVM_VM_NETWORK_WRITE_BYTES;
+    limits.process_count = AIVM_VM_PROCESS_COUNT;
+    limits.worker_count = AIVM_VM_WORKER_COUNT;
+    limits.ui_window_count = AIVM_VM_UI_WINDOW_COUNT;
+    limits.debug_artifact_bytes = AIVM_VM_DEBUG_ARTIFACT_BYTES;
+    limits.syscall_elapsed_ms = AIVM_VM_SYSCALL_ELAPSED_MS;
     (void)profile;
     return limits;
 }
@@ -1809,6 +1818,8 @@ static const char* syscall_failure_detail(AivmSyscallStatus status, AivmContract
             return "AIVMS005: Syscall return type violated contract.";
         case AIVM_SYSCALL_ERR_UNBOUND:
             return "AIVMS006: Syscall target is known but has no host binding.";
+        case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
+            return "AIVMS007: Syscall resource limit exceeded.";
         case AIVM_SYSCALL_OK:
             return "AIVMS000: Syscall dispatch succeeded.";
         default:

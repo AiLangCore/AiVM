@@ -83,21 +83,39 @@ semantic allocation.
 ## Host Resource Limits
 
 Current beta hardening direction requires named resource records for host
-resources, but not every host resource limiter is implemented yet.
+resources. Limits are guardrails, not the main design mechanism. Large host
+resources should use bounded primitives such as handles, chunks, immutable
+messages, worker handoff, or blob storage. Raising a whole-file, whole-response,
+or whole-artifact limit is not the default solution.
+
+The current whole-file filesystem calls are still present, so they enforce
+profile limits immediately. The production direction is to add handle/chunk
+filesystem primitives so large files can be processed in bounded chunks.
 
 Tracked host-resource limit records:
 
-| Limit record | Applies to | Beta status |
-| --- | --- | --- |
-| `file_read_bytes` | `sys.fs.*` read paths | Planned hardening. |
-| `file_write_bytes` | `sys.fs.*` write paths | Planned hardening. |
-| `network_read_bytes` | `sys.net.*` read paths | Planned hardening. |
-| `network_write_bytes` | `sys.net.*` write paths | Planned hardening. |
-| `process_count` | `sys.process.*` child processes | Planned hardening. |
-| `worker_count` | worker/task execution resources | Planned hardening. |
-| `ui_window_count` | host UI windows | Planned hardening. |
-| `debug_artifact_bytes` | `aivm-debug` artifact output | Planned hardening. |
-| `syscall_elapsed_ms` | syscall execution timeout budget | Planned hardening. |
+| Limit record | Current value | Applies to | Beta status |
+| --- | ---: | --- | --- |
+| `file_read_bytes` | 16777216 | Current `sys.fs.file.read`; future chunk reads | Enforced for whole-file read. |
+| `file_write_bytes` | 16777216 | Current `sys.fs.file.write`; future chunk writes | Enforced for whole-file write. |
+| `network_read_bytes` | 1048576 | `sys.net.*` read paths | Defined; chunked enforcement pending. |
+| `network_write_bytes` | 1048576 | `sys.net.*` write paths | Defined; chunked enforcement pending. |
+| `process_count` | 32 | `sys.process.*` child processes | Defined; enforcement pending. |
+| `worker_count` | 64 | worker/task execution resources | Defined; enforcement pending. |
+| `ui_window_count` | 16 | host UI windows | Defined; enforcement pending. |
+| `debug_artifact_bytes` | 67108864 | `aivm-debug` artifact output | Defined; enforcement pending. |
+| `syscall_elapsed_ms` | 30000 | syscall execution timeout budget | Defined; enforcement pending. |
+
+Filesystem and network APIs should move toward this shape:
+
+```text
+open resource -> handle
+read/write handle with max chunk size
+close/release handle
+```
+
+Limits then apply to maximum chunk size, maximum handles, total accounted bytes
+where required by the selected profile, and deterministic failure behavior.
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app
@@ -168,6 +186,7 @@ The `AIVMS` family reports syscall dispatch failures.
 | `AIVMS004` | Syscall contract validation failed. |
 | `AIVMS005` | Syscall return type violated the contract. |
 | `AIVMS006` | Syscall target is known but has no host binding. |
+| `AIVMS007` | Syscall resource limit exceeded. |
 | `AIVMS999` | Unknown syscall dispatch status. |
 
 `AIVMS004` is paired with the `AIVMC` contract family.

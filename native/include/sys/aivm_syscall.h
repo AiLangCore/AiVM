@@ -13,7 +13,8 @@ typedef enum {
     AIVM_SYSCALL_ERR_NOT_FOUND = -3,
     AIVM_SYSCALL_ERR_CONTRACT = -4,
     AIVM_SYSCALL_ERR_RETURN_TYPE = -5,
-    AIVM_SYSCALL_ERR_UNBOUND = -6
+    AIVM_SYSCALL_ERR_UNBOUND = -6,
+    AIVM_SYSCALL_ERR_RESOURCE_LIMIT = -7
 } AivmSyscallStatus;
 
 typedef int (*AivmSyscallHandler)(

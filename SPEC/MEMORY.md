@@ -246,6 +246,12 @@ stable limits for:
 - task capacity
 - parallel value capacity
 
+Host-resource limits are guardrails over bounded primitives. Large files,
+network streams, debug artifacts, UI assets, and blobs should not rely on
+unbounded all-at-once allocation. The preferred runtime shape is handle/chunk
+processing, immutable message passing, worker handoff, and explicit blob
+storage with deterministic release rules.
+
 Future runtime profiles may tune those limits for production, debug, and
 compiler/tooling workloads. A profile change must be explicit and visible in
 diagnostics.

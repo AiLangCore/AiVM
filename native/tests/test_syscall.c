@@ -561,6 +561,12 @@ int main(void)
     if (expect(strcmp(aivm_syscall_status_code((AivmSyscallStatus)-999), "AIVMS999") == 0) != 0) {
         return 1;
     }
+    if (expect(strcmp(aivm_syscall_status_code(AIVM_SYSCALL_ERR_RESOURCE_LIMIT), "AIVMS007") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_syscall_status_message(AIVM_SYSCALL_ERR_RESOURCE_LIMIT), "Syscall resource limit exceeded.") == 0) != 0) {
+        return 1;
+    }
 
     return 0;
 }

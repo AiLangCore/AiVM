@@ -144,6 +144,8 @@ const char* aivm_syscall_status_code(AivmSyscallStatus status)
             return "AIVMS005";
         case AIVM_SYSCALL_ERR_UNBOUND:
             return "AIVMS006";
+        case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
+            return "AIVMS007";
         default:
             return "AIVMS999";
     }
@@ -166,6 +168,8 @@ const char* aivm_syscall_status_message(AivmSyscallStatus status)
             return "Syscall return type violated contract.";
         case AIVM_SYSCALL_ERR_UNBOUND:
             return "Syscall target is known but has no host binding.";
+        case AIVM_SYSCALL_ERR_RESOURCE_LIMIT:
+            return "Syscall resource limit exceeded.";
         default:
             return "Unknown syscall dispatch status.";
     }
