@@ -3382,6 +3382,8 @@ void aivm_reset_state(AivmVm* vm)
     vm->string_arena_pressure_count = 0U;
     vm->bytes_arena_pressure_count = 0U;
     vm->node_arena_pressure_count = 0U;
+    vm->network_read_bytes_used = 0U;
+    vm->network_write_bytes_used = 0U;
     vm->process_argv_node_handle = 0;
     vm->ui_default_window_size_node_handle = 0;
     vm->ui_empty_event_node_handle = 0;

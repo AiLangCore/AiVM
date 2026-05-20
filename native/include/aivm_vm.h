@@ -268,6 +268,8 @@ typedef struct {
     size_t string_arena_pressure_count;
     size_t bytes_arena_pressure_count;
     size_t node_arena_pressure_count;
+    size_t network_read_bytes_used;
+    size_t network_write_bytes_used;
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);

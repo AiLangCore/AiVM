@@ -23,7 +23,7 @@ first production-grade runtime.
   argument, timeout, resource-limit, and host-failure VM errors.
 - [x] Document beta resource-limit records and error-code families in
   `Docs/Resource-Limits-And-Errors.md`.
-- [ ] Beta: replace unbounded/all-at-once host operations with bounded
+- [x] Beta: replace unbounded/all-at-once host operations with bounded
   primitives first, then enforce named resource limit records for filesystem
   reads/writes, network reads/writes, process count, worker count, UI windows,
   debug artifacts, and syscall execution time.
@@ -34,7 +34,7 @@ first production-grade runtime.
     stream through bounded chunks instead of raising whole-file limits.
   - [x] Enforce per-call network read/write limits on existing TCP and UDP
     handle-based network primitives.
-  - [ ] Add total network byte accounting if a beta runtime profile requires a
+  - [x] Add total network byte accounting if a beta runtime profile requires a
     cumulative network budget.
   - [x] Enforce `process_count` before host child process creation.
   - [x] Enforce `worker_count` before worker handle allocation.
@@ -176,14 +176,14 @@ These are the immediate hardening tasks before beta:
 - Resource limits: beta documentation exists in
   `Docs/Resource-Limits-And-Errors.md`; current whole-file filesystem
   read/write syscalls enforce profile limits, file handle/chunk primitives are
-  available, and TCP/UDP network read/write paths enforce per-call byte limits.
+  available, and TCP/UDP network read/write paths enforce per-call and
+  cumulative per-run byte limits.
   `sys.process.spawn` enforces the process-count limit before host child
   process creation, `sys.worker.start` enforces the worker-count limit before
   worker handle allocation, `sys.ui.createWindow` enforces the UI-window limit
   before host window creation, VM syscall dispatch enforces elapsed-time limits
   after host dispatch returns, and `aivm-debug` enforces artifact byte budgets
-  before publishing artifact files. Remaining work is any cumulative network
-  byte accounting required by beta profiles.
+  before publishing artifact files.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

@@ -99,8 +99,8 @@ Tracked host-resource limit records:
 | --- | ---: | --- | --- |
 | `file_read_bytes` | 16777216 | Current `sys.fs.file.read`; `sys.fs.file.readChunk` | Enforced for whole-file read and read chunks. |
 | `file_write_bytes` | 16777216 | Current `sys.fs.file.write`; `sys.fs.file.writeChunk` | Enforced for whole-file write and write chunks. |
-| `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as the maximum read request size per call. |
-| `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as the maximum write payload size per call. |
+| `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as the maximum read request size per call and cumulative bytes returned per VM run. |
+| `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as the maximum write payload size per call and cumulative bytes written per VM run. |
 | `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
 | `worker_count` | 64 | `sys.worker.start` retained worker handles | Enforced before worker allocation. |
 | `ui_window_count` | 16 | `sys.ui.createWindow` active windows | Enforced before host window creation. |
@@ -131,7 +131,10 @@ Current filesystem chunk primitives:
 Current network primitives are already handle-based for TCP and UDP. Read
 request sizes above `network_read_bytes` and write payloads above
 `network_write_bytes` fail with `AIVMS007` before socket-handle lookup or async
-operation allocation.
+operation allocation. Bytes successfully read or written are also charged
+against the active VM run. When the cumulative read/write budget is exhausted,
+sync network syscalls fail with `AIVMS007`; async network operations complete as
+failed operations with a resource-limit error string.
 
 Process spawning enforces `process_count` before the host child process is
 created. When the selected runtime profile's live process budget is exhausted,

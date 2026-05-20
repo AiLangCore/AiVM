@@ -42,6 +42,7 @@ int main(void)
     AivmValue result;
     AivmSyscallStatus status;
     AivmRuntimeProfileLimits limits;
+    AivmVm vm;
     int64_t handle;
 
     remove("aivm-host-limit-small.bin");
@@ -55,6 +56,24 @@ int main(void)
     CHECK(limits.network_read_bytes == AIVM_VM_NETWORK_READ_BYTES);
     CHECK(limits.process_count == AIVM_VM_PROCESS_COUNT);
     CHECK(limits.worker_count == AIVM_VM_WORKER_COUNT);
+
+    aivm_init(&vm, NULL);
+    g_native_active_vm = &vm;
+    CHECK(native_net_try_consume_read_bytes(5U) == 1);
+    CHECK(vm.network_read_bytes_used == 5U);
+    CHECK(native_net_try_consume_read_bytes(3U) == 1);
+    CHECK(vm.network_read_bytes_used == 8U);
+    CHECK(native_net_try_consume_read_bytes(1U) == 0);
+    CHECK(vm.network_read_bytes_used == 8U);
+    CHECK(native_net_try_consume_write_bytes(6U) == 1);
+    CHECK(vm.network_write_bytes_used == 6U);
+    CHECK(native_net_try_consume_write_bytes(3U) == 0);
+    CHECK(vm.network_write_bytes_used == 6U);
+    aivm_reset_state(&vm);
+    CHECK(vm.network_read_bytes_used == 0U);
+    CHECK(vm.network_write_bytes_used == 0U);
+    g_native_active_vm = NULL;
+    aivm_dispose(&vm);
 
     CHECK(write_test_file("aivm-host-limit-small.bin", small_bytes, sizeof(small_bytes)));
     CHECK(write_test_file("aivm-host-limit-large.bin", large_bytes, sizeof(large_bytes)));
