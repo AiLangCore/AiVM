@@ -32,8 +32,10 @@ first production-grade runtime.
     whole-file filesystem syscalls.
   - [x] Design and implement handle/chunk filesystem primitives so large files
     stream through bounded chunks instead of raising whole-file limits.
-  - [ ] Design and implement handle/chunk network primitives with bounded
-    read/write chunks and total accounting.
+  - [x] Enforce per-call network read/write limits on existing TCP and UDP
+    handle-based network primitives.
+  - [ ] Add total network byte accounting if a beta runtime profile requires a
+    cumulative network budget.
   - [ ] Add process, worker, UI window, debug artifact, and syscall elapsed
     limit enforcement.
 - [x] Beta: document that OS users, containers, app sandboxes, and deployment
@@ -167,9 +169,11 @@ These are the immediate hardening tasks before beta:
   are wired; remaining work is any non-default tooling limits.
 - Resource limits: beta documentation exists in
   `Docs/Resource-Limits-And-Errors.md`; current whole-file filesystem
-  read/write syscalls enforce profile limits, and file handle/chunk primitives
-  are available. Remaining work is network, process, worker, UI, debug
-  artifact, and syscall timeout behavior.
+  read/write syscalls enforce profile limits, file handle/chunk primitives are
+  available, and TCP/UDP network read/write paths enforce per-call byte limits.
+  Remaining work is process, worker, UI, debug artifact, syscall timeout
+  behavior, and any cumulative network byte accounting required by beta
+  profiles.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

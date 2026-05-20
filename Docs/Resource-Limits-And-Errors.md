@@ -98,8 +98,8 @@ Tracked host-resource limit records:
 | --- | ---: | --- | --- |
 | `file_read_bytes` | 16777216 | Current `sys.fs.file.read`; `sys.fs.file.readChunk` | Enforced for whole-file read and read chunks. |
 | `file_write_bytes` | 16777216 | Current `sys.fs.file.write`; `sys.fs.file.writeChunk` | Enforced for whole-file write and write chunks. |
-| `network_read_bytes` | 1048576 | `sys.net.*` read paths | Defined; chunked enforcement pending. |
-| `network_write_bytes` | 1048576 | `sys.net.*` write paths | Defined; chunked enforcement pending. |
+| `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as the maximum read request size per call. |
+| `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as the maximum write payload size per call. |
 | `process_count` | 32 | `sys.process.*` child processes | Defined; enforcement pending. |
 | `worker_count` | 64 | worker/task execution resources | Defined; enforcement pending. |
 | `ui_window_count` | 16 | host UI windows | Defined; enforcement pending. |
@@ -126,6 +126,11 @@ Current filesystem chunk primitives:
 | `sys.fs.file.openWrite(path)` | Opens or truncates a host file for bounded chunk writes and returns a positive handle, or `-1` when unavailable. |
 | `sys.fs.file.writeChunk(handle, bytes)` | Writes one bounded byte chunk and returns bytes written, or `-1` for invalid handles. Chunks above `file_write_bytes` fail with `AIVMS007`. |
 | `sys.fs.file.close(handle)` | Closes a file handle and returns whether a live handle was closed. |
+
+Current network primitives are already handle-based for TCP and UDP. Read
+request sizes above `network_read_bytes` and write payloads above
+`network_write_bytes` fail with `AIVMS007` before socket-handle lookup or async
+operation allocation.
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app

@@ -93,6 +93,44 @@ static void native_net_async_release_pending_bytes(NativeNetAsyncState* op);
 static int native_net_socket_would_block(void);
 static int native_net_platform_init(void);
 
+#ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES
+static size_t native_net_host_resource_limit(size_t profile_value)
+{
+    (void)profile_value;
+    return (size_t)AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES;
+}
+#else
+static size_t native_net_host_resource_limit(size_t profile_value)
+{
+    return profile_value;
+}
+#endif
+
+static int native_net_requested_limit_exceeded(int64_t requested, size_t profile_limit)
+{
+    size_t limit;
+    if (requested < 0) {
+        return 0;
+    }
+    limit = native_net_host_resource_limit(profile_limit);
+    return (uintmax_t)requested > (uintmax_t)limit;
+}
+
+static int native_net_bytes_limit_exceeded(size_t byte_count, size_t profile_limit)
+{
+    size_t limit = native_net_host_resource_limit(profile_limit);
+    return byte_count > limit;
+}
+
+static AivmRuntimeProfileLimits native_net_active_runtime_limits(void)
+{
+    AivmRuntimeProfile profile = aivm_runtime_default_profile();
+    if (g_native_active_vm != NULL) {
+        profile = g_native_active_vm->runtime_profile;
+    }
+    return aivm_runtime_profile_limits(profile);
+}
+
 static int native_net_dns_skip_name(const uint8_t* packet, size_t packet_len, size_t* io_offset)
 {
     size_t offset;
@@ -2079,6 +2117,10 @@ static int native_syscall_net_tcp_read(
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
+    if (native_net_requested_limit_exceeded(args[1].int_value, native_net_active_runtime_limits().network_read_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
     state = native_net_handle_lookup(args[0].int_value);
     if (state == NULL ||
         (state->kind != NATIVE_NET_HANDLE_KIND_TCP_STREAM &&
@@ -2120,6 +2162,10 @@ static int native_syscall_net_tcp_write(
         args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_BYTES) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (native_net_bytes_limit_exceeded(args[1].bytes_value.length, native_net_active_runtime_limits().network_write_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
     state = native_net_handle_lookup(args[0].int_value);
     if (state == NULL ||
@@ -2222,6 +2268,10 @@ static int native_syscall_net_udp_send(
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
+    if (native_net_bytes_limit_exceeded(args[3].bytes_value.length, native_net_active_runtime_limits().network_write_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
     state = native_net_handle_lookup(args[0].int_value);
     if (state == NULL || state->kind != NATIVE_NET_HANDLE_KIND_UDP_SOCKET ||
         args[2].int_value <= 0 || args[2].int_value > 65535 ||
@@ -2271,6 +2321,10 @@ static int native_syscall_net_udp_recv(
     if (args == NULL || arg_count != 2U || args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_INT) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (native_net_requested_limit_exceeded(args[1].int_value, native_net_active_runtime_limits().network_read_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
     if (g_native_active_vm == NULL) {
         result->type = AIVM_VAL_VOID;
@@ -2536,6 +2590,20 @@ static int native_syscall_net_start_op(
     if (!is_supported_target) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (strcmp(target, "sys.net.tcp.readStart") == 0 &&
+        args != NULL && arg_count == 2U &&
+        args[0].type == AIVM_VAL_INT && args[1].type == AIVM_VAL_INT &&
+        native_net_requested_limit_exceeded(args[1].int_value, native_net_active_runtime_limits().network_read_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
+    if (strcmp(target, "sys.net.tcp.writeStart") == 0 &&
+        args != NULL && arg_count == 2U &&
+        args[0].type == AIVM_VAL_INT && args[1].type == AIVM_VAL_BYTES &&
+        native_net_bytes_limit_exceeded(args[1].bytes_value.length, native_net_active_runtime_limits().network_write_bytes)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
     op_handle = native_net_async_allocate();
     if (op_handle < 0) {

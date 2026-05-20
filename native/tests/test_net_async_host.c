@@ -37,6 +37,61 @@ static int can_skip_local_bind_failure(void)
 #endif
 }
 
+static int test_network_resource_limit_rejections(void)
+{
+    AivmValue tcp_args[2];
+    AivmValue udp_args[4];
+    AivmValue result;
+    uint8_t* payload;
+    size_t payload_len = (size_t)AIVM_VM_NETWORK_WRITE_BYTES + 1U;
+
+    payload = (uint8_t*)malloc(payload_len);
+    if (payload == NULL) {
+        fprintf(stderr, "FAIL line %d\n", __LINE__);
+        return 0;
+    }
+    memset(payload, 'x', payload_len);
+
+    tcp_args[0] = aivm_value_int(-123);
+    tcp_args[1] = aivm_value_int((int64_t)AIVM_VM_NETWORK_READ_BYTES + 1);
+    if (native_syscall_net_tcp_read("sys.net.tcp.read", tcp_args, 2U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT ||
+        native_syscall_net_start_op("sys.net.tcp.readStart", tcp_args, 2U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT) {
+        fprintf(stderr, "FAIL line %d\n", __LINE__);
+        free(payload);
+        return 0;
+    }
+
+    tcp_args[0] = aivm_value_int(-123);
+    tcp_args[1] = aivm_value_bytes(payload, payload_len);
+    if (native_syscall_net_tcp_write("sys.net.tcp.write", tcp_args, 2U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT ||
+        native_syscall_net_start_op("sys.net.tcp.writeStart", tcp_args, 2U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT) {
+        fprintf(stderr, "FAIL line %d\n", __LINE__);
+        free(payload);
+        return 0;
+    }
+
+    udp_args[0] = aivm_value_int(-123);
+    udp_args[1] = aivm_value_int((int64_t)AIVM_VM_NETWORK_READ_BYTES + 1);
+    if (native_syscall_net_udp_recv("sys.net.udp.recv", udp_args, 2U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT) {
+        fprintf(stderr, "FAIL line %d\n", __LINE__);
+        free(payload);
+        return 0;
+    }
+
+    udp_args[0] = aivm_value_int(-123);
+    udp_args[1] = aivm_value_string("localhost");
+    udp_args[2] = aivm_value_int(1);
+    udp_args[3] = aivm_value_bytes(payload, payload_len);
+    if (native_syscall_net_udp_send("sys.net.udp.send", udp_args, 4U, &result) != AIVM_SYSCALL_ERR_RESOURCE_LIMIT) {
+        fprintf(stderr, "FAIL line %d\n", __LINE__);
+        free(payload);
+        return 0;
+    }
+
+    free(payload);
+    return 1;
+}
+
 int main(void)
 {
     NativeSocket listener = NATIVE_INVALID_SOCKET;
@@ -56,6 +111,7 @@ int main(void)
 
     native_net_reset();
     CHECK(native_net_platform_init());
+    CHECK(test_network_resource_limit_rejections());
 
     listener = socket(AF_INET, SOCK_STREAM, 0);
     CHECK(listener != NATIVE_INVALID_SOCKET);
