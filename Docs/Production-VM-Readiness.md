@@ -49,7 +49,7 @@ Optional future sandboxing:
 
 - [x] Add per-syscall capability groups to the contract metadata.
 - [x] Add a runtime capability policy object.
-- [ ] Add CLI flags for explicitly enabling or denying capability groups.
+- [x] Add CLI flags for explicitly enabling or denying capability groups.
 
 ## Deterministic Library Migration
 
@@ -170,7 +170,9 @@ These are the immediate hardening tasks before beta:
   agent-readable summaries.
 - Runtime profiles: profile names, diagnostic emission, and explicit
   `aivm-debug debug capture run --profile production|debug|tooling` selection
-  are wired; remaining work is any non-default tooling limits.
+  are wired. `aivm-debug debug capture run --allow <group>` and
+  `--deny <group>` expose capability policy overrides for release validation.
+  Remaining work is any non-default tooling limits.
 - Resource limits: beta documentation exists in
   `Docs/Resource-Limits-And-Errors.md`; current whole-file filesystem
   read/write syscalls enforce profile limits, file handle/chunk primitives are

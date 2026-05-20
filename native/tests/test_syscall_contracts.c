@@ -8,6 +8,7 @@ static int expect(int condition)
 int main(void)
 {
     AivmValueType return_type;
+    AivmSyscallCapabilityGroup capability;
     const AivmSyscallContract* contract;
     AivmValue draw_rect_args[6];
     AivmValue draw_text_args[6];
@@ -730,6 +731,21 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(aivm_value_string(aivm_syscall_capability_name(AIVM_SYSCALL_CAPABILITY_DEBUG)), aivm_value_string("debug")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_capability_from_name("debug", &capability) == 1) != 0) {
+        return 1;
+    }
+    if (expect(capability == AIVM_SYSCALL_CAPABILITY_DEBUG) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_capability_from_name("process", &capability) == 1) != 0) {
+        return 1;
+    }
+    if (expect(capability == AIVM_SYSCALL_CAPABILITY_PROCESS) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_capability_from_name("missing", &capability) == 0) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_should_bind_in_production("sys.debug.mode") == 0) != 0) {

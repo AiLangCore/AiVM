@@ -228,6 +228,25 @@ const char* aivm_syscall_capability_name(AivmSyscallCapabilityGroup capability)
     }
 }
 
+int aivm_syscall_capability_from_name(
+    const char* name,
+    AivmSyscallCapabilityGroup* out_capability)
+{
+    AivmSyscallCapabilityGroup capability;
+    if (name == NULL || out_capability == NULL) {
+        return 0;
+    }
+    for (capability = AIVM_SYSCALL_CAPABILITY_CORE;
+         capability <= AIVM_SYSCALL_CAPABILITY_DEBUG;
+         capability = (AivmSyscallCapabilityGroup)(capability + 1)) {
+        if (strcmp(name, aivm_syscall_capability_name(capability)) == 0) {
+            *out_capability = capability;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int aivm_syscall_contract_is_debug_target(const char* target)
 {
     return aivm_syscall_contract_capability(target) == AIVM_SYSCALL_CAPABILITY_DEBUG;

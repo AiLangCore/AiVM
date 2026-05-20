@@ -55,7 +55,8 @@ host boundary a syscall crosses.
 The VM owns a runtime capability policy object. Production profile policy allows
 normal host-boundary groups and denies `debug`; debug/tooling profiles allow
 `debug` as well. A denied capability fails before host dispatch with `AIVMS008`.
-Future CLI flags may expose explicit allow/deny controls.
+`aivm-debug debug capture run` exposes explicit `--allow <group>` and
+`--deny <group>` policy overrides for diagnostics and release validation.
 
 Current groups are:
 
@@ -231,13 +232,14 @@ Before the production VM is sponsorship-ready:
   artifact operations.
 - Separate debug-only syscalls from production `aivm`; bind them from
   `aivm-debug` where appropriate.
-- Use syscall capability groups as the policy metadata for future explicit
-  allow/deny controls.
+- Use syscall capability groups as the policy metadata for explicit allow/deny
+  controls.
 - Move deterministic library candidates into AiLang or document why a specific
   target must remain host-provided.
 
-Optional future sandboxing may add `--allow-*` or `--deny-*` flags, but that is
-not the current production baseline.
+Future sandboxing may extend the current debug-capture `--allow` and `--deny`
+flags to other command surfaces, but that is not the current production
+baseline.
 
 ## Current Syscalls
 

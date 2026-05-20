@@ -43,6 +43,8 @@ Current:
   - `aivm-debug debug capture run <app.aibc1> --out <debug-run-dir>`
   - optional profile selection:
     `--profile production|debug|tooling` (default: `debug`)
+  - optional capability policy overrides:
+    `--allow <group>` and `--deny <group>`
   - `aivm-debug explain <debug-run-dir>`
   - `aivm-debug inspect stack <debug-run-dir>`
   - `aivm-debug inspect memory <debug-run-dir>`

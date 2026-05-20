@@ -22,6 +22,7 @@ OK_RUN="${TMP_DIR}/ok-run"
 LOAD_FAIL_RUN="${TMP_DIR}/load-fail-run"
 TOOLING_RUN="${TMP_DIR}/tooling-run"
 PRODUCTION_LOAD_FAIL_RUN="${TMP_DIR}/production-load-fail-run"
+POLICY_LOAD_FAIL_RUN="${TMP_DIR}/policy-load-fail-run"
 
 printf '%b' \
   '\x41\x49\x42\x43\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00'\
@@ -93,12 +94,32 @@ if [[ "${production_load_fail_rc}" -ne 2 ]]; then
 fi
 
 set +e
+"${AIVM_DEBUG}" debug capture run "${LOAD_FAIL_PROGRAM}" --profile=production --allow debug --out "${POLICY_LOAD_FAIL_RUN}" >"${TMP_DIR}/policy-load-fail.stdout" 2>"${TMP_DIR}/policy-load-fail.stderr"
+policy_load_fail_rc=$?
+set -e
+
+if [[ "${policy_load_fail_rc}" -ne 2 ]]; then
+  echo "expected policy load-failing capture rc=2, got ${policy_load_fail_rc}" >&2
+  exit 1
+fi
+
+set +e
 "${AIVM_DEBUG}" debug capture run "${OK_PROGRAM}" --profile invalid --out "${TMP_DIR}/invalid-profile-run" >"${TMP_DIR}/invalid-profile.stdout" 2>"${TMP_DIR}/invalid-profile.stderr"
 invalid_profile_rc=$?
 set -e
 
 if [[ "${invalid_profile_rc}" -ne 64 ]]; then
   echo "expected invalid profile rc=64, got ${invalid_profile_rc}" >&2
+  exit 1
+fi
+
+set +e
+"${AIVM_DEBUG}" debug capture run "${OK_PROGRAM}" --allow missing --out "${TMP_DIR}/invalid-capability-run" >"${TMP_DIR}/invalid-capability.stdout" 2>"${TMP_DIR}/invalid-capability.stderr"
+invalid_capability_rc=$?
+set -e
+
+if [[ "${invalid_capability_rc}" -ne 64 ]]; then
+  echo "expected invalid capability rc=64, got ${invalid_capability_rc}" >&2
   exit 1
 fi
 
@@ -119,11 +140,14 @@ do
   test -f "${OK_RUN}/${artifact}"
   test -f "${TOOLING_RUN}/${artifact}"
   test -f "${PRODUCTION_LOAD_FAIL_RUN}/${artifact}"
+  test -f "${POLICY_LOAD_FAIL_RUN}/${artifact}"
 done
 
 grep -q 'phase = "load"' "${LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'runtime_profile = "debug"' "${LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'runtime_profile = "production"' "${PRODUCTION_LOAD_FAIL_RUN}/diagnostics.toml"
+grep -q 'syscall_capability_policy_mask = 16382' "${PRODUCTION_LOAD_FAIL_RUN}/config.toml"
+grep -q 'syscall_capability_policy_mask = 32766' "${POLICY_LOAD_FAIL_RUN}/config.toml"
 grep -q 'program_error_code = "AIVMP003"' "${LOAD_FAIL_RUN}/diagnostics.toml"
 grep -q 'current_opcode = "LOAD_FAILED"' "${LOAD_FAIL_RUN}/stack_trace.toml"
 grep -q 'instruction_count = 0' "${LOAD_FAIL_RUN}/profile.toml"
@@ -152,6 +176,7 @@ grep -q 'opcode = "PUSH_INT", count = 1' "${OK_RUN}/profile.toml"
 grep -q 'opcode = "HALT", count = 1' "${OK_RUN}/profile.toml"
 grep -q 'instruction_count = 2' "${TOOLING_RUN}/profile.toml"
 grep -q -- '--profile must be production, debug, or tooling' "${TMP_DIR}/invalid-profile.stderr"
+grep -q -- '--allow requires a syscall capability group' "${TMP_DIR}/invalid-capability.stderr"
 
 "${AIVM_DEBUG}" explain "${FAIL_RUN}" >"${TMP_DIR}/explain.txt"
 grep -q 'runtime_profile: "debug"' "${TMP_DIR}/explain.txt"

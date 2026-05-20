@@ -54,7 +54,8 @@ retained roots and reduce temporary structures.
 ## Diagnostic Visibility
 
 `aivm-debug debug capture run <program.aibc1> --out <dir>` writes the active
-profile and limit records into the debug artifact bundle. The core files are:
+profile, syscall capability policy, and limit records into the debug artifact
+bundle. The core files are:
 
 - `config.toml`: selected runtime profile and command configuration.
 - `diagnostics.toml`: status, phase, exit code, VM error code, VM message, and

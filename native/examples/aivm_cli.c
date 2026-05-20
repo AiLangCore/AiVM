@@ -874,7 +874,7 @@ static void print_usage(FILE* stream)
 #if defined(AIVM_DEBUG_RUNTIME)
     fprintf(stream, "       %s profile <program.aibc1> [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s benchmark [--iterations <n>] <program.aibc1> [args...]\n", AIVM_CLI_NAME);
-    fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [--profile <production|debug|tooling>] [args...]\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [--profile <production|debug|tooling>] [--allow <capability>] [--deny <capability>] [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s explain <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s suggest <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s inspect <stack|memory|profile|syscalls> <debug-run-dir>\n", AIVM_CLI_NAME);
@@ -931,6 +931,12 @@ static int read_file(const char* path, uint8_t** out_bytes, size_t* out_size)
 }
 
 #if defined(AIVM_DEBUG_RUNTIME)
+typedef struct DebugCapabilityOverride
+{
+    AivmSyscallCapabilityGroup capability;
+    int allow;
+} DebugCapabilityOverride;
+
 static void write_empty_debug_file(const char* artifact_dir, const char* file_name)
 {
     char path[PATH_MAX];
@@ -1169,6 +1175,8 @@ static void write_debug_artifacts(
             fprintf(file, "runtime_profile = ");
             write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
             fprintf(file, "\n");
+            fprintf(file, "syscall_capability_policy_mask = %llu\n",
+                vm == NULL ? 0ULL : (unsigned long long)vm->syscall_policy.allowed_capability_mask);
             fprintf(file, "abi = %u\n", (unsigned int)aivm_c_abi_version());
             fprintf(file, "program = ");
             write_toml_string(file, program_path);
@@ -1374,6 +1382,7 @@ static void write_debug_load_failure_artifacts(
     const char* artifact_dir,
     const char* program_path,
     AivmRuntimeProfile runtime_profile,
+    const AivmSyscallCapabilityPolicy* syscall_policy,
     AivmProgramLoadResult load_result)
 {
     char path[PATH_MAX];
@@ -1416,6 +1425,8 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "runtime_profile = ");
             write_toml_string(file, aivm_runtime_profile_name(runtime_profile));
             fprintf(file, "\n");
+            fprintf(file, "syscall_capability_policy_mask = %llu\n",
+                syscall_policy == NULL ? 0ULL : (unsigned long long)syscall_policy->allowed_capability_mask);
             fprintf(file, "abi = %u\n", (unsigned int)aivm_c_abi_version());
             fprintf(file, "program = ");
             write_toml_string(file, program_path);
@@ -1909,7 +1920,8 @@ static int execute_bytes(
     size_t process_argv_count,
     const char* debug_artifact_dir,
     const char* program_path,
-    AivmRuntimeProfile runtime_profile)
+    AivmRuntimeProfile runtime_profile,
+    const AivmSyscallCapabilityPolicy* syscall_policy)
 {
     AivmProgram program;
     static AivmVm vm;
@@ -1950,11 +1962,12 @@ static int execute_bytes(
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);
     if (load_result.status != AIVM_PROGRAM_OK) {
 #if defined(AIVM_DEBUG_RUNTIME)
-        write_debug_load_failure_artifacts(debug_artifact_dir, program_path, runtime_profile, load_result);
+        write_debug_load_failure_artifacts(debug_artifact_dir, program_path, runtime_profile, syscall_policy, load_result);
 #else
         (void)debug_artifact_dir;
         (void)program_path;
         (void)runtime_profile;
+        (void)syscall_policy;
 #endif
         fprintf(
             stderr,
@@ -1976,6 +1989,9 @@ static int execute_bytes(
         process_argv,
         process_argv_count);
     aivm_set_runtime_profile(&vm, runtime_profile);
+    if (syscall_policy != NULL) {
+        aivm_set_syscall_policy(&vm, syscall_policy);
+    }
     aivm_run(&vm);
     ok = vm.status != AIVM_VM_STATUS_ERROR;
 #if defined(AIVM_DEBUG_RUNTIME)
@@ -2033,7 +2049,8 @@ static int run_program(const char* path, const char* const* process_argv, size_t
         process_argv_count,
         NULL,
         path,
-        aivm_runtime_default_profile());
+        aivm_runtime_default_profile(),
+        NULL);
     free(bytes);
     return exit_code;
 }
@@ -2046,10 +2063,14 @@ static int debug_capture_run(int argc, char** argv)
     const char* const* process_argv = NULL;
     size_t process_argv_count = 0U;
     AivmRuntimeProfile runtime_profile = aivm_runtime_default_profile();
+    AivmSyscallCapabilityPolicy syscall_policy;
+    DebugCapabilityOverride capability_overrides[32];
+    size_t capability_override_count = 0U;
     uint8_t* bytes;
     size_t byte_count;
     int exit_code;
     int i;
+    size_t override_index;
     char stdout_path[PATH_MAX];
     char stderr_path[PATH_MAX];
 
@@ -2078,6 +2099,35 @@ static int debug_capture_run(int argc, char** argv)
                 fprintf(stderr, "%s: --profile must be production, debug, or tooling\n", AIVM_CLI_NAME);
                 return 64;
             }
+        } else if (strcmp(argv[i], "--allow") == 0 || strcmp(argv[i], "--deny") == 0) {
+            AivmSyscallCapabilityGroup capability;
+            if (i + 1 >= argc || !aivm_syscall_capability_from_name(argv[i + 1], &capability)) {
+                fprintf(stderr, "%s: %s requires a syscall capability group\n", AIVM_CLI_NAME, argv[i]);
+                return 64;
+            }
+            if (capability_override_count >= sizeof(capability_overrides) / sizeof(capability_overrides[0])) {
+                fprintf(stderr, "%s: too many capability policy overrides\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            capability_overrides[capability_override_count].capability = capability;
+            capability_overrides[capability_override_count].allow = strcmp(argv[i], "--allow") == 0;
+            capability_override_count += 1U;
+            i += 1;
+        } else if (strncmp(argv[i], "--allow=", 8U) == 0 || strncmp(argv[i], "--deny=", 7U) == 0) {
+            AivmSyscallCapabilityGroup capability;
+            const int is_allow = strncmp(argv[i], "--allow=", 8U) == 0;
+            const char* capability_name = argv[i] + (is_allow ? 8 : 7);
+            if (!aivm_syscall_capability_from_name(capability_name, &capability)) {
+                fprintf(stderr, "%s: %s is not a known syscall capability group\n", AIVM_CLI_NAME, capability_name);
+                return 64;
+            }
+            if (capability_override_count >= sizeof(capability_overrides) / sizeof(capability_overrides[0])) {
+                fprintf(stderr, "%s: too many capability policy overrides\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            capability_overrides[capability_override_count].capability = capability;
+            capability_overrides[capability_override_count].allow = is_allow;
+            capability_override_count += 1U;
         } else if (strcmp(argv[i], "--") == 0) {
             if (program_path == NULL) {
                 fprintf(stderr, "%s: debug capture run requires a program before --\n", AIVM_CLI_NAME);
@@ -2100,6 +2150,18 @@ static int debug_capture_run(int argc, char** argv)
     if (program_path == NULL) {
         print_usage(stderr);
         return 64;
+    }
+    if (runtime_profile == AIVM_RUNTIME_PROFILE_PRODUCTION) {
+        aivm_syscall_policy_allow_production_default(&syscall_policy);
+    } else {
+        aivm_syscall_policy_allow_all(&syscall_policy);
+    }
+    for (override_index = 0U; override_index < capability_override_count; override_index += 1U) {
+        if (capability_overrides[override_index].allow) {
+            aivm_syscall_policy_allow_group(&syscall_policy, capability_overrides[override_index].capability);
+        } else {
+            aivm_syscall_policy_deny_group(&syscall_policy, capability_overrides[override_index].capability);
+        }
     }
     if (!read_file(program_path, &bytes, &byte_count)) {
         return 1;
@@ -2125,7 +2187,8 @@ static int debug_capture_run(int argc, char** argv)
         process_argv_count,
         artifact_dir,
         program_path,
-        runtime_profile);
+        runtime_profile,
+        &syscall_policy);
     if (g_debug_stdout_capture != NULL) {
         fclose(g_debug_stdout_capture);
         g_debug_stdout_capture = NULL;
@@ -2204,7 +2267,8 @@ static int benchmark_program(int argc, char** argv)
             process_argv_count,
             NULL,
             path,
-            aivm_runtime_default_profile());
+            aivm_runtime_default_profile(),
+            NULL);
         if (exit_code != 0) {
             free(bytes);
             return exit_code;

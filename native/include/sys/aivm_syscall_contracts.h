@@ -59,6 +59,10 @@ const AivmSyscallContract* aivm_syscall_contract_find_by_target(const char* targ
 const AivmSyscallContract* aivm_syscall_contract_find_by_id(uint32_t id);
 AivmSyscallCapabilityGroup aivm_syscall_contract_capability(const char* target);
 const char* aivm_syscall_capability_name(AivmSyscallCapabilityGroup capability);
+int aivm_syscall_capability_from_name(
+    const char* name,
+    AivmSyscallCapabilityGroup* out_capability
+);
 int aivm_syscall_contract_is_debug_target(const char* target);
 int aivm_syscall_contract_should_bind_in_production(const char* target);
 const char* aivm_contract_status_code(AivmContractStatus status);
