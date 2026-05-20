@@ -107,6 +107,11 @@ int main(void)
             "#!/bin/sh\n"
             "echo demo-tool \"$@\"\n") ||
         !write_file(
+            ".tmp/pkg-manager-test/package-src/pkg/tools/slow",
+            "#!/bin/sh\n"
+            "sleep 5\n"
+            "echo slow-tool\n") ||
+        !write_file(
             ".tmp/pkg-manager-test/project/project.aiproj",
             "Program#p1 {\n"
             "  Project#proj1(name=\"demo-app\" entryFile=\"src/app.aos\" entryExport=\"start\")\n"
@@ -114,7 +119,7 @@ int main(void)
         return 2;
     }
 #ifndef _WIN32
-    if (!run_ok("chmod +x .tmp/pkg-manager-test/package-src/pkg/tools/demo")) {
+    if (!run_ok("chmod +x .tmp/pkg-manager-test/package-src/pkg/tools/demo .tmp/pkg-manager-test/package-src/pkg/tools/slow")) {
         return 3;
     }
 #endif
@@ -204,14 +209,33 @@ int main(void)
         tool_exit != 0) {
         return 14;
     }
+    error[0] = '\0';
+#ifdef _WIN32
+    _putenv("AILANG_PACKAGE_TOOL_TIMEOUT_SECONDS=1");
+#else
+    if (setenv("AILANG_PACKAGE_TOOL_TIMEOUT_SECONDS", "1", 1) != 0) {
+        return 15;
+    }
+#endif
+    if (ailang_package_manager_try_run_tool(
+            &options,
+            "slow",
+            0,
+            NULL,
+            &tool_exit,
+            error,
+            sizeof(error)) ||
+        strstr(error, "package tool timed out after 1 seconds: slow") == NULL) {
+        return 16;
+    }
 #endif
     if (!ailang_package_manager_remove(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "removed demo") == NULL) {
-        return 15;
+        return 17;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Include#dep_demo") != NULL) {
-        return 16;
+        return 18;
     }
     return 0;
 }

@@ -22,9 +22,11 @@
 #endif
 #else
 #include <dirent.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #define AILANG_PM_PATH_SEP '/'
 #ifndef PATH_MAX
@@ -34,6 +36,8 @@
 
 #define AILANG_PM_TEXT_LIMIT 262144U
 #define AILANG_PM_LOCK_LIMIT 131072U
+#define AILANG_PM_TOOL_TIMEOUT_SECONDS 30
+#define AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS 3600
 
 typedef struct AilangPackageRecord {
     char name[128];
@@ -49,6 +53,17 @@ static int pm_set_error(char* error, size_t error_len, const char* fmt, ...)
 {
     va_list ap;
     if (error != NULL && error_len > 0U) {
+        va_start(ap, fmt);
+        (void)vsnprintf(error, error_len, fmt, ap);
+        va_end(ap);
+    }
+    return 0;
+}
+
+static int pm_set_error_if_empty(char* error, size_t error_len, const char* fmt, ...)
+{
+    va_list ap;
+    if (error != NULL && error_len > 0U && error[0] == '\0') {
         va_start(ap, fmt);
         (void)vsnprintf(error, error_len, fmt, ap);
         va_end(ap);
@@ -436,13 +451,129 @@ static int pm_run(const char* command)
     return command != NULL && system(command) == 0;
 }
 
-static int pm_run_tool_command(const char* tool_path, int arg_count, char** args, int* exit_code)
+static unsigned int pm_tool_timeout_seconds(void)
+{
+    const char* env = getenv("AILANG_PACKAGE_TOOL_TIMEOUT_SECONDS");
+    char* end = NULL;
+    unsigned long value;
+    if (env == NULL || env[0] == '\0') {
+        return AILANG_PM_TOOL_TIMEOUT_SECONDS;
+    }
+    value = strtoul(env, &end, 10);
+    if (end == env || *end != '\0' || value == 0UL) {
+        return AILANG_PM_TOOL_TIMEOUT_SECONDS;
+    }
+    if (value > AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS) {
+        return AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS;
+    }
+    return (unsigned int)value;
+}
+
+static int pm_run_bounded_command(
+    const char* command,
+    unsigned int timeout_seconds,
+    int* exit_code,
+    int* timed_out)
+{
+    if (exit_code == NULL || timed_out == NULL || command == NULL || command[0] == '\0') {
+        return 0;
+    }
+    *timed_out = 0;
+#ifdef _WIN32
+    {
+        STARTUPINFOA startup;
+        PROCESS_INFORMATION process;
+        DWORD wait_result;
+        DWORD child_exit = 1U;
+        char command_line[PATH_MAX * 4];
+        if (strlen(command) >= sizeof(command_line)) {
+            return 0;
+        }
+        memset(&startup, 0, sizeof(startup));
+        memset(&process, 0, sizeof(process));
+        startup.cb = sizeof(startup);
+        (void)snprintf(command_line, sizeof(command_line), "%s", command);
+        if (!CreateProcessA(NULL, command_line, NULL, NULL, TRUE, 0, NULL, NULL, &startup, &process)) {
+            return 0;
+        }
+        wait_result = WaitForSingleObject(process.hProcess, timeout_seconds * 1000U);
+        if (wait_result == WAIT_TIMEOUT) {
+            *timed_out = 1;
+            TerminateProcess(process.hProcess, 124U);
+            WaitForSingleObject(process.hProcess, INFINITE);
+            *exit_code = 124;
+        } else if (wait_result == WAIT_OBJECT_0 && GetExitCodeProcess(process.hProcess, &child_exit)) {
+            *exit_code = (int)child_exit;
+        } else {
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            return 0;
+        }
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return 1;
+    }
+#else
+    {
+        pid_t pid;
+        time_t start;
+        int status = 0;
+        pid = fork();
+        if (pid < 0) {
+            return 0;
+        }
+        if (pid == 0) {
+            (void)setpgid(0, 0);
+            execl("/bin/sh", "sh", "-c", command, (char*)NULL);
+            _exit(127);
+        }
+        (void)setpgid(pid, pid);
+        start = time(NULL);
+        for (;;) {
+            pid_t waited = waitpid(pid, &status, WNOHANG);
+            if (waited == pid) {
+                break;
+            }
+            if (waited < 0) {
+                return 0;
+            }
+            if (start != (time_t)-1 && time(NULL) - start >= (time_t)timeout_seconds) {
+                *timed_out = 1;
+                (void)kill(-pid, SIGKILL);
+                (void)kill(pid, SIGKILL);
+                (void)waitpid(pid, &status, 0);
+                *exit_code = 124;
+                return 1;
+            }
+            sleep(1U);
+        }
+        if (WIFEXITED(status)) {
+            *exit_code = WEXITSTATUS(status);
+        } else if (WIFSIGNALED(status)) {
+            *exit_code = 128 + WTERMSIG(status);
+        } else {
+            *exit_code = 1;
+        }
+        return 1;
+    }
+#endif
+}
+
+static int pm_run_tool_command(
+    const char* tool_name,
+    const char* tool_path,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len)
 {
     char command[PATH_MAX * 4];
     char quoted[PATH_MAX * 2];
     size_t used = 0U;
     int i;
-    int rc;
+    int timed_out = 0;
+    unsigned int timeout_seconds = pm_tool_timeout_seconds();
     if (tool_path == NULL || exit_code == NULL || !pm_shell_quote(tool_path, quoted, sizeof(quoted))) {
         return 0;
     }
@@ -457,19 +588,17 @@ static int pm_run_tool_command(const char* tool_path, int arg_count, char** args
             return 0;
         }
     }
-    rc = system(command);
-    if (rc == -1) {
+    if (!pm_run_bounded_command(command, timeout_seconds, exit_code, &timed_out)) {
         return 0;
     }
-#ifndef _WIN32
-    if (WIFEXITED(rc)) {
-        *exit_code = WEXITSTATUS(rc);
-    } else {
-        *exit_code = 1;
+    if (timed_out) {
+        return pm_set_error(
+            error,
+            error_len,
+            "package tool timed out after %u seconds: %s",
+            timeout_seconds,
+            tool_name == NULL ? "<unknown>" : tool_name);
     }
-#else
-    *exit_code = rc;
-#endif
     return 1;
 }
 
@@ -1346,22 +1475,22 @@ int ailang_package_manager_try_run_tool(
         pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
         pm_join_path(global_tools, tool_name, tool_path, sizeof(tool_path)) &&
         pm_file_exists(tool_path)) {
-        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
-            pm_set_error(error, error_len, "failed to run global tool: %s", tool_name);
+        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+            pm_set_error_if_empty(error, error_len, "failed to run global tool: %s", tool_name);
     }
 #ifdef _WIN32
     if (pm_resolve_install_root(options, install_root, sizeof(install_root)) &&
         pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
         snprintf(tool_path, sizeof(tool_path), "%s%c%s.exe", global_tools, AILANG_PM_PATH_SEP, tool_name) < (int)sizeof(tool_path) &&
         pm_file_exists(tool_path)) {
-        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
-            pm_set_error(error, error_len, "failed to run global tool: %s", tool_name);
+        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+            pm_set_error_if_empty(error, error_len, "failed to run global tool: %s", tool_name);
     }
 #endif
     if (pm_find_project_dir(options, project_dir, sizeof(project_dir)) &&
         pm_find_local_tool(project_dir, tool_name, tool_path, sizeof(tool_path))) {
-        return pm_run_tool_command(tool_path, arg_count, args, exit_code) ? 1 :
-            pm_set_error(error, error_len, "failed to run local tool: %s", tool_name);
+        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+            pm_set_error_if_empty(error, error_len, "failed to run local tool: %s", tool_name);
     }
     return 0;
 }
