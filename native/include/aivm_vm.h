@@ -191,6 +191,7 @@ typedef struct {
     unsigned int storage_magic;
     const AivmProgram* program;
     AivmRuntimeProfile runtime_profile;
+    size_t syscall_elapsed_limit_ms;
     size_t instruction_pointer;
     AivmVmStatus status;
     AivmVmError error;
@@ -299,5 +300,6 @@ const char* aivm_runtime_profile_name(AivmRuntimeProfile profile);
 int aivm_runtime_profile_from_name(const char* name, AivmRuntimeProfile* out_profile);
 AivmRuntimeProfile aivm_runtime_default_profile(void);
 AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile);
+void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile);
 
 #endif

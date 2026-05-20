@@ -1857,7 +1857,7 @@ static int execute_bytes(
         sizeof(bindings) / sizeof(bindings[0]),
         process_argv,
         process_argv_count);
-    vm.runtime_profile = runtime_profile;
+    aivm_set_runtime_profile(&vm, runtime_profile);
     aivm_run(&vm);
     ok = vm.status != AIVM_VM_STATUS_ERROR;
 #if defined(AIVM_DEBUG_RUNTIME)

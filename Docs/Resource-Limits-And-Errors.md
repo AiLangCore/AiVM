@@ -104,7 +104,7 @@ Tracked host-resource limit records:
 | `worker_count` | 64 | `sys.worker.start` retained worker handles | Enforced before worker allocation. |
 | `ui_window_count` | 16 | `sys.ui.createWindow` active windows | Enforced before host window creation. |
 | `debug_artifact_bytes` | 67108864 | `aivm-debug` artifact output | Defined; enforcement pending. |
-| `syscall_elapsed_ms` | 30000 | syscall execution timeout budget | Defined; enforcement pending. |
+| `syscall_elapsed_ms` | 30000 | VM syscall dispatch calls | Enforced after host syscall dispatch returns. |
 
 Filesystem and network APIs should move toward this shape:
 
@@ -146,6 +146,12 @@ UI window creation enforces `ui_window_count` before calling the host UI
 backend. Active windows are released from the runtime budget when
 `sys.ui.closeWindow` succeeds. When the selected runtime profile's active window
 budget is exhausted, `sys.ui.createWindow` fails with `AIVMS007`.
+
+Syscall elapsed time is measured around the host syscall dispatch call. If the
+call returns after the selected runtime profile's `syscall_elapsed_ms` budget,
+the VM enters syscall error state with `AIVMS007`. This is a deterministic
+post-call failure signal; it does not currently interrupt a blocking host
+syscall while it is still running.
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app

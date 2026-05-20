@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "aivm_program.h"
 #include "aivm_vm.h"
@@ -44,6 +45,25 @@ static int host_ui_draw_rect(
         return AIVM_SYSCALL_ERR_INVALID;
     }
     *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int host_slow_noop(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    clock_t start;
+    (void)target;
+    (void)args;
+    if (arg_count != 0U || result == NULL) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    start = clock();
+    while (((double)(clock() - start) / (double)CLOCKS_PER_SEC) < 0.02) {
+    }
+    *result = aivm_value_int(0);
     return AIVM_SYSCALL_OK;
 }
 
@@ -1667,6 +1687,48 @@ static int test_call_sys_failure_sets_vm_error(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC001: Syscall target was not found. target=sys.missing") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_call_sys_elapsed_limit_sets_vm_error(void)
+{
+    static AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.time.nowUnixMs" }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.time.nowUnixMs", host_slow_noop }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
+    vm.syscall_elapsed_limit_ms = 1U;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_SYSCALL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS007: Syscall resource limit exceeded.") != NULL) != 0) {
+        return 1;
+    }
+    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.time.nowUnixMs") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -4256,6 +4318,9 @@ int main(void)
         return 1;
     }
     if (test_call_sys_failure_sets_vm_error() != 0) {
+        return 1;
+    }
+    if (test_call_sys_elapsed_limit_sets_vm_error() != 0) {
         return 1;
     }
     if (test_call_sys_string_contracts_success() != 0) {

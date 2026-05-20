@@ -2,9 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(AIVM_DEBUG_RUNTIME)
 #include <time.h>
-#endif
 #include "sys/aivm_syscall_contracts.h"
 
 #define AIVM_VM_STORAGE_MAGIC 0xA117A11DU
@@ -158,6 +156,17 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.syscall_elapsed_ms = AIVM_VM_SYSCALL_ELAPSED_MS;
     (void)profile;
     return limits;
+}
+
+void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile)
+{
+    AivmRuntimeProfileLimits limits;
+    if (vm == NULL) {
+        return;
+    }
+    vm->runtime_profile = profile;
+    limits = aivm_runtime_profile_limits(profile);
+    vm->syscall_elapsed_limit_ms = limits.syscall_elapsed_ms;
 }
 
 static void set_vm_local_out_of_range_error(
@@ -1523,11 +1532,9 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     AivmContractStatus contract_status = AIVM_CONTRACT_OK;
     int allow_positional_recovery = 0;
     size_t i;
-#if defined(AIVM_DEBUG_RUNTIME)
     clock_t syscall_start;
     clock_t syscall_end;
     double syscall_elapsed_seconds;
-#endif
 
     if (vm == NULL || out_result == NULL) {
         return 0;
@@ -1690,9 +1697,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         return call_debug_task_reclaim_stats(vm, out_result);
     }
 
-#if defined(AIVM_DEBUG_RUNTIME)
     syscall_start = clock();
-#endif
     syscall_status = aivm_syscall_dispatch_checked_with_contract(
         vm->syscall_bindings,
         vm->syscall_binding_count,
@@ -1701,11 +1706,23 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
         effective_arg_count,
         out_result,
         &contract_status);
-#if defined(AIVM_DEBUG_RUNTIME)
     syscall_end = clock();
     syscall_elapsed_seconds = (double)(syscall_end - syscall_start) / (double)CLOCKS_PER_SEC;
+#if defined(AIVM_DEBUG_RUNTIME)
     record_profile_syscall(vm, target_value.string_value, syscall_elapsed_seconds);
 #endif
+    if (vm->syscall_elapsed_limit_ms > 0U &&
+        syscall_elapsed_seconds * 1000.0 > (double)vm->syscall_elapsed_limit_ms) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "AIVMS007: Syscall resource limit exceeded. target=%.72s elapsed_ms=%.3f limit_ms=%llu",
+            target_value.string_value,
+            syscall_elapsed_seconds * 1000.0,
+            (unsigned long long)vm->syscall_elapsed_limit_ms);
+        set_vm_error(vm, AIVM_VM_ERR_SYSCALL, vm->error_detail_storage);
+        return 0;
+    }
     if (syscall_status != AIVM_SYSCALL_OK) {
         if (syscall_status == AIVM_SYSCALL_ERR_INVALID) {
             (void)snprintf(
@@ -3371,7 +3388,7 @@ void aivm_init(AivmVm* vm, const AivmProgram* program)
     prepare_vm_for_init(vm);
 
     vm->program = program;
-    vm->runtime_profile = aivm_runtime_default_profile();
+    aivm_set_runtime_profile(vm, aivm_runtime_default_profile());
     vm->syscall_bindings = NULL;
     vm->syscall_binding_count = 0U;
     vm->process_argv = NULL;
@@ -3402,7 +3419,7 @@ void aivm_init_with_syscalls_and_argv(
     prepare_vm_for_init(vm);
 
     vm->program = program;
-    vm->runtime_profile = aivm_runtime_default_profile();
+    aivm_set_runtime_profile(vm, aivm_runtime_default_profile());
     vm->syscall_bindings = bindings;
     vm->syscall_binding_count = binding_count;
     vm->process_argv = process_argv;
