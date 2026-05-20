@@ -40,7 +40,8 @@ first production-grade runtime.
   - [x] Enforce `worker_count` before worker handle allocation.
   - [x] Enforce `ui_window_count` before host window creation.
   - [x] Enforce `syscall_elapsed_ms` after host syscall dispatch returns.
-  - [ ] Add debug artifact limit enforcement.
+  - [x] Enforce `debug_artifact_bytes` across published `aivm-debug`
+    artifact bundles.
 - [x] Beta: document that OS users, containers, app sandboxes, and deployment
   environments are the production security boundary.
 
@@ -177,9 +178,10 @@ These are the immediate hardening tasks before beta:
   `sys.process.spawn` enforces the process-count limit before host child
   process creation, `sys.worker.start` enforces the worker-count limit before
   worker handle allocation, `sys.ui.createWindow` enforces the UI-window limit
-  before host window creation, and VM syscall dispatch enforces elapsed-time
-  limits after host dispatch returns. Remaining work is debug artifact behavior
-  and any cumulative network byte accounting required by beta profiles.
+  before host window creation, VM syscall dispatch enforces elapsed-time limits
+  after host dispatch returns, and `aivm-debug` enforces artifact byte budgets
+  before publishing artifact files. Remaining work is any cumulative network
+  byte accounting required by beta profiles.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

@@ -944,6 +944,106 @@ static void write_empty_debug_file(const char* artifact_dir, const char* file_na
     }
 }
 
+typedef struct DebugArtifactBudget
+{
+    size_t limit_bytes;
+    size_t used_bytes;
+    int exceeded;
+} DebugArtifactBudget;
+
+typedef struct DebugArtifactFile
+{
+    FILE* file;
+    DebugArtifactBudget* budget;
+    char path[PATH_MAX];
+    char temp_path[PATH_MAX];
+} DebugArtifactFile;
+
+static size_t debug_artifact_file_size(const char* path)
+{
+    struct stat info;
+    if (path == NULL || stat(path, &info) != 0 || info.st_size < 0) {
+        return 0U;
+    }
+    return (size_t)info.st_size;
+}
+
+static void debug_artifact_budget_init(DebugArtifactBudget* budget, size_t limit_bytes)
+{
+    if (budget == NULL) {
+        return;
+    }
+    budget->limit_bytes = limit_bytes;
+    budget->used_bytes = 0U;
+    budget->exceeded = 0;
+}
+
+static void debug_artifact_budget_count_existing(DebugArtifactBudget* budget, const char* artifact_dir, const char* file_name)
+{
+    char path[PATH_MAX];
+    size_t size;
+    if (budget == NULL || artifact_dir == NULL || file_name == NULL ||
+        !join_path(artifact_dir, file_name, path, sizeof(path))) {
+        return;
+    }
+    size = debug_artifact_file_size(path);
+    if (budget->used_bytes > (size_t)-1 - size) {
+        budget->used_bytes = (size_t)-1;
+        budget->exceeded = 1;
+        return;
+    }
+    budget->used_bytes += size;
+    if (budget->limit_bytes > 0U && budget->used_bytes > budget->limit_bytes) {
+        budget->exceeded = 1;
+    }
+}
+
+static FILE* debug_artifact_open(DebugArtifactBudget* budget, const char* artifact_dir, const char* file_name, DebugArtifactFile* artifact)
+{
+    int written;
+    if (budget == NULL || artifact_dir == NULL || file_name == NULL || artifact == NULL || budget->exceeded) {
+        return NULL;
+    }
+    memset(artifact, 0, sizeof(*artifact));
+    artifact->budget = budget;
+    if (!join_path(artifact_dir, file_name, artifact->path, sizeof(artifact->path))) {
+        return NULL;
+    }
+    written = snprintf(artifact->temp_path, sizeof(artifact->temp_path), "%s.tmp", artifact->path);
+    if (written < 0 || (size_t)written >= sizeof(artifact->temp_path)) {
+        return NULL;
+    }
+    artifact->file = fopen(artifact->temp_path, "wb");
+    return artifact->file;
+}
+
+static void debug_artifact_close(DebugArtifactFile* artifact)
+{
+    size_t size;
+    DebugArtifactBudget* budget;
+    if (artifact == NULL || artifact->file == NULL || artifact->budget == NULL) {
+        return;
+    }
+    fclose(artifact->file);
+    artifact->file = NULL;
+    budget = artifact->budget;
+    size = debug_artifact_file_size(artifact->temp_path);
+    if (budget->limit_bytes > 0U &&
+        (budget->used_bytes > budget->limit_bytes ||
+         size > budget->limit_bytes - budget->used_bytes)) {
+        remove(artifact->temp_path);
+        budget->exceeded = 1;
+        return;
+    }
+    remove(artifact->path);
+    if (rename(artifact->temp_path, artifact->path) != 0) {
+        remove(artifact->temp_path);
+        budget->exceeded = 1;
+        return;
+    }
+    budget->used_bytes += size;
+}
+
 static size_t debug_current_pc(const AivmProgram* program, const AivmVm* vm)
 {
     if (vm == NULL) {
@@ -1022,6 +1122,8 @@ static void write_debug_artifacts(
     char stack1[96];
     char local0[96];
     char local1[96];
+    DebugArtifactBudget budget;
+    DebugArtifactFile artifact;
     AivmRuntimeProfile runtime_profile = vm == NULL ? aivm_runtime_default_profile() : vm->runtime_profile;
     AivmRuntimeProfileLimits profile_limits = aivm_runtime_profile_limits(runtime_profile);
 
@@ -1034,8 +1136,15 @@ static void write_debug_artifacts(
     }
 
     write_empty_debug_file(artifact_dir, "stdout.txt");
+    if (g_debug_stdout_capture != NULL) {
+        fflush(g_debug_stdout_capture);
+    }
+    debug_artifact_budget_init(&budget, profile_limits.debug_artifact_bytes);
+    debug_artifact_budget_count_existing(&budget, artifact_dir, "stdout.txt");
+    debug_artifact_budget_count_existing(&budget, artifact_dir, "stderr.txt");
+
     if (join_path(artifact_dir, "stderr.txt", path, sizeof(path))) {
-        file = fopen(path, "ab");
+        file = debug_artifact_open(&budget, artifact_dir, "stderr.txt", &artifact);
         if (file != NULL) {
             if (!ok && vm != NULL) {
                 fprintf(
@@ -1048,12 +1157,12 @@ static void write_debug_artifacts(
                 }
                 fprintf(file, "\n");
             }
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "config.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "config.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_config_v1\"\n");
             fprintf(file, "runtime = \"aivm-debug\"\n");
@@ -1064,12 +1173,12 @@ static void write_debug_artifacts(
             fprintf(file, "program = ");
             write_toml_string(file, program_path);
             fprintf(file, "\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "diagnostics.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "diagnostics.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_diagnostics_v1\"\n");
             fprintf(file, "runtime_profile = ");
@@ -1091,15 +1200,15 @@ static void write_debug_artifacts(
             fprintf(file, "detail = ");
             write_toml_string(file, vm == NULL ? "" : aivm_vm_error_detail(vm));
             fprintf(file, "\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "stack_trace.toml", &artifact);
         if (file != NULL) {
             write_debug_stack_trace(file, program, vm);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
@@ -1121,7 +1230,7 @@ static void write_debug_artifacts(
     }
 
     if (join_path(artifact_dir, "vm_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "vm_trace.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_vm_trace_v1\"\n");
             fprintf(file, "last = { pc = %llu, opcode = ",
@@ -1140,12 +1249,12 @@ static void write_debug_artifacts(
             fprintf(file, ", local1 = ");
             write_toml_string(file, local1);
             fprintf(file, " }\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "memory.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_memory_v1\"\n");
             fprintf(file, "stack_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->stack_count));
@@ -1176,12 +1285,12 @@ static void write_debug_artifacts(
                 (unsigned long long)profile_limits.ui_window_count,
                 (unsigned long long)profile_limits.debug_artifact_bytes,
                 (unsigned long long)profile_limits.syscall_elapsed_ms);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "profile.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "profile.toml", &artifact);
         if (file != NULL) {
             size_t opcode_index;
             size_t syscall_index;
@@ -1223,12 +1332,12 @@ static void write_debug_artifacts(
             }
             fprintf(file, "]\n");
             fprintf(file, "note = \"Profiler timings use the host C clock and are diagnostic only.\"\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "syscall_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "syscall_trace.toml", &artifact);
         if (file != NULL) {
             size_t syscall_index;
             fprintf(file, "format = \"aivm_debug_syscall_trace_v1\"\n");
@@ -1247,16 +1356,16 @@ static void write_debug_artifacts(
                 }
             }
             fprintf(file, "]\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "suggestions.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "suggestions.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_suggestions_v1\"\n");
             fprintf(file, "next = [\"aivm-debug explain %s\", \"aivm-debug inspect stack %s\"]\n", artifact_dir, artifact_dir);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 }
@@ -1269,6 +1378,8 @@ static void write_debug_load_failure_artifacts(
 {
     char path[PATH_MAX];
     FILE* file;
+    DebugArtifactBudget budget;
+    DebugArtifactFile artifact;
     AivmRuntimeProfileLimits profile_limits = aivm_runtime_profile_limits(runtime_profile);
 
     if (artifact_dir == NULL || artifact_dir[0] == '\0') {
@@ -1280,18 +1391,25 @@ static void write_debug_load_failure_artifacts(
     }
 
     write_empty_debug_file(artifact_dir, "stdout.txt");
+    if (g_debug_stdout_capture != NULL) {
+        fflush(g_debug_stdout_capture);
+    }
+    debug_artifact_budget_init(&budget, profile_limits.debug_artifact_bytes);
+    debug_artifact_budget_count_existing(&budget, artifact_dir, "stdout.txt");
+    debug_artifact_budget_count_existing(&budget, artifact_dir, "stderr.txt");
+
     if (join_path(artifact_dir, "stderr.txt", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "stderr.txt", &artifact);
         if (file != NULL) {
             fprintf(file, "aivm: load failed: %s at byte %zu\n",
                 aivm_program_status_message(load_result.status),
                 load_result.error_offset);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "config.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "config.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_config_v1\"\n");
             fprintf(file, "runtime = \"aivm-debug\"\n");
@@ -1302,12 +1420,12 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "program = ");
             write_toml_string(file, program_path);
             fprintf(file, "\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "diagnostics.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "diagnostics.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_diagnostics_v1\"\n");
             fprintf(file, "runtime_profile = ");
@@ -1331,34 +1449,34 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "detail = ");
             write_toml_string(file, aivm_program_status_message(load_result.status));
             fprintf(file, "\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "stack_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "stack_trace.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_stack_trace_v1\"\n");
             fprintf(file, "current_pc = 0\n");
             fprintf(file, "current_opcode = \"LOAD_FAILED\"\n");
             fprintf(file, "frames = []\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "vm_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "vm_trace.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_vm_trace_v1\"\n");
             fprintf(file, "last = { pc = 0, opcode = \"LOAD_FAILED\" }\n");
             fprintf(file, "stack = { count = 0, top0 = \"\", top1 = \"\" }\n");
             fprintf(file, "locals = { count = 0, local0 = \"\", local1 = \"\" }\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "memory.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "memory.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_memory_v1\"\n");
             fprintf(file, "stack_count = 0\n");
@@ -1389,12 +1507,12 @@ static void write_debug_load_failure_artifacts(
                 (unsigned long long)profile_limits.ui_window_count,
                 (unsigned long long)profile_limits.debug_artifact_bytes,
                 (unsigned long long)profile_limits.syscall_elapsed_ms);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "profile.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "profile.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_profile_v1\"\n");
             fprintf(file, "status = \"load_failed\"\n");
@@ -1405,27 +1523,27 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "syscall_elapsed_seconds = 0.000000000\n");
             fprintf(file, "syscall_counts = []\n");
             fprintf(file, "note = \"Program load failed before VM execution.\"\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "syscall_trace.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "syscall_trace.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_syscall_trace_v1\"\n");
             fprintf(file, "syscall_count = 0\n");
             fprintf(file, "syscall_elapsed_seconds = 0.000000000\n");
             fprintf(file, "syscalls = []\n");
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 
     if (join_path(artifact_dir, "suggestions.toml", path, sizeof(path))) {
-        file = fopen(path, "wb");
+        file = debug_artifact_open(&budget, artifact_dir, "suggestions.toml", &artifact);
         if (file != NULL) {
             fprintf(file, "format = \"aivm_debug_suggestions_v1\"\n");
             fprintf(file, "next = [\"aivm-debug explain %s\", \"verify the input is a valid AiBC v2 file\"]\n", artifact_dir);
-            fclose(file);
+            debug_artifact_close(&artifact);
         }
     }
 }
