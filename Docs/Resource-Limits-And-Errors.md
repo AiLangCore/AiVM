@@ -89,14 +89,16 @@ messages, worker handoff, or blob storage. Raising a whole-file, whole-response,
 or whole-artifact limit is not the default solution.
 
 The current whole-file filesystem calls are still present, so they enforce
-profile limits immediately. The production direction is to add handle/chunk
-filesystem primitives so large files can be processed in bounded chunks.
+profile limits immediately. Read-side handle/chunk filesystem primitives are
+available for large files. The remaining filesystem direction is to add
+write-side handle/chunk primitives so large outputs can also be processed in
+bounded chunks.
 
 Tracked host-resource limit records:
 
 | Limit record | Current value | Applies to | Beta status |
 | --- | ---: | --- | --- |
-| `file_read_bytes` | 16777216 | Current `sys.fs.file.read`; future chunk reads | Enforced for whole-file read. |
+| `file_read_bytes` | 16777216 | Current `sys.fs.file.read`; `sys.fs.file.readChunk` | Enforced for whole-file read and read chunks. |
 | `file_write_bytes` | 16777216 | Current `sys.fs.file.write`; future chunk writes | Enforced for whole-file write. |
 | `network_read_bytes` | 1048576 | `sys.net.*` read paths | Defined; chunked enforcement pending. |
 | `network_write_bytes` | 1048576 | `sys.net.*` write paths | Defined; chunked enforcement pending. |
@@ -116,6 +118,14 @@ close/release handle
 
 Limits then apply to maximum chunk size, maximum handles, total accounted bytes
 where required by the selected profile, and deterministic failure behavior.
+
+Current read-side filesystem primitives:
+
+| Target | Behavior |
+| --- | --- |
+| `sys.fs.file.openRead(path)` | Opens a host file for bounded chunk reads and returns a positive handle, or `-1` when unavailable. |
+| `sys.fs.file.readChunk(handle, maxBytes)` | Reads up to `maxBytes` bytes and returns an empty byte array for invalid handles or EOF. Requests above `file_read_bytes` fail with `AIVMS007`. |
+| `sys.fs.file.close(handle)` | Closes a file handle and returns whether a live handle was closed. |
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app

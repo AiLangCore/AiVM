@@ -136,6 +136,17 @@ static int native_syscall_fs_dir_create(
 static unsigned char* g_native_file_bytes_scratch = NULL;
 static size_t g_native_file_bytes_scratch_capacity = 0U;
 
+enum {
+    NATIVE_FS_FILE_HANDLE_CAPACITY = 32
+};
+
+typedef struct {
+    FILE* file;
+    int in_use;
+} NativeFileHandle;
+
+static NativeFileHandle g_native_file_handles[NATIVE_FS_FILE_HANDLE_CAPACITY];
+
 #ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES
 static size_t native_host_resource_limit(size_t profile_value)
 {
@@ -171,6 +182,65 @@ static int native_file_size_bytes(const char* path, size_t* out_size)
         return 0;
     }
     *out_size = (size_t)st.st_size;
+    return 1;
+}
+
+static void native_fs_file_handles_reset(void)
+{
+    size_t index;
+    for (index = 0U; index < NATIVE_FS_FILE_HANDLE_CAPACITY; index += 1U) {
+        if (g_native_file_handles[index].file != NULL) {
+            fclose(g_native_file_handles[index].file);
+        }
+        g_native_file_handles[index].file = NULL;
+        g_native_file_handles[index].in_use = 0;
+    }
+}
+
+static int native_fs_file_handle_alloc(FILE* file)
+{
+    size_t index;
+    if (file == NULL) {
+        return -1;
+    }
+    for (index = 0U; index < NATIVE_FS_FILE_HANDLE_CAPACITY; index += 1U) {
+        if (!g_native_file_handles[index].in_use) {
+            g_native_file_handles[index].file = file;
+            g_native_file_handles[index].in_use = 1;
+            return (int)(index + 1U);
+        }
+    }
+    return -1;
+}
+
+static FILE* native_fs_file_handle_get(int handle)
+{
+    size_t index;
+    if (handle <= 0) {
+        return NULL;
+    }
+    index = (size_t)(handle - 1);
+    if (index >= NATIVE_FS_FILE_HANDLE_CAPACITY || !g_native_file_handles[index].in_use) {
+        return NULL;
+    }
+    return g_native_file_handles[index].file;
+}
+
+static int native_fs_file_handle_close(int handle)
+{
+    size_t index;
+    if (handle <= 0) {
+        return 0;
+    }
+    index = (size_t)(handle - 1);
+    if (index >= NATIVE_FS_FILE_HANDLE_CAPACITY || !g_native_file_handles[index].in_use) {
+        return 0;
+    }
+    if (g_native_file_handles[index].file != NULL) {
+        fclose(g_native_file_handles[index].file);
+    }
+    g_native_file_handles[index].file = NULL;
+    g_native_file_handles[index].in_use = 0;
     return 1;
 }
 
@@ -236,6 +306,99 @@ static int native_syscall_fs_file_read(
     }
     free(bytes);
     *result = aivm_value_bytes(g_native_file_bytes_scratch, byte_count);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_fs_file_open_read(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    FILE* fp;
+    int handle;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    fp = fopen(args[0].string_value, "rb");
+    if (fp == NULL) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_OK;
+    }
+    handle = native_fs_file_handle_alloc(fp);
+    if (handle < 0) {
+        fclose(fp);
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_OK;
+    }
+    *result = aivm_value_int(handle);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_fs_file_read_chunk(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    FILE* fp;
+    size_t requested;
+    size_t read_count;
+    AivmRuntimeProfileLimits limits;
+    size_t limit;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (args == NULL || arg_count != 2U || args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (args[1].int_value < 0) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    requested = (size_t)args[1].int_value;
+    limits = native_active_runtime_limits();
+    limit = native_host_resource_limit(limits.file_read_bytes);
+    if (requested > limit) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
+    fp = native_fs_file_handle_get((int)args[0].int_value);
+    if (fp == NULL) {
+        *result = aivm_value_bytes(NULL, 0U);
+        return AIVM_SYSCALL_OK;
+    }
+    if (!native_ensure_file_bytes_scratch(requested)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    read_count = requested == 0U ? 0U : fread(g_native_file_bytes_scratch, 1U, requested, fp);
+    *result = aivm_value_bytes(g_native_file_bytes_scratch, read_count);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_fs_file_close(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    *result = aivm_value_bool(native_fs_file_handle_close((int)args[0].int_value) ? 1 : 0);
     return AIVM_SYSCALL_OK;
 }
 

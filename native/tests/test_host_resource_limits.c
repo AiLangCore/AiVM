@@ -36,9 +36,11 @@ int main(void)
     const unsigned char small_bytes[] = { 'o', 'k' };
     const unsigned char large_bytes[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8' };
     AivmValue args[2];
+    AivmValue one_arg[1];
     AivmValue result;
     AivmSyscallStatus status;
     AivmRuntimeProfileLimits limits;
+    int64_t handle;
 
     remove("aivm-host-limit-small.bin");
     remove("aivm-host-limit-large.bin");
@@ -73,6 +75,34 @@ int main(void)
     status = native_syscall_fs_file_write("sys.fs.file.write", args, 2U, &result);
     CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
     CHECK(strcmp(aivm_syscall_status_message(status), "Syscall resource limit exceeded.") == 0);
+
+    args[0] = aivm_value_string("aivm-host-limit-large.bin");
+    status = native_syscall_fs_file_open_read("sys.fs.file.openRead", args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value > 0);
+    handle = result.int_value;
+
+    args[0] = aivm_value_int(handle);
+    args[1] = aivm_value_int(4);
+    status = native_syscall_fs_file_read_chunk("sys.fs.file.readChunk", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BYTES);
+    CHECK(result.bytes_value.length == 4U);
+    CHECK(memcmp(result.bytes_value.data, "0123", 4U) == 0);
+
+    args[1] = aivm_value_int(9);
+    status = native_syscall_fs_file_read_chunk("sys.fs.file.readChunk", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
+
+    one_arg[0] = aivm_value_int(handle);
+    status = native_syscall_fs_file_close("sys.fs.file.close", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 1);
+
+    status = native_syscall_fs_file_close("sys.fs.file.close", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
 
     remove("aivm-host-limit-small.bin");
     remove("aivm-host-limit-large.bin");

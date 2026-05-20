@@ -30,8 +30,10 @@ first production-grade runtime.
   - [x] Define named host-resource limit records in runtime profiles.
   - [x] Enforce `file_read_bytes` and `file_write_bytes` on the current
     whole-file filesystem syscalls.
-  - [ ] Design and implement handle/chunk filesystem primitives so large files
-    stream through bounded chunks instead of raising whole-file limits.
+  - [x] Design and implement read-side handle/chunk filesystem primitives so
+    large files stream through bounded chunks instead of raising whole-file
+    limits.
+  - [ ] Design and implement write-side handle/chunk filesystem primitives.
   - [ ] Design and implement handle/chunk network primitives with bounded
     read/write chunks and total accounting.
   - [ ] Add process, worker, UI window, debug artifact, and syscall elapsed
@@ -167,9 +169,9 @@ These are the immediate hardening tasks before beta:
   are wired; remaining work is any non-default tooling limits.
 - Resource limits: beta documentation exists in
   `Docs/Resource-Limits-And-Errors.md`; current whole-file filesystem
-  read/write syscalls enforce profile limits. Remaining work is to replace
-  large all-at-once APIs with handle/chunk primitives, then enforce network,
-  process, worker, UI, debug artifact, and syscall timeout behavior.
+  read/write syscalls enforce profile limits, and read-side file handle/chunk
+  primitives are available. Remaining work is write-side chunked files,
+  network, process, worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

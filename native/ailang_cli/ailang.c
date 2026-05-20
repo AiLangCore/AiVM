@@ -4436,7 +4436,7 @@ static int run_native_compiled_program(
     size_t process_argv_count,
     const NativeDebugOptions* debug_options)
 {
-    AivmSyscallBinding bindings[107];
+    AivmSyscallBinding bindings[110];
     size_t binding_count;
     static AivmVm vm;
     int ok;
@@ -4488,6 +4488,7 @@ static int run_native_compiled_program(
     native_ui_runtime_reset_handles();
     native_host_ui_reset();
     native_net_reset();
+    native_fs_file_handles_reset();
 
     bindings[0].target = "sys.stdout.writeLine";
     bindings[0].handler = native_syscall_stdout_write_line;
@@ -4696,7 +4697,13 @@ static int run_native_compiled_program(
     bindings[101].handler = native_syscall_image_decode_to_rgba_base64;
     bindings[102].target = "sys.bytes.fromUtf8String";
     bindings[102].handler = native_syscall_bytes_from_utf8_string;
-    binding_count = 103U;
+    bindings[103].target = "sys.fs.file.openRead";
+    bindings[103].handler = native_syscall_fs_file_open_read;
+    bindings[104].target = "sys.fs.file.readChunk";
+    bindings[104].handler = native_syscall_fs_file_read_chunk;
+    bindings[105].target = "sys.fs.file.close";
+    bindings[105].handler = native_syscall_fs_file_close;
+    binding_count = 106U;
     if (debug_options != NULL) {
         bindings[binding_count].target = "sys.debug.mode";
         bindings[binding_count].handler = native_syscall_debug_mode;
@@ -4734,6 +4741,7 @@ static int run_native_compiled_program(
             (unsigned long long)vm.instruction_pointer);
         (void)write_native_debug_bundle(debug_options, program, &vm, 0, 0, diagnostics_line);
         native_net_reset();
+        native_fs_file_handles_reset();
         native_host_ui_shutdown();
         native_scene_capture_reset();
         airun_log_capture_close();
@@ -4760,6 +4768,7 @@ static int run_native_compiled_program(
         (unsigned long long)vm.instruction_pointer);
     (void)write_native_debug_bundle(debug_options, program, &vm, exit_code, has_exit_code, diagnostics_line);
     native_net_reset();
+    native_fs_file_handles_reset();
     native_host_ui_shutdown();
     native_scene_capture_reset();
     airun_log_capture_close();
