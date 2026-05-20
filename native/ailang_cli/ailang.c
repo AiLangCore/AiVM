@@ -2264,6 +2264,7 @@ static void print_usage(void)
         "  package <list|restore> [project-dir]\n"
         "  package add <name[@version]> [project-dir]\n"
         "  package remove <name> [project-dir]\n"
+        "  test [project-dir] [--no-cache]\n"
         "  clean [program(.aibc1|.aos|project-dir|project.aiproj)]\n"
         "  repl\n"
         "  bench [--iterations <n>] [--human]\n"
@@ -9148,6 +9149,195 @@ static AIRUN_MAYBE_UNUSED int handle_build(int argc, char** argv)
     return 2;
 }
 
+static int compare_test_path_entries(const void* left, const void* right)
+{
+    const char* left_text = (const char*)left;
+    const char* right_text = (const char*)right;
+    return strcmp(left_text, right_text);
+}
+
+static int collect_test_aos_files(const char* dir_path, char paths[][PATH_MAX], size_t* count, size_t capacity)
+{
+    if (dir_path == NULL || paths == NULL || count == NULL) {
+        return 0;
+    }
+    if (!directory_exists(dir_path)) {
+        return 1;
+    }
+#ifdef _WIN32
+    {
+        char pattern[PATH_MAX];
+        WIN32_FIND_DATAA data;
+        HANDLE h;
+        if (!join_path(dir_path, "*.aos", pattern, sizeof(pattern))) {
+            return 0;
+        }
+        h = FindFirstFileA(pattern, &data);
+        if (h == INVALID_HANDLE_VALUE) {
+            return 1;
+        }
+        do {
+            if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+                if (*count >= capacity ||
+                    !join_path(dir_path, data.cFileName, paths[*count], PATH_MAX)) {
+                    FindClose(h);
+                    return 0;
+                }
+                *count += 1U;
+            }
+        } while (FindNextFileA(h, &data));
+        FindClose(h);
+    }
+#else
+    {
+        DIR* dir = opendir(dir_path);
+        struct dirent* ent;
+        if (dir == NULL) {
+            return 1;
+        }
+        while ((ent = readdir(dir)) != NULL) {
+            char child[PATH_MAX];
+            if (!ends_with(ent->d_name, ".aos")) {
+                continue;
+            }
+            if (*count >= capacity ||
+                !join_path(dir_path, ent->d_name, child, sizeof(child)) ||
+                !file_exists(child) ||
+                snprintf(paths[*count], PATH_MAX, "%s", child) >= PATH_MAX) {
+                closedir(dir);
+                return 0;
+            }
+            *count += 1U;
+        }
+        closedir(dir);
+    }
+#endif
+    return 1;
+}
+
+static int append_project_tests_from_dir(
+    const char* dir_path,
+    char paths[][PATH_MAX],
+    size_t* count,
+    size_t capacity)
+{
+    char project_manifest[PATH_MAX];
+    if (dir_path == NULL || paths == NULL || count == NULL) {
+        return 0;
+    }
+    if (!directory_exists(dir_path)) {
+        return 1;
+    }
+    if (!join_path(dir_path, "project.aiproj", project_manifest, sizeof(project_manifest))) {
+        return 0;
+    }
+    if (file_exists(project_manifest)) {
+        if (*count >= capacity || snprintf(paths[*count], PATH_MAX, "%s", project_manifest) >= PATH_MAX) {
+            return 0;
+        }
+        *count += 1U;
+        return 1;
+    }
+    return collect_test_aos_files(dir_path, paths, count, capacity);
+}
+
+static int run_one_project_test(const char* test_path, const char* out_root, size_t index, int use_cache)
+{
+    char out_dir[PATH_MAX];
+    char app_path[PATH_MAX];
+    int build_rc;
+    int run_rc;
+    if (test_path == NULL || out_root == NULL) {
+        return 2;
+    }
+    if (snprintf(out_dir, sizeof(out_dir), "%s%c%04llu", out_root, AIVM_PATH_SEP, (unsigned long long)index) >= (int)sizeof(out_dir) ||
+        !ensure_directory_recursive(out_dir)) {
+        fprintf(stderr,
+            "Err#err1(code=AILANG022 message=\"Failed to create test output directory.\" nodeId=test)\n");
+        return 2;
+    }
+    build_rc = build_input_to_aibc1(test_path, out_dir, app_path, sizeof(app_path), use_cache);
+    if (build_rc != 1) {
+        fprintf(stderr,
+            "Err#err1(code=AILANG022 message=\"Test build failed: %s\" nodeId=test)\n",
+            native_build_error());
+        return 2;
+    }
+    run_rc = run_native_aibc1(app_path, NULL, 0U, NULL);
+    if (run_rc != 0) {
+        fprintf(stderr,
+            "Err#err1(code=AILANG022 message=\"Test failed.\" nodeId=test)\n");
+        return run_rc;
+    }
+    return 0;
+}
+
+static AIRUN_MAYBE_UNUSED int handle_test(int argc, char** argv)
+{
+    const char* target = ".";
+    int target_set = 0;
+    int use_cache = 1;
+    int i;
+    char project_dir[PATH_MAX];
+    char lower_tests[PATH_MAX];
+    char upper_tests[PATH_MAX];
+    char toolchain_dir[PATH_MAX];
+    char out_root[PATH_MAX];
+    char test_paths[256][PATH_MAX];
+    size_t test_count = 0U;
+    size_t test_index;
+
+    for (i = 2; i < argc; i += 1) {
+        if (strcmp(argv[i], "--no-cache") == 0) {
+            use_cache = 0;
+            continue;
+        }
+        if (argv[i][0] == '-') {
+            fprintf(stderr,
+                "Err#err1(code=AILANG021 message=\"Unsupported test argument.\" nodeId=argv)\n");
+            return 2;
+        }
+        if (!target_set) {
+            target = argv[i];
+            target_set = 1;
+            continue;
+        }
+        fprintf(stderr,
+            "Err#err1(code=AILANG021 message=\"Unsupported test argument.\" nodeId=argv)\n");
+        return 2;
+    }
+
+    if (!resolve_project_dir_for_cache(target, project_dir, sizeof(project_dir)) ||
+        !join_path(project_dir, "tests", lower_tests, sizeof(lower_tests)) ||
+        !join_path(project_dir, "Tests", upper_tests, sizeof(upper_tests)) ||
+        !join_path(project_dir, ".toolchain", toolchain_dir, sizeof(toolchain_dir)) ||
+        !join_path(toolchain_dir, "test", out_root, sizeof(out_root)) ||
+        !ensure_directory_recursive(out_root)) {
+        fprintf(stderr,
+            "Err#err1(code=AILANG021 message=\"Failed to resolve project test paths.\" nodeId=test)\n");
+        return 2;
+    }
+
+    if (!append_project_tests_from_dir(lower_tests, test_paths, &test_count, sizeof(test_paths) / sizeof(test_paths[0])) ||
+        ((!directory_exists(lower_tests) || !directory_exists(upper_tests) || !same_file_path(lower_tests, upper_tests)) &&
+         !append_project_tests_from_dir(upper_tests, test_paths, &test_count, sizeof(test_paths) / sizeof(test_paths[0])))) {
+        fprintf(stderr,
+            "Err#err1(code=AILANG021 message=\"Failed to discover project tests.\" nodeId=test)\n");
+        return 2;
+    }
+
+    qsort(test_paths, test_count, sizeof(test_paths[0]), compare_test_path_entries);
+    for (test_index = 0U; test_index < test_count; test_index += 1U) {
+        int rc = run_one_project_test(test_paths[test_index], out_root, test_index + 1U, use_cache);
+        if (rc != 0) {
+            return rc;
+        }
+    }
+
+    printf("Ok#ok1(type=int value=%llu)\n", (unsigned long long)test_count);
+    return 0;
+}
+
 static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
 {
     const char* program_input = NULL;
@@ -9665,6 +9855,9 @@ int main(int argc, char** argv)
     }
     if (strcmp(argv[1], "bench") == 0) {
         return handle_bench(argc, argv);
+    }
+    if (strcmp(argv[1], "test") == 0) {
+        return handle_test(argc, argv);
     }
     if (strcmp(argv[1], "publish") == 0) {
         return handle_publish(argc, argv);
