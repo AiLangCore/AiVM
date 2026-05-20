@@ -39,7 +39,12 @@ fi
 
 missing_docs=0
 missing_tests=0
+missing_capability=0
 while read -r _id target; do
+  if ! grep -F "\"${target}\"" "${CONTRACTS_FILE}" | grep -q "AIVM_SYSCALL_CAPABILITY_"; then
+    echo "syscall check: ${target} is missing a syscall capability group" >&2
+    missing_capability=1
+  fi
   if ! grep -qF "\`${target}\`" "${DOCS_FILE}"; then
     echo "syscall check: ${target} is missing from Docs/Syscalls.md" >&2
     missing_docs=1
@@ -50,7 +55,6 @@ while read -r _id target; do
   fi
 done < "${CONTRACT_LIST}"
 
-if [ "${missing_docs}" -ne 0 ] || [ "${missing_tests}" -ne 0 ]; then
+if [ "${missing_capability}" -ne 0 ] || [ "${missing_docs}" -ne 0 ] || [ "${missing_tests}" -ne 0 ]; then
   exit 1
 fi
-

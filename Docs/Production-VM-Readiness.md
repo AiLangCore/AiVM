@@ -47,7 +47,7 @@ first production-grade runtime.
 
 Optional future sandboxing:
 
-- [ ] Add per-syscall capability groups to the contract metadata.
+- [x] Add per-syscall capability groups to the contract metadata.
 - [ ] Add a runtime capability policy object.
 - [ ] Add CLI flags for explicitly enabling or denying capability groups.
 

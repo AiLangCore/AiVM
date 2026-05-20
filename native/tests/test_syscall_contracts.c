@@ -714,6 +714,24 @@ int main(void)
     if (expect(aivm_syscall_contract_is_debug_target(NULL) == 0) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_capability("sys.debug.mode") == AIVM_SYSCALL_CAPABILITY_DEBUG) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_capability("sys.process.spawn") == AIVM_SYSCALL_CAPABILITY_PROCESS) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_capability("sys.fs.file.openRead") == AIVM_SYSCALL_CAPABILITY_FILESYSTEM) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_capability("sys.bytes.slice") == AIVM_SYSCALL_CAPABILITY_CORE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_capability("sys.unknown") == AIVM_SYSCALL_CAPABILITY_NONE) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(aivm_value_string(aivm_syscall_capability_name(AIVM_SYSCALL_CAPABILITY_DEBUG)), aivm_value_string("debug")) == 1) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_should_bind_in_production("sys.debug.mode") == 0) != 0) {
         return 1;
     }

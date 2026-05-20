@@ -13,6 +13,7 @@ A new `sys.*` target may only be added when all of these are true:
 - It cannot be implemented deterministically in AiLang or AiLang core
   libraries.
 - It has an explicit contract entry in `native/sys/aivm_syscall_contracts.c`.
+  The contract entry must include the syscall capability group.
 - It has contract tests in `native/tests/test_syscall_contracts.c`.
 - It is listed in this document with a host-boundary justification.
 - The change notes explain why it is a syscall instead of AiLang library code.
@@ -43,6 +44,32 @@ All `sys.debug.*` targets are debug/profile-only. They remain documented
 contracts because bytecode validation and debug tooling need stable target
 metadata, but production release hosts must not bind them by default.
 `aivm-debug` and debug command surfaces may bind them.
+
+### Capability Groups
+
+Each syscall contract has exactly one coarse capability group. The group is
+runtime metadata, not language semantics. It gives release builds, debug builds,
+future sandbox profiles, and agent tooling a single place to reason about the
+host boundary a syscall crosses.
+
+Current groups are:
+
+- `core`: temporary deterministic helpers that should move into AiLang core
+  libraries when self-hosting allows it.
+- `console`: host stdin/stdout/stderr.
+- `process`: host process state and child process execution.
+- `platform`: host platform/runtime identity.
+- `time`: host wall-clock, monotonic time, sleep, and timezone data.
+- `filesystem`: host filesystem access.
+- `crypto`: host entropy and temporary deterministic crypto helpers.
+- `network`: host TCP/UDP/network async primitives.
+- `ui`: host UI/window/rendering resources.
+- `worker`: mechanical worker execution resources.
+- `remote`: host remote bridge calls.
+- `host`: host-default handlers outside the VM.
+- `image`: host image decoding.
+- `debug`: debug/profiling/capture artifacts, bound only by `aivm-debug` and
+  debug command surfaces.
 
 ### Host-Boundary
 
@@ -199,11 +226,13 @@ Before the production VM is sponsorship-ready:
   artifact operations.
 - Separate debug-only syscalls from production `aivm`; bind them from
   `aivm-debug` where appropriate.
+- Use syscall capability groups as the policy metadata for future explicit
+  allow/deny controls.
 - Move deterministic library candidates into AiLang or document why a specific
   target must remain host-provided.
 
-Optional future sandboxing may add explicit capability groups and `--allow-*`
-or `--deny-*` flags, but that is not the current production baseline.
+Optional future sandboxing may add `--allow-*` or `--deny-*` flags, but that is
+not the current production baseline.
 
 ## Current Syscalls
 
