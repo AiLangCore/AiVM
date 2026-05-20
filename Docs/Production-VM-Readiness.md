@@ -21,10 +21,12 @@ first production-grade runtime.
   `aivm-debug`, then enforce that split in release builds.
 - [x] Distinguish unknown syscall, known-but-unbound syscall, invalid
   argument, timeout, resource-limit, and host-failure VM errors.
-- [ ] Beta: add named resource limit records for filesystem reads/writes,
+- [x] Document beta resource-limit records and error-code families in
+  `Docs/Resource-Limits-And-Errors.md`.
+- [ ] Beta: enforce named resource limit records for filesystem reads/writes,
   network reads/writes, process count, worker count, UI windows, debug
   artifacts, and syscall execution time.
-- [ ] Beta: document that OS users, containers, app sandboxes, and deployment
+- [x] Beta: document that OS users, containers, app sandboxes, and deployment
   environments are the production security boundary.
 
 Optional future sandboxing:
@@ -153,8 +155,9 @@ These are the immediate hardening tasks before beta:
 - Runtime profiles: profile names, diagnostic emission, and explicit
   `aivm-debug debug capture run --profile production|debug|tooling` selection
   are wired; remaining work is any non-default tooling limits.
-- Resource limits: define stable limit records for file, network, process,
-  worker, UI, debug artifact, and syscall timeout behavior.
+- Resource limits: beta documentation exists in
+  `Docs/Resource-Limits-And-Errors.md`; remaining work is enforcement for file,
+  network, process, worker, UI, debug artifact, and syscall timeout behavior.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

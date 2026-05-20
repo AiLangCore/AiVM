@@ -66,6 +66,8 @@ call into AiVM rather than expanding the production VM command surface.
 ## Specifications
 
 - `Docs/Syscalls.md` defines the syscall boundary and syscall addition rules.
+- `Docs/Resource-Limits-And-Errors.md` defines beta resource limits and
+  error-code families.
 - `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
 - `Docs/Production-VM-Readiness.md` tracks production hardening work.
 
