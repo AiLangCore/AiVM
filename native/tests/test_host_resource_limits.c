@@ -1,5 +1,6 @@
 #define AIRUN_ALLOW_INTERNAL_UI_FALLBACK 1
 #define AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES 8
+#define AIRUN_TEST_HOST_RESOURCE_LIMIT_WORKER_COUNT 2
 #define main airun_embedded_main_for_test
 #include "../ailang_cli/ailang.c"
 #undef main
@@ -53,6 +54,7 @@ int main(void)
     CHECK(limits.file_write_bytes == AIVM_VM_FILE_WRITE_BYTES);
     CHECK(limits.network_read_bytes == AIVM_VM_NETWORK_READ_BYTES);
     CHECK(limits.process_count == AIVM_VM_PROCESS_COUNT);
+    CHECK(limits.worker_count == AIVM_VM_WORKER_COUNT);
 
     CHECK(write_test_file("aivm-host-limit-small.bin", small_bytes, sizeof(small_bytes)));
     CHECK(write_test_file("aivm-host-limit-large.bin", large_bytes, sizeof(large_bytes)));
@@ -134,6 +136,20 @@ int main(void)
     CHECK(result.type == AIVM_VAL_BYTES);
     CHECK(result.bytes_value.length == 4U);
     CHECK(memcmp(result.bytes_value.data, "ABCD", 4U) == 0);
+
+    args[0] = aivm_value_string("sleep");
+    args[1] = aivm_value_string("1000");
+    status = native_syscall_worker_start("sys.worker.start", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value > 0);
+
+    status = native_syscall_worker_start("sys.worker.start", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value > 0);
+
+    status = native_syscall_worker_start("sys.worker.start", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
+    CHECK(strcmp(aivm_syscall_status_code(status), "AIVMS007") == 0);
 
     remove("aivm-host-limit-small.bin");
     remove("aivm-host-limit-large.bin");

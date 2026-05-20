@@ -37,8 +37,8 @@ first production-grade runtime.
   - [ ] Add total network byte accounting if a beta runtime profile requires a
     cumulative network budget.
   - [x] Enforce `process_count` before host child process creation.
-  - [ ] Add worker, UI window, debug artifact, and syscall elapsed limit
-    enforcement.
+  - [x] Enforce `worker_count` before worker handle allocation.
+  - [ ] Add UI window, debug artifact, and syscall elapsed limit enforcement.
 - [x] Beta: document that OS users, containers, app sandboxes, and deployment
   environments are the production security boundary.
 
@@ -173,9 +173,10 @@ These are the immediate hardening tasks before beta:
   read/write syscalls enforce profile limits, file handle/chunk primitives are
   available, and TCP/UDP network read/write paths enforce per-call byte limits.
   `sys.process.spawn` enforces the process-count limit before host child
-  process creation. Remaining work is worker, UI, debug artifact, syscall
-  timeout behavior, and any cumulative network byte accounting required by beta
-  profiles.
+  process creation, and `sys.worker.start` enforces the worker-count limit
+  before worker handle allocation. Remaining work is UI, debug artifact,
+  syscall timeout behavior, and any cumulative network byte accounting required
+  by beta profiles.
 - Parser retained nodes: use parser memory attribution to reduce temporary
   token/result nodes retained during compiler source parsing.
 - Parser/compiler scratch arenas: route parser/compiler internals through

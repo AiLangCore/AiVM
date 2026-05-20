@@ -33,6 +33,42 @@ static NativeWorkerState* native_worker_lookup(int64_t handle_value)
     return &g_native_workers[index];
 }
 
+static size_t native_worker_active_count(void)
+{
+    size_t index;
+    size_t count = 0U;
+    for (index = 0U; index < NATIVE_WORKER_CAPACITY; index += 1U) {
+        if (g_native_workers[index].used) {
+            count += 1U;
+        }
+    }
+    return count;
+}
+
+#ifdef AIRUN_TEST_HOST_RESOURCE_LIMIT_WORKER_COUNT
+static size_t native_worker_host_resource_limit(size_t profile_value)
+{
+    (void)profile_value;
+    return (size_t)AIRUN_TEST_HOST_RESOURCE_LIMIT_WORKER_COUNT;
+}
+#else
+static size_t native_worker_host_resource_limit(size_t profile_value)
+{
+    return profile_value;
+}
+#endif
+
+static size_t native_worker_active_runtime_limit(void)
+{
+    AivmRuntimeProfile profile = aivm_runtime_default_profile();
+    AivmRuntimeProfileLimits limits;
+    if (g_native_active_vm != NULL) {
+        profile = g_native_active_vm->runtime_profile;
+    }
+    limits = aivm_runtime_profile_limits(profile);
+    return native_worker_host_resource_limit(limits.worker_count);
+}
+
 static int64_t native_worker_allocate_slot(void)
 {
     size_t index;
@@ -99,6 +135,10 @@ static int native_syscall_worker_start(
         args[1].type != AIVM_VAL_STRING || args[1].string_value == NULL) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (native_worker_active_count() >= native_worker_active_runtime_limit()) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }
     handle = native_worker_allocate_slot();
     if (handle < 0) {

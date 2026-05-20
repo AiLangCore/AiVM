@@ -101,7 +101,7 @@ Tracked host-resource limit records:
 | `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as the maximum read request size per call. |
 | `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as the maximum write payload size per call. |
 | `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
-| `worker_count` | 64 | worker/task execution resources | Defined; enforcement pending. |
+| `worker_count` | 64 | `sys.worker.start` retained worker handles | Enforced before worker allocation. |
 | `ui_window_count` | 16 | host UI windows | Defined; enforcement pending. |
 | `debug_artifact_bytes` | 67108864 | `aivm-debug` artifact output | Defined; enforcement pending. |
 | `syscall_elapsed_ms` | 30000 | syscall execution timeout budget | Defined; enforcement pending. |
@@ -136,6 +136,11 @@ Process spawning enforces `process_count` before the host child process is
 created. When the selected runtime profile's live process budget is exhausted,
 `sys.process.spawn` fails with `AIVMS007`. Finished processes release their
 handle slot after exit is observed and buffered stdout/stderr has been drained.
+
+Worker start enforces `worker_count` before allocating a worker handle. Current
+worker handles are retained so callers can poll, read the result, read the
+error, or cancel; once the selected runtime profile's retained worker budget is
+exhausted, `sys.worker.start` fails with `AIVMS007`.
 
 Until these records are fully enforced, deployment security and resource
 containment come from the host operating system, user account, container, app
