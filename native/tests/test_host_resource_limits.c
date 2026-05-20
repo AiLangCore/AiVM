@@ -11,6 +11,7 @@
             remove("aivm-host-limit-small.bin"); \
             remove("aivm-host-limit-large.bin"); \
             remove("aivm-host-limit-write.bin"); \
+            remove("aivm-host-limit-chunk-write.bin"); \
             return 1; \
         } \
     } while (0)
@@ -45,6 +46,7 @@ int main(void)
     remove("aivm-host-limit-small.bin");
     remove("aivm-host-limit-large.bin");
     remove("aivm-host-limit-write.bin");
+    remove("aivm-host-limit-chunk-write.bin");
 
     limits = aivm_runtime_profile_limits(AIVM_RUNTIME_PROFILE_PRODUCTION);
     CHECK(limits.file_read_bytes == AIVM_VM_FILE_READ_BYTES);
@@ -104,8 +106,38 @@ int main(void)
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
 
+    args[0] = aivm_value_string("aivm-host-limit-chunk-write.bin");
+    status = native_syscall_fs_file_open_write("sys.fs.file.openWrite", args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT);
+    CHECK(result.int_value > 0);
+    handle = result.int_value;
+
+    args[0] = aivm_value_int(handle);
+    args[1] = aivm_value_bytes((const uint8_t*)"ABCD", 4U);
+    status = native_syscall_fs_file_write_chunk("sys.fs.file.writeChunk", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_INT && result.int_value == 4);
+
+    args[1] = aivm_value_bytes(large_bytes, sizeof(large_bytes));
+    status = native_syscall_fs_file_write_chunk("sys.fs.file.writeChunk", args, 2U, &result);
+    CHECK(status == AIVM_SYSCALL_ERR_RESOURCE_LIMIT);
+
+    one_arg[0] = aivm_value_int(handle);
+    status = native_syscall_fs_file_close("sys.fs.file.close", one_arg, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 1);
+
+    args[0] = aivm_value_string("aivm-host-limit-chunk-write.bin");
+    status = native_syscall_fs_file_read("sys.fs.file.read", args, 1U, &result);
+    CHECK(status == AIVM_SYSCALL_OK);
+    CHECK(result.type == AIVM_VAL_BYTES);
+    CHECK(result.bytes_value.length == 4U);
+    CHECK(memcmp(result.bytes_value.data, "ABCD", 4U) == 0);
+
     remove("aivm-host-limit-small.bin");
     remove("aivm-host-limit-large.bin");
     remove("aivm-host-limit-write.bin");
+    remove("aivm-host-limit-chunk-write.bin");
     return 0;
 }

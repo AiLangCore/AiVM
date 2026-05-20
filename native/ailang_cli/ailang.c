@@ -4436,7 +4436,7 @@ static int run_native_compiled_program(
     size_t process_argv_count,
     const NativeDebugOptions* debug_options)
 {
-    AivmSyscallBinding bindings[110];
+    AivmSyscallBinding bindings[112];
     size_t binding_count;
     static AivmVm vm;
     int ok;
@@ -4703,7 +4703,11 @@ static int run_native_compiled_program(
     bindings[104].handler = native_syscall_fs_file_read_chunk;
     bindings[105].target = "sys.fs.file.close";
     bindings[105].handler = native_syscall_fs_file_close;
-    binding_count = 106U;
+    bindings[106].target = "sys.fs.file.openWrite";
+    bindings[106].handler = native_syscall_fs_file_open_write;
+    bindings[107].target = "sys.fs.file.writeChunk";
+    bindings[107].handler = native_syscall_fs_file_write_chunk;
+    binding_count = 108U;
     if (debug_options != NULL) {
         bindings[binding_count].target = "sys.debug.mode";
         bindings[binding_count].handler = native_syscall_debug_mode;

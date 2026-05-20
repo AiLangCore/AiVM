@@ -18,6 +18,7 @@ int main(void)
     AivmValue int_arg[1];
     AivmValue fs_write_args[2];
     AivmValue fs_read_chunk_args[2];
+    AivmValue fs_write_chunk_args[2];
     AivmValue fs_dir_delete_args[2];
     AivmValue crypto_hmac_args[2];
     AivmValue net_int_string_args[2];
@@ -396,6 +397,26 @@ int main(void)
         return 1;
     }
     if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.fs.file.openWrite", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(127U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
+        return 1;
+    }
+    fs_write_chunk_args[0] = aivm_value_int(1);
+    fs_write_chunk_args[1] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
+    if (expect(aivm_syscall_contract_validate("sys.fs.file.writeChunk", fs_write_chunk_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(128U, fs_write_chunk_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_INT) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_validate("sys.crypto.base64Encode", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {

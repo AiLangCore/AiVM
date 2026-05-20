@@ -92,7 +92,9 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.fs.dir.delete` | `fs.write` | Mutates host filesystem state. |
 | `sys.fs.file.openRead` | `fs.read` | Opens a host file handle for bounded chunk reads. |
 | `sys.fs.file.readChunk` | `fs.read` | Reads bounded chunks from a host file handle. |
-| `sys.fs.file.close` | `fs.read` | Releases a host file handle. |
+| `sys.fs.file.openWrite` | `fs.write` | Opens a host file handle for bounded chunk writes. |
+| `sys.fs.file.writeChunk` | `fs.write` | Writes bounded chunks to a host file handle. |
+| `sys.fs.file.close` | `fs.read`/`fs.write` | Releases a host file handle. |
 | `sys.crypto.randomBytes` | `random` | Reads host entropy. |
 | `sys.net.tcp.connect` | `network` | Opens host network connections. |
 | `sys.net.tcp.listen` | `network` | Opens host network listeners. |
@@ -248,6 +250,8 @@ or `--deny-*` flags, but that is not the current production baseline.
 | 124 | `sys.fs.file.openRead` | 1 | `int` |
 | 125 | `sys.fs.file.readChunk` | 2 | `bytes` |
 | 126 | `sys.fs.file.close` | 1 | `bool` |
+| 127 | `sys.fs.file.openWrite` | 1 | `int` |
+| 128 | `sys.fs.file.writeChunk` | 2 | `int` |
 | 37 | `sys.crypto.base64Encode` | 1 | `string` |
 | 38 | `sys.crypto.base64Decode` | 1 | `string` |
 | 39 | `sys.crypto.sha1` | 1 | `string` |
