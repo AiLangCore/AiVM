@@ -21,6 +21,11 @@ export PATH="$HOME/.ailang/bin:$PATH"
 aivm --version
 ```
 
+Branch status: `develop` is the public default branch while the native C VM is
+being hardened for beta. Release tags and GitHub prereleases are the public
+artifact source; `main` is not the current integration branch during this beta
+cycle.
+
 The native C VM lives under:
 
 ```text
@@ -70,6 +75,8 @@ call into AiVM rather than expanding the production VM command surface.
   error-code families.
 - `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
 - `Docs/Production-VM-Readiness.md` tracks production hardening work.
+- [AiLangCore roadmap](https://ailang.codes/docs/roadmap.html) tracks the
+  Alpha -> Beta -> RC -> 1.0 direction across AiLang, AiVM, and AiVectra.
 
 ## Versioning
 
