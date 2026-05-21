@@ -85,6 +85,8 @@ Current audit:
   be imported beside `std.str` without flat-name collisions.
 - AiLang CLI/compiler runtime and parser profiling/selfhost scripts now use
   the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
+- AiLang CI now rejects new direct `sys.str.*` or `sys.bytes.*` usage outside
+  the active wrapper and syscall-level regression files.
 - Direct non-wrapper usage still exists in:
   - `AiLang/scripts/test-ailang-traced-syscalls.sh` while the explicit
     syscall tracing regression test exists
