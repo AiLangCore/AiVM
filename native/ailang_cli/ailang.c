@@ -7005,6 +7005,35 @@ static int simple_compile_expr_ext(
         }
         return 1;
     }
+    if (strcmp(node->kind, "StringUtf8ByteCount") == 0) {
+        SimpleNodeView value;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &value)) {
+            return simple_fail("StringUtf8ByteCount missing arg");
+        }
+        if (!simple_compile_expr_ext(&value, program, locals, ctx)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_UTF8_BYTE_COUNT, 0);
+    }
+    if (strcmp(node->kind, "StringSlice") == 0 || strcmp(node->kind, "StringRemove") == 0) {
+        SimpleNodeView text;
+        SimpleNodeView start;
+        SimpleNodeView length;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &text) ||
+            !simple_parse_next_node(text.next, node->body_end, &start) ||
+            !simple_parse_next_node(start.next, node->body_end, &length)) {
+            return simple_failf("%s missing args", node->kind);
+        }
+        if (!simple_compile_expr_ext(&text, program, locals, ctx) ||
+            !simple_compile_expr_ext(&start, program, locals, ctx) ||
+            !simple_compile_expr_ext(&length, program, locals, ctx)) {
+            return 0;
+        }
+        if (strcmp(node->kind, "StringSlice") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_STR_SUBSTRING, 0);
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_REMOVE, 0);
+    }
     if (strcmp(node->kind, "Add") == 0 || strcmp(node->kind, "Eq") == 0 || strcmp(node->kind, "ToString") == 0 ||
         strcmp(node->kind, "AttrCount") == 0 || strcmp(node->kind, "AttrKey") == 0 ||
         strcmp(node->kind, "AttrValueString") == 0 || strcmp(node->kind, "AttrValueInt") == 0 ||

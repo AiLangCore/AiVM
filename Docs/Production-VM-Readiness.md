@@ -71,13 +71,17 @@ unless a CI or release blocker appears.
 Current audit:
 
 - Baseline wrappers exist in `AiLang/src/std/str.aos` and
-  `AiLang/src/std/bytes.aos`, but they still delegate to `sys.str.*` and
-  `sys.bytes.*`.
+  `AiLang/src/std/bytes.aos`.
+- `std.str.substring`, `std.str.remove`, and `std.str.utf8ByteCount` now lower
+  through non-syscall intrinsic nodes (`StringSlice`, `StringRemove`, and
+  `StringUtf8ByteCount`) backed by existing VM opcodes.
+- `std.str.find`, Unicode code point construction, Unicode escape decoding,
+  and `std.bytes` still delegate to temporary VM syscall contracts.
 - AiLang now has a canonical primitive migration note at
   `Docs/Deterministic-Text-Bytes-Primitives.md`; VM contracts should not be
   removed until the required non-syscall text/bytes primitive surface exists.
-- AiLang now has a static validation contract test for the planned primitive
-  node names and arities.
+- AiLang now has a static validation contract test for the current and planned
+  primitive node names and arities.
 - Optional packages `std-json`, `std-http`, and `std-ui-input` now use the
   public `std.str` surface instead of direct `sys.str.*` calls.
 - AiVectra library text helpers and the WeatherApp/InteractiveSvgMvp samples
