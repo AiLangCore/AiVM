@@ -73,15 +73,14 @@ Current audit:
 - Baseline wrappers exist in `AiLang/src/std/str.aos` and
   `AiLang/src/std/bytes.aos`, but they still delegate to `sys.str.*` and
   `sys.bytes.*`.
+- Optional packages `std-json`, `std-http`, and `std-ui-input` now use the
+  public `std.str` surface instead of direct `sys.str.*` calls.
+- AiVectra library text helpers and the WeatherApp/InteractiveSvgMvp samples
+  now use the staged `std.str` surface instead of direct `sys.str.*` calls.
 - Direct non-wrapper usage still exists in:
   - `AiLang/src/compiler/parser.aos`
   - `AiLang/src/compiler/runtime.aos`
   - `AiLang/src/cli/ailang.aos`
-  - `ailang-core-packages/packages/std-json/src/format/json.aos`
-  - `ailang-core-packages/packages/std-http/src/net/http.aos`
-  - `ailang-core-packages/packages/std-ui-input/src/ui/input.aos`
-  - `AiVectra/src/AiVectra/src/lib.aos`
-  - `AiVectra/samples/*`
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
