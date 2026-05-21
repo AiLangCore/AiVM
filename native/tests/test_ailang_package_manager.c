@@ -191,6 +191,11 @@ int main(void)
         strstr(error, "compiled command 'build'") == NULL) {
         return 9;
     }
+    error[0] = '\0';
+    if (ailang_package_manager_add(&options, "ailang", output, sizeof(output), error, sizeof(error)) ||
+        strstr(error, "provided by the selected SDK") == NULL) {
+        return 20;
+    }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Include#dep_build") != NULL) {
         return 10;

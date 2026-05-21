@@ -136,6 +136,7 @@ static int resolve_executable_path(const char* argv0, char* out, size_t out_len)
 static int dirname_of(const char* path, char* out, size_t out_len);
 static int simple_resolve_path(const char* base_file, const char* import_path, char* out_path, size_t out_path_len);
 static int simple_resolve_import_path(const char* base_file, const char* attrs, char* out_path, size_t out_path_len);
+static int simple_resolve_sdk_import_path(const char* sdk_name, const char* import_path, char* out_path, size_t out_path_len);
 static int simple_fail(const char* message);
 static int simple_failf(const char* fmt, ...);
 static int starts_with(const char* value, const char* prefix);
@@ -6007,6 +6008,62 @@ static int simple_resolve_path(const char* base_file, const char* import_path, c
     return 1;
 }
 
+static int simple_resolve_sdk_root(char* out_root, size_t out_len)
+{
+    const char* env;
+    char exe_dir[PATH_MAX];
+    char parent_dir[PATH_MAX];
+
+    if (out_root == NULL || out_len == 0U) {
+        return 0;
+    }
+
+    env = getenv("AILANG_SDK_ROOT");
+    if (env != NULL && env[0] != '\0') {
+        return snprintf(out_root, out_len, "%s", env) >= 0 && strlen(env) < out_len;
+    }
+
+    if (g_airun_runtime_exe_path[0] == '\0' ||
+        !dirname_of(g_airun_runtime_exe_path, exe_dir, sizeof(exe_dir)) ||
+        !dirname_of(exe_dir, parent_dir, sizeof(parent_dir))) {
+        return 0;
+    }
+
+    return snprintf(out_root, out_len, "%s", parent_dir) >= 0 && strlen(parent_dir) < out_len;
+}
+
+static int simple_resolve_sdk_import_path(const char* sdk_name, const char* import_path, char* out_path, size_t out_path_len)
+{
+    char sdk_root[PATH_MAX];
+    char candidate[PATH_MAX];
+    char src_candidate[PATH_MAX];
+
+    if (sdk_name == NULL || import_path == NULL || out_path == NULL ||
+        strcmp(sdk_name, "ailang") != 0 ||
+        import_path[0] == '/' ||
+        strstr(import_path, "..") != NULL) {
+        return 0;
+    }
+    if (!simple_resolve_sdk_root(sdk_root, sizeof(sdk_root)) ||
+        !join_path(sdk_root, import_path, candidate, sizeof(candidate))) {
+        return 0;
+    }
+    if (file_exists(candidate)) {
+        return snprintf(out_path, out_path_len, "%s", candidate) >= 0 && strlen(candidate) < out_path_len;
+    }
+
+    if (starts_with(import_path, "std/") || starts_with(import_path, "compiler/")) {
+        char src_path[PATH_MAX];
+        if (join_path("src", import_path, src_path, sizeof(src_path)) &&
+            join_path(sdk_root, src_path, src_candidate, sizeof(src_candidate)) &&
+            file_exists(src_candidate)) {
+            return snprintf(out_path, out_path_len, "%s", src_candidate) >= 0 && strlen(src_candidate) < out_path_len;
+        }
+    }
+
+    return 0;
+}
+
 static int simple_find_project_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len)
 {
     char source_dir[PATH_MAX];
@@ -6130,9 +6187,13 @@ static int simple_resolve_import_path(const char* base_file, const char* attrs, 
 {
     char import_path[PATH_MAX];
     char package_name[128];
+    char sdk_name[128];
     if (attrs == NULL ||
         !parse_attr_span(attrs, "path", import_path, sizeof(import_path))) {
         return 0;
+    }
+    if (parse_attr_span(attrs, "sdk", sdk_name, sizeof(sdk_name))) {
+        return simple_resolve_sdk_import_path(sdk_name, import_path, out_path, out_path_len);
     }
     if (!parse_attr_span(attrs, "package", package_name, sizeof(package_name))) {
         return simple_resolve_path(base_file, import_path, out_path, out_path_len);

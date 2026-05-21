@@ -939,6 +939,11 @@ static int pm_parse_package_spec(const char* spec, char* name, size_t name_len, 
     return name[0] != '\0';
 }
 
+static int pm_is_sdk_owned_name(const char* name)
+{
+    return name != NULL && strcmp(name, "ailang") == 0;
+}
+
 static int pm_manifest_has_include(const char* manifest, const char* package_name)
 {
     const char* p = manifest;
@@ -1368,6 +1373,10 @@ int ailang_package_manager_restore(
             free(manifest);
             return pm_set_error(error, error_len, "invalid Include package declaration");
         }
+        if (pm_is_sdk_owned_name(include_name)) {
+            free(manifest);
+            return pm_set_error(error, error_len, "ailang is provided by the selected SDK, not package restore");
+        }
         if (!pm_load_record(registry, include_name, include_version, &record, error, error_len)) {
             free(manifest);
             return 0;
@@ -1466,6 +1475,9 @@ int ailang_package_manager_add(
     }
     if (!pm_parse_package_spec(package_spec, name, sizeof(name), version, sizeof(version))) {
         return pm_set_error(error, error_len, "invalid package spec");
+    }
+    if (pm_is_sdk_owned_name(name)) {
+        return pm_set_error(error, error_len, "ailang is provided by the selected SDK, not package restore");
     }
     if (!pm_join_path(project_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) ||
         !pm_resolve_registry(options, registry, sizeof(registry)) ||
