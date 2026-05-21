@@ -53,6 +53,10 @@ Optional future sandboxing:
 
 ## Deterministic Library Migration
 
+Status: next priority after package namespace/registry hardening. Package
+metadata and registry validation are no longer the active readiness thread
+unless a CI or release blocker appears.
+
 - [ ] Review `sys.str.*` contracts and move deterministic behavior into AiLang
   core libraries.
 - [ ] Review `sys.bytes.*` contracts and move deterministic behavior into
