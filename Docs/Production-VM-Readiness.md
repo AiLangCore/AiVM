@@ -73,6 +73,9 @@ Current audit:
 - Baseline wrappers exist in `AiLang/src/std/str.aos` and
   `AiLang/src/std/bytes.aos`, but they still delegate to `sys.str.*` and
   `sys.bytes.*`.
+- AiLang now has a canonical primitive migration note at
+  `Docs/Deterministic-Text-Bytes-Primitives.md`; VM contracts should not be
+  removed until the required non-syscall text/bytes primitive surface exists.
 - Optional packages `std-json`, `std-http`, and `std-ui-input` now use the
   public `std.str` surface instead of direct `sys.str.*` calls.
 - AiVectra library text helpers and the WeatherApp/InteractiveSvgMvp samples
