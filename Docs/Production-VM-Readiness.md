@@ -81,10 +81,13 @@ Current audit:
   direct `sys.str.*` calls.
 - AiLang compiler parser character slicing now uses the staged `std.str`
   surface instead of direct `sys.str.*` calls.
+- `std.bytes` now exports dotted names such as `bytes.toUtf8String` so it can
+  be imported beside `std.str` without flat-name collisions.
+- AiLang CLI/compiler runtime and parser profiling/selfhost scripts now use
+  the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
 - Direct non-wrapper usage still exists in:
-  - `AiLang/src/compiler/runtime.aos` for `sys.bytes.*` conversions and
-    concatenation only
-  - `AiLang/src/cli/ailang.aos` for `sys.bytes.*` conversions only
+  - `AiLang/scripts/test-ailang-traced-syscalls.sh` while the explicit
+    syscall tracing regression test exists
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
