@@ -77,10 +77,12 @@ Current audit:
   public `std.str` surface instead of direct `sys.str.*` calls.
 - AiVectra library text helpers and the WeatherApp/InteractiveSvgMvp samples
   now use the staged `std.str` surface instead of direct `sys.str.*` calls.
+- AiLang CLI string helpers now use the staged `std.str` surface instead of
+  direct `sys.str.*` calls.
 - Direct non-wrapper usage still exists in:
   - `AiLang/src/compiler/parser.aos`
   - `AiLang/src/compiler/runtime.aos`
-  - `AiLang/src/cli/ailang.aos`
+  - `AiLang/src/cli/ailang.aos` for `sys.bytes.*` conversions only
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
