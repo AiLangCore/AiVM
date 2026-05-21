@@ -68,6 +68,37 @@ unless a CI or release blocker appears.
 - [ ] Remove moved syscall contracts completely; do not leave compatibility
   adapters before the first major or minor release.
 
+Current audit:
+
+- Baseline wrappers exist in `AiLang/src/std/str.aos` and
+  `AiLang/src/std/bytes.aos`, but they still delegate to `sys.str.*` and
+  `sys.bytes.*`.
+- Direct non-wrapper usage still exists in:
+  - `AiLang/src/compiler/parser.aos`
+  - `AiLang/src/compiler/runtime.aos`
+  - `AiLang/src/cli/ailang.aos`
+  - `ailang-core-packages/packages/std-json/src/format/json.aos`
+  - `ailang-core-packages/packages/std-http/src/net/http.aos`
+  - `ailang-core-packages/packages/std-ui-input/src/ui/input.aos`
+  - `AiVectra/src/AiVectra/src/lib.aos`
+  - `AiVectra/samples/*`
+- `sys.crypto.randomBytes` remains a valid host-boundary syscall.
+- Deterministic crypto helpers and base64 should become AiLang libraries or
+  optional packages unless a measured VM/runtime reason justifies keeping a
+  host primitive.
+
+Migration order:
+
+1. Replace direct application/package/sample calls with baseline `std.str` and
+   `std.bytes` wrappers so deterministic behavior has a single public surface.
+2. Move deterministic string and bytes implementations out of host syscall
+   handlers and into AiLang-authored libraries.
+3. Update compiler/runtime callers to use the AiLang library surface or a
+   compiler-owned internal helper, not `sys.*`.
+4. Remove the migrated syscall contracts, docs, and tests completely.
+5. Add a guard that rejects new deterministic `sys.str.*` and `sys.bytes.*`
+   usage outside the active migration files.
+
 ## Production Defaults
 
 Production `aivm` should behave like a normal command-line runtime: it runs with
