@@ -205,7 +205,7 @@ int main(void)
         return 12;
     }
     if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error)) ||
-        strstr(output, "demo 0.1.0") == NULL) {
+        strstr(output, "demo 0.1.0 namespaces=demo.tool") == NULL) {
         return 13;
     }
     if (!read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||

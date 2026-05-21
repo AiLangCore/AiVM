@@ -369,6 +369,39 @@ static int pm_toml_get_array(const char* text, const char* key, char* out, size_
     return 1;
 }
 
+static int pm_toml_array_to_display(const char* array_text, char* out, size_t out_len)
+{
+    size_t i;
+    size_t used = 0U;
+    int in_quote = 0;
+    if (array_text == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    out[0] = '\0';
+    for (i = 0U; array_text[i] != '\0'; i += 1U) {
+        char c = array_text[i];
+        if (c == '"') {
+            in_quote = !in_quote;
+            continue;
+        }
+        if (!in_quote && isspace((unsigned char)c)) {
+            continue;
+        }
+        if (!in_quote && c == ',') {
+            if (!pm_append(out, out_len, &used, ",")) {
+                return 0;
+            }
+            continue;
+        }
+        if (used + 2U > out_len) {
+            return 0;
+        }
+        out[used++] = c;
+        out[used] = '\0';
+    }
+    return 1;
+}
+
 static int pm_toml_get_version_string(
     const char* text,
     const char* version,
@@ -492,6 +525,18 @@ static int pm_load_package_source_metadata(
     ok = pm_collect_source_namespaces(descriptor, metadata, error, error_len);
     free(descriptor);
     return ok;
+}
+
+static int pm_namespace_seen(const char* registry, const char* namespace_value)
+{
+    char needle[160];
+    if (registry == NULL || namespace_value == NULL || namespace_value[0] == '\0') {
+        return 0;
+    }
+    if (snprintf(needle, sizeof(needle), "\n%s\n", namespace_value) >= (int)sizeof(needle)) {
+        return 0;
+    }
+    return strstr(registry, needle) != NULL;
 }
 
 static int pm_first_version(const char* text, char* out, size_t out_len)
@@ -1186,9 +1231,26 @@ int ailang_package_manager_list(
         while ((p = strstr(p, "[[package]]")) != NULL) {
             char name[128] = "";
             char version[64] = "";
+            char namespaces[512] = "";
+            char namespaces_display[512] = "";
             if (pm_toml_get_string(p, "name", name, sizeof(name))) {
                 (void)pm_toml_get_string(p, "version", version, sizeof(version));
-                if (!pm_appendf(output, output_len, &used, "%s%s%s\n", name, version[0] == '\0' ? "" : " ", version)) {
+                (void)pm_toml_get_array(p, "namespaces", namespaces, sizeof(namespaces));
+                if (namespaces[0] != '\0' &&
+                    !pm_toml_array_to_display(namespaces, namespaces_display, sizeof(namespaces_display))) {
+                    free(text);
+                    return pm_set_error(error, error_len, "package namespace list output overflow");
+                }
+                if (!pm_appendf(
+                        output,
+                        output_len,
+                        &used,
+                        "%s%s%s%s%s\n",
+                        name,
+                        version[0] == '\0' ? "" : " ",
+                        version,
+                        namespaces_display[0] == '\0' ? "" : " namespaces=",
+                        namespaces_display)) {
                     free(text);
                     return pm_set_error(error, error_len, "package list output overflow");
                 }
@@ -1270,6 +1332,9 @@ int ailang_package_manager_restore(
         output[0] = '\0';
     }
     restored_namespaces[0] = '\0';
+    if (!pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, "\n")) {
+        return pm_set_error(error, error_len, "package namespace registry overflow");
+    }
     if (!pm_join_path(project_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) ||
         !pm_join_path(project_dir, ".ailang", local_root, sizeof(local_root)) ||
         !pm_join_path(local_root, "packages", package_cache, sizeof(package_cache)) ||
@@ -1338,17 +1403,12 @@ int ailang_package_manager_restore(
                 }
                 memcpy(namespace_value, ns_start, n);
                 namespace_value[n] = '\0';
-                if (restored_namespaces[0] != '\0' &&
-                    strstr(restored_namespaces, namespace_value) != NULL) {
+                if (pm_namespace_seen(restored_namespaces, namespace_value)) {
                     free(manifest);
                     return pm_set_error(error, error_len, "duplicate package namespace: %s", namespace_value);
                 }
-                if (restored_namespaces[0] != '\0' &&
+                if (!pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, namespace_value) ||
                     !pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, "\n")) {
-                    free(manifest);
-                    return pm_set_error(error, error_len, "package namespace registry overflow");
-                }
-                if (!pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, namespace_value)) {
                     free(manifest);
                     return pm_set_error(error, error_len, "package namespace registry overflow");
                 }
