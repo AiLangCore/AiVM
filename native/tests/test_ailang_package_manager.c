@@ -103,6 +103,17 @@ int main(void)
             ".tmp/pkg-manager-test/package-src/pkg/src/lib.aos",
             "Program#pkg1 {}\n") ||
         !write_file(
+            ".tmp/pkg-manager-test/package-src/pkg/package.toml",
+            "schema = \"ailang.package-source.v1\"\n"
+            "name = \"demo\"\n"
+            "version = \"0.1.0\"\n"
+            "types = [\"library\", \"tool\"]\n"
+            "\n"
+            "[libraries.demo]\n"
+            "namespace = \"demo.tool\"\n"
+            "entry = \"src/lib.aos\"\n"
+            "exports = []\n") ||
+        !write_file(
             ".tmp/pkg-manager-test/package-src/pkg/tools/demo",
             "#!/bin/sh\n"
             "echo demo-tool \"$@\"\n") ||
@@ -197,6 +208,10 @@ int main(void)
         strstr(output, "demo 0.1.0") == NULL) {
         return 13;
     }
+    if (!read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||
+        strstr(output, "namespaces = [\"demo.tool\"]") == NULL) {
+        return 14;
+    }
 #ifndef _WIN32
     if (!ailang_package_manager_try_run_tool(
             &options,
@@ -207,14 +222,14 @@ int main(void)
             error,
             sizeof(error)) ||
         tool_exit != 0) {
-        return 14;
+        return 15;
     }
     error[0] = '\0';
 #ifdef _WIN32
     _putenv("AILANG_PACKAGE_TOOL_TIMEOUT_SECONDS=1");
 #else
     if (setenv("AILANG_PACKAGE_TOOL_TIMEOUT_SECONDS", "1", 1) != 0) {
-        return 15;
+        return 16;
     }
 #endif
     if (ailang_package_manager_try_run_tool(
@@ -226,16 +241,16 @@ int main(void)
             error,
             sizeof(error)) ||
         strstr(error, "package tool timed out after 1 seconds: slow") == NULL) {
-        return 16;
+        return 17;
     }
 #endif
     if (!ailang_package_manager_remove(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "removed demo") == NULL) {
-        return 17;
+        return 18;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Include#dep_demo") != NULL) {
-        return 18;
+        return 19;
     }
     return 0;
 }

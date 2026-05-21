@@ -49,6 +49,10 @@ typedef struct AilangPackageRecord {
     char types[256];
 } AilangPackageRecord;
 
+typedef struct AilangPackageSourceMetadata {
+    char namespaces[512];
+} AilangPackageSourceMetadata;
+
 static int pm_set_error(char* error, size_t error_len, const char* fmt, ...)
 {
     va_list ap;
@@ -379,6 +383,115 @@ static int pm_toml_get_version_string(
     }
     pos = strstr(text, section);
     return pos != NULL && pm_toml_get_string(pos, key, out, out_len);
+}
+
+static int pm_is_dotted_namespace(const char* text)
+{
+    int saw_dot = 0;
+    int expect_segment_start = 1;
+    size_t i;
+    if (text == NULL || text[0] == '\0') {
+        return 0;
+    }
+    for (i = 0U; text[i] != '\0'; i += 1U) {
+        unsigned char c = (unsigned char)text[i];
+        if (expect_segment_start) {
+            if (!islower(c)) {
+                return 0;
+            }
+            expect_segment_start = 0;
+        } else if (c == '.') {
+            saw_dot = 1;
+            expect_segment_start = 1;
+        } else if (!islower(c) && !isdigit(c)) {
+            return 0;
+        }
+    }
+    return saw_dot && !expect_segment_start;
+}
+
+static int pm_collect_source_namespaces(
+    const char* descriptor,
+    AilangPackageSourceMetadata* metadata,
+    char* error,
+    size_t error_len)
+{
+    const char* cursor;
+    size_t namespace_count = 0U;
+    size_t entry_count = 0U;
+    size_t used = 0U;
+    if (descriptor == NULL || metadata == NULL) {
+        return pm_set_error(error, error_len, "invalid package source metadata request");
+    }
+    metadata->namespaces[0] = '\0';
+    cursor = descriptor;
+    while ((cursor = strstr(cursor, "entry = \"")) != NULL) {
+        entry_count += 1U;
+        cursor += strlen("entry = \"");
+    }
+    cursor = descriptor;
+    while ((cursor = strstr(cursor, "namespace = \"")) != NULL) {
+        const char* start = cursor + strlen("namespace = \"");
+        const char* end = strchr(start, '"');
+        char namespace_value[128];
+        size_t n;
+        if (end == NULL) {
+            return pm_set_error(error, error_len, "invalid package namespace declaration");
+        }
+        n = (size_t)(end - start);
+        if (n + 1U > sizeof(namespace_value)) {
+            return pm_set_error(error, error_len, "package namespace is too long");
+        }
+        memcpy(namespace_value, start, n);
+        namespace_value[n] = '\0';
+        if (!pm_is_dotted_namespace(namespace_value)) {
+            return pm_set_error(error, error_len, "invalid package namespace: %s", namespace_value);
+        }
+        if (metadata->namespaces[0] != '\0' &&
+            strstr(metadata->namespaces, namespace_value) != NULL) {
+            return pm_set_error(error, error_len, "duplicate package namespace: %s", namespace_value);
+        }
+        if (namespace_count > 0U && !pm_append(metadata->namespaces, sizeof(metadata->namespaces), &used, ", ")) {
+            return pm_set_error(error, error_len, "package namespace list overflow");
+        }
+        if (!pm_append(metadata->namespaces, sizeof(metadata->namespaces), &used, "\"") ||
+            !pm_append(metadata->namespaces, sizeof(metadata->namespaces), &used, namespace_value) ||
+            !pm_append(metadata->namespaces, sizeof(metadata->namespaces), &used, "\"")) {
+            return pm_set_error(error, error_len, "package namespace list overflow");
+        }
+        namespace_count += 1U;
+        cursor = end + 1;
+    }
+    if (entry_count > 0U && namespace_count != entry_count) {
+        return pm_set_error(error, error_len, "package library entries must declare namespaces");
+    }
+    return 1;
+}
+
+static int pm_load_package_source_metadata(
+    const char* package_dir,
+    const AilangPackageRecord* record,
+    AilangPackageSourceMetadata* metadata,
+    char* error,
+    size_t error_len)
+{
+    char package_root[PATH_MAX];
+    char descriptor_path[PATH_MAX];
+    char* descriptor = NULL;
+    int ok;
+    if (package_dir == NULL || record == NULL || metadata == NULL) {
+        return pm_set_error(error, error_len, "invalid package source metadata request");
+    }
+    if (!pm_join_path(package_dir, record->package_root, package_root, sizeof(package_root)) ||
+        !pm_join_path(package_root, "package.toml", descriptor_path, sizeof(descriptor_path))) {
+        return pm_set_error(error, error_len, "package source descriptor path overflow");
+    }
+    if (!pm_read_text_limited(descriptor_path, &descriptor)) {
+        return pm_set_error(error, error_len, "package source descriptor not found: %s", record->name);
+    }
+    ok = pm_collect_source_namespaces(descriptor, metadata, error, error_len);
+    free(descriptor);
+    return ok;
 }
 
 static int pm_first_version(const char* text, char* out, size_t out_len)
@@ -1150,10 +1263,13 @@ int ailang_package_manager_restore(
     size_t lock_used = 0U;
     char* manifest = NULL;
     const char* p;
+    char restored_namespaces[1024];
+    size_t restored_namespaces_used = 0U;
     int restored = 0;
     if (output != NULL && output_len > 0U) {
         output[0] = '\0';
     }
+    restored_namespaces[0] = '\0';
     if (!pm_join_path(project_dir, "project.aiproj", manifest_path, sizeof(manifest_path)) ||
         !pm_join_path(project_dir, ".ailang", local_root, sizeof(local_root)) ||
         !pm_join_path(local_root, "packages", package_cache, sizeof(package_cache)) ||
@@ -1182,6 +1298,7 @@ int ailang_package_manager_restore(
         char package_dir[PATH_MAX];
         char conflict[256];
         AilangPackageRecord record;
+        AilangPackageSourceMetadata source_metadata;
         if (!pm_parse_include(p, include_name, sizeof(include_name), include_version, sizeof(include_version))) {
             free(manifest);
             return pm_set_error(error, error_len, "invalid Include package declaration");
@@ -1199,6 +1316,45 @@ int ailang_package_manager_restore(
             free(manifest);
             return pm_set_error(error, error_len, "package clone/checkout failed: %s", record.name);
         }
+        if (!pm_load_package_source_metadata(package_dir, &record, &source_metadata, error, error_len)) {
+            free(manifest);
+            return 0;
+        }
+        if (source_metadata.namespaces[0] != '\0') {
+            const char* ns_cursor = source_metadata.namespaces;
+            while ((ns_cursor = strchr(ns_cursor, '"')) != NULL) {
+                const char* ns_start = ns_cursor + 1;
+                const char* ns_end = strchr(ns_start, '"');
+                char namespace_value[128];
+                size_t n;
+                if (ns_end == NULL) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "invalid package namespace list");
+                }
+                n = (size_t)(ns_end - ns_start);
+                if (n + 1U > sizeof(namespace_value)) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "package namespace is too long");
+                }
+                memcpy(namespace_value, ns_start, n);
+                namespace_value[n] = '\0';
+                if (restored_namespaces[0] != '\0' &&
+                    strstr(restored_namespaces, namespace_value) != NULL) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "duplicate package namespace: %s", namespace_value);
+                }
+                if (restored_namespaces[0] != '\0' &&
+                    !pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, "\n")) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "package namespace registry overflow");
+                }
+                if (!pm_append(restored_namespaces, sizeof(restored_namespaces), &restored_namespaces_used, namespace_value)) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "package namespace registry overflow");
+                }
+                ns_cursor = ns_end + 1;
+            }
+        }
         if (!pm_append(&lock_text[0], sizeof(lock_text), &lock_used, "[[package]]\n") ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "name = \"%s\"\n", record.name) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "version = \"%s\"\n", record.version) ||
@@ -1206,7 +1362,8 @@ int ailang_package_manager_restore(
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "packageRoot = \"%s\"\n", record.package_root) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "commit = \"%s\"\n", record.commit) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "path = \".ailang/packages/%s\"\n", record.name) ||
-            !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "types = [%s]\n\n", record.types)) {
+            !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "types = [%s]\n", record.types) ||
+            !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "namespaces = [%s]\n\n", source_metadata.namespaces)) {
             free(manifest);
             return pm_set_error(error, error_len, "lockfile output overflow");
         }
