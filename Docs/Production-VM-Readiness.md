@@ -79,9 +79,11 @@ Current audit:
   now use the staged `std.str` surface instead of direct `sys.str.*` calls.
 - AiLang CLI string helpers now use the staged `std.str` surface instead of
   direct `sys.str.*` calls.
+- AiLang compiler parser character slicing now uses the staged `std.str`
+  surface instead of direct `sys.str.*` calls.
 - Direct non-wrapper usage still exists in:
-  - `AiLang/src/compiler/parser.aos`
-  - `AiLang/src/compiler/runtime.aos`
+  - `AiLang/src/compiler/runtime.aos` for `sys.bytes.*` conversions and
+    concatenation only
   - `AiLang/src/cli/ailang.aos` for `sys.bytes.*` conversions only
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
