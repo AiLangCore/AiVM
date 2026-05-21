@@ -87,6 +87,9 @@ Current audit:
   the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
 - AiLang CI now rejects new direct `sys.str.*` or `sys.bytes.*` usage outside
   the active wrapper and syscall-level regression files.
+- AiVM syscall contract checks now allowlist the current temporary
+  `sys.str.*`/`sys.bytes.*` contracts and fail if new deterministic utility
+  contracts are added during migration.
 - Direct non-wrapper usage still exists in:
   - `AiLang/scripts/test-ailang-traced-syscalls.sh` while the explicit
     syscall tracing regression test exists
