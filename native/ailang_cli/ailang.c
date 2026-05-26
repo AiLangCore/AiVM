@@ -2939,14 +2939,14 @@ static int emit_wasm_cli_launchers(const char* out_dir, const char* runtime_name
     if (snprintf(
             run_sh,
             sizeof(run_sh),
-            "#!/usr/bin/env bash\nset -euo pipefail\nDIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\nexec wasmtime run -C cache=n \"${DIR}/%s\" - < \"${DIR}/app.aibc1\"\n",
+            "#!/usr/bin/env bash\nset -euo pipefail\nDIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\nexec wasmtime run -C cache=n \"${DIR}/%s\" aibc-stdin < \"${DIR}/app.aibc1\"\n",
             runtime_name) >= (int)sizeof(run_sh)) {
         return 0;
     }
     if (snprintf(
             run_ps1,
             sizeof(run_ps1),
-            "$ErrorActionPreference = 'Stop'\n$dir = Split-Path -Parent $MyInvocation.MyCommand.Path\nwasmtime run -C cache=n \"$dir/%s\" - < \"$dir/app.aibc1\"\n",
+            "$ErrorActionPreference = 'Stop'\n$dir = Split-Path -Parent $MyInvocation.MyCommand.Path\nwasmtime run -C cache=n \"$dir/%s\" aibc-stdin < \"$dir/app.aibc1\"\n",
             runtime_name) >= (int)sizeof(run_ps1)) {
         return 0;
     }

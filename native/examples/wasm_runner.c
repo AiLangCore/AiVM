@@ -1744,7 +1744,7 @@ int main(int argc, char** argv)
 {
     unsigned char* bytes = NULL;
     size_t byte_count = 0U;
-    AivmProgram program;
+    static AivmProgram program;
     AivmProgramLoadResult load_result;
     AivmSyscallBinding bindings[128];
     size_t binding_count = 0U;
@@ -1754,7 +1754,7 @@ int main(int argc, char** argv)
     size_t app_argc = 0U;
 
     if (argc < 2 || argv == NULL) {
-        fprintf(stderr, "Usage: aivm-runtime-wasm32 <app.aibc1|- for stdin> [args...]\n");
+        fprintf(stderr, "Usage: aivm-runtime-wasm32 <app.aibc1|aibc-stdin> [args...]\n");
         return 2;
     }
 
@@ -1763,8 +1763,8 @@ int main(int argc, char** argv)
         app_argc = (size_t)(argc - 2);
     }
 
-    if ((strcmp(argv[1], "-") == 0 && !read_binary_stdin(&bytes, &byte_count)) ||
-        (strcmp(argv[1], "-") != 0 && !read_binary_file(argv[1], &bytes, &byte_count))) {
+    if ((strcmp(argv[1], "aibc-stdin") == 0 && !read_binary_stdin(&bytes, &byte_count)) ||
+        (strcmp(argv[1], "aibc-stdin") != 0 && !read_binary_file(argv[1], &bytes, &byte_count))) {
         fprintf(stderr, "Err#err1(code=RUN001 message=\"Failed to read AiBC1 file.\" nodeId=program)\n");
         return 2;
     }
