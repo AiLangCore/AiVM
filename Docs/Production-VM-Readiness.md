@@ -77,15 +77,13 @@ Current audit:
   `StringFromCodePoint`, `StringDecodeUnicodeHex4`,
   `StringDecodeUnicodeSurrogatePairHex4`, and `StringUtf8ByteCount`) backed by
   VM opcodes.
-- `std.bytes.length`, `std.bytes.at`, `std.bytes.slice`, and
-  `std.bytes.concat` now lower through non-syscall intrinsic nodes
-  (`BytesLength`, `BytesAt`, `BytesSlice`, and `BytesConcat`) backed by VM
-  opcodes.
-- `std.bytes` base64 and UTF-8 conversion helpers still delegate to temporary
-  VM syscall contracts.
+- `std.bytes.length`, `std.bytes.at`, `std.bytes.slice`, `std.bytes.concat`,
+  `std.bytes.fromBase64`, `std.bytes.toBase64`, `std.bytes.fromUtf8String`,
+  and `std.bytes.toUtf8String` now lower through non-syscall intrinsic nodes
+  backed by VM opcodes.
 - AiLang now has a canonical primitive migration note at
-  `Docs/Deterministic-Text-Bytes-Primitives.md`; VM contracts should not be
-  removed until the required non-syscall text/bytes primitive surface exists.
+  `Docs/Deterministic-Text-Bytes-Primitives.md`; the required non-syscall
+  text/bytes primitive surface now exists.
 - AiLang now has a static validation contract test for the current and planned
   primitive node names and arities.
 - Optional packages `std-json`, `std-http`, and `std-ui-input` now use the
@@ -101,13 +99,10 @@ Current audit:
 - AiLang CLI/compiler runtime and parser profiling/selfhost scripts now use
   the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
 - AiLang CI now rejects new direct `sys.str.*` or `sys.bytes.*` usage outside
-  the active wrapper and syscall-level regression files.
+  syscall-level regression files.
 - AiVM syscall contract checks now allowlist the current temporary
   `sys.str.*`/`sys.bytes.*` contracts and fail if new deterministic utility
-  contracts are added during migration.
-- Direct non-wrapper usage still exists in:
-  - `AiLang/scripts/test-ailang-traced-syscalls.sh` while the explicit
-    syscall tracing regression test exists
+  contracts are added while contract-table removal is pending.
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
@@ -118,7 +113,7 @@ Migration order:
 1. Replace direct application/package/sample calls with baseline `std.str` and
    `std.bytes` wrappers so deterministic behavior has a single public surface.
 2. Move deterministic string and bytes implementations out of host syscall
-   handlers and into AiLang-authored libraries.
+   handlers and into AiLang-authored libraries or VM intrinsic opcodes.
 3. Update compiler/runtime callers to use the AiLang library surface or a
    compiler-owned internal helper, not `sys.*`.
 4. Remove the migrated syscall contracts, docs, and tests completely.

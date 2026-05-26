@@ -4237,6 +4237,10 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_AT: return "BYTES_AT";
         case AIVM_OP_BYTES_SLICE: return "BYTES_SLICE";
         case AIVM_OP_BYTES_CONCAT: return "BYTES_CONCAT";
+        case AIVM_OP_BYTES_FROM_UTF8_STRING: return "BYTES_FROM_UTF8_STRING";
+        case AIVM_OP_BYTES_TO_UTF8_STRING: return "BYTES_TO_UTF8_STRING";
+        case AIVM_OP_BYTES_FROM_BASE64: return "BYTES_FROM_BASE64";
+        case AIVM_OP_BYTES_TO_BASE64: return "BYTES_TO_BASE64";
         default: return "UNKNOWN";
     }
 }
@@ -7053,6 +7057,28 @@ static int simple_compile_expr_ext(
             return 0;
         }
         return simple_emit_instruction(program, AIVM_OP_BYTES_LENGTH, 0);
+    }
+    if (strcmp(node->kind, "BytesFromUtf8String") == 0 ||
+        strcmp(node->kind, "BytesToUtf8String") == 0 ||
+        strcmp(node->kind, "BytesFromBase64") == 0 ||
+        strcmp(node->kind, "BytesToBase64") == 0) {
+        SimpleNodeView value;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &value)) {
+            return simple_failf("%s missing arg", node->kind);
+        }
+        if (!simple_compile_expr_ext(&value, program, locals, ctx)) {
+            return 0;
+        }
+        if (strcmp(node->kind, "BytesFromUtf8String") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_FROM_UTF8_STRING, 0);
+        }
+        if (strcmp(node->kind, "BytesToUtf8String") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_TO_UTF8_STRING, 0);
+        }
+        if (strcmp(node->kind, "BytesFromBase64") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_FROM_BASE64, 0);
+        }
+        return simple_emit_instruction(program, AIVM_OP_BYTES_TO_BASE64, 0);
     }
     if (strcmp(node->kind, "BytesAt") == 0 || strcmp(node->kind, "BytesConcat") == 0) {
         SimpleNodeView left;
