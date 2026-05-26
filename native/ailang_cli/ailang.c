@@ -4527,18 +4527,6 @@ static int run_native_compiled_program(
     bindings[16].handler = native_syscall_process_stderr_read;
     bindings[17].target = "sys.process.poll";
     bindings[17].handler = native_syscall_process_poll;
-    bindings[18].target = "sys.str.fromCodePoint";
-    bindings[18].handler = native_syscall_str_from_codepoint;
-    bindings[19].target = "sys.str.decodeUnicodeHex4";
-    bindings[19].handler = native_syscall_str_decode_unicode_hex4;
-    bindings[20].target = "sys.str.decodeUnicodeSurrogatePairHex4";
-    bindings[20].handler = native_syscall_str_decode_unicode_surrogate_pair_hex4;
-    bindings[22].target = "sys.str.substring";
-    bindings[22].handler = native_syscall_str_substring;
-    bindings[23].target = "sys.str.find";
-    bindings[23].handler = native_syscall_str_find;
-    bindings[24].target = "sys.str.remove";
-    bindings[24].handler = native_syscall_str_remove;
     bindings[25].target = "sys.ui.createWindow";
     bindings[25].handler = native_syscall_ui_create_window;
     bindings[26].target = "sys.ui.beginFrame";
@@ -4616,8 +4604,6 @@ static int run_native_compiled_program(
     bindings[61].handler = native_syscall_fs_file_write;
     bindings[62].target = "sys.fs.dir.create";
     bindings[62].handler = native_syscall_fs_dir_create;
-    bindings[63].target = "sys.str.utf8ByteCount";
-    bindings[63].handler = native_syscall_str_utf8_byte_count;
     bindings[64].target = "sys.console.write";
     bindings[64].handler = native_syscall_console_write;
     bindings[65].target = "sys.console.writeLine";

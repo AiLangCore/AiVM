@@ -33,9 +33,7 @@ int main(void)
     AivmValue bool_string_string_args[3];
     AivmValue int_string_string_args[3];
     AivmValue str_args[3];
-    AivmValue utf8_count_args[1];
     AivmValue bytes_range_args[3];
-    AivmValue str_pair_args[2];
     AivmValue process_spawn_args[4];
     AivmValue image_decode_args[2];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
@@ -721,9 +719,6 @@ int main(void)
     if (expect(aivm_syscall_contract_capability("sys.fs.file.openRead") == AIVM_SYSCALL_CAPABILITY_FILESYSTEM) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_capability("sys.str.substring") == AIVM_SYSCALL_CAPABILITY_CORE) != 0) {
-        return 1;
-    }
     if (expect(aivm_syscall_contract_capability("sys.unknown") == AIVM_SYSCALL_CAPABILITY_NONE) != 0) {
         return 1;
     }
@@ -891,79 +886,6 @@ int main(void)
         return 1;
     }
 
-    utf8_count_args[0] = aivm_value_string("abc");
-    if (expect(aivm_syscall_contract_validate("sys.str.utf8ByteCount", utf8_count_args, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(26U, utf8_count_args, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-
-    str_args[0] = aivm_value_string("hello");
-    str_args[1] = aivm_value_int(1);
-    str_args[2] = aivm_value_int(3);
-    if (expect(aivm_syscall_contract_validate("sys.str.substring", str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(59U, str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(60U, str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    str_args[0] = aivm_value_string("hello");
-    str_args[1] = aivm_value_string("ll");
-    str_args[2] = aivm_value_int(0);
-    if (expect(aivm_syscall_contract_validate("sys.str.find", str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(116U, str_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    int_arg[0] = aivm_value_int(0x263A);
-    if (expect(aivm_syscall_contract_validate("sys.str.fromCodePoint", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(111U, int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    console_write_arg[0] = aivm_value_string("263A");
-    if (expect(aivm_syscall_contract_validate("sys.str.decodeUnicodeHex4", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(112U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    str_pair_args[0] = aivm_value_string("D83D");
-    str_pair_args[1] = aivm_value_string("DE42");
-    if (expect(aivm_syscall_contract_validate("sys.str.decodeUnicodeSurrogatePairHex4", str_pair_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(113U, str_pair_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    str_args[1] = aivm_value_string("bad");
-    if (expect(aivm_syscall_contract_validate("sys.str.remove", str_args, 3U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
-        return 1;
-    }
     bytes_range_args[0] = aivm_value_int(1);
     bytes_range_args[1] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
     bytes_range_args[2] = aivm_value_void();

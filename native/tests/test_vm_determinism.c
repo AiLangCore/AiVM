@@ -7,17 +7,19 @@ static int expect(int condition)
     return condition ? 0 : 1;
 }
 
-static int host_utf8_count_constant(
+static int host_remote_call_constant(
     const char* target,
     const AivmValue* args,
     size_t arg_count,
     AivmValue* result)
 {
     (void)target;
-    if (arg_count != 1U) {
+    if (arg_count != 3U) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
-    if (args[0].type != AIVM_VAL_STRING) {
+    if (args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
     *result = aivm_value_int(7);
@@ -153,27 +155,31 @@ int main(void)
         { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 4 },
         { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
-        { .type = AIVM_VAL_STRING, .string_value = "a😀bc" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 },
         { .type = AIVM_VAL_INT, .int_value = 5 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 9U,
+        .instruction_count = 11U,
         .constants = constants,
-        .constant_count = 3U,
+        .constant_count = 5U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str.utf8ByteCount", host_utf8_count_constant }
+        { "sys.remote.call", host_remote_call_constant }
     };
     int iteration;
     size_t merge_checksum_a = 0U;

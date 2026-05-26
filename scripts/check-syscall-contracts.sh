@@ -63,18 +63,11 @@ fi
 
 cut -d ' ' -f 2- "${CONTRACT_LIST}" | grep -E '^sys\.(str|bytes)\.' | sort > "${DETERMINISTIC_ACTUAL}" || true
 cat > "${DETERMINISTIC_ALLOWED}" <<'EOF'
-sys.str.decodeUnicodeHex4
-sys.str.decodeUnicodeSurrogatePairHex4
-sys.str.find
-sys.str.fromCodePoint
-sys.str.remove
-sys.str.substring
-sys.str.utf8ByteCount
 EOF
 
 if ! diff -u "${DETERMINISTIC_ALLOWED}" "${DETERMINISTIC_ACTUAL}" >/dev/null; then
   echo "syscall check: deterministic utility syscall surface changed" >&2
-  echo "syscall check: sys.str.* contracts are temporary; sys.bytes.* contracts have been removed" >&2
+  echo "syscall check: deterministic text/bytes syscall contracts have been removed" >&2
   diff -u "${DETERMINISTIC_ALLOWED}" "${DETERMINISTIC_ACTUAL}" >&2 || true
   exit 1
 fi

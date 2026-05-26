@@ -41,7 +41,7 @@ Program#p1 {
               Add#a3 {
                 Lit#i9(value=1)
                 Call#c2(target=strLen) {
-                  Call#c3(target=sys.str.remove) {
+                  StringRemove#c3 {
                     Var#v8(name=textValue)
                     Lit#i10(value=0)
                     Lit#i11(value=1)
@@ -59,7 +59,7 @@ Program#p1 {
     Fn#f3(params=text,pattern,index) {
       Block#b11 {
         Return#r7 {
-          Call#c4(target=sys.str.find) {
+          StringFind#c4 {
             Var#v9(name=text)
             Var#v10(name=pattern)
             Var#v11(name=index)

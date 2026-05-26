@@ -57,7 +57,7 @@ Status: next priority after package namespace/registry hardening. Package
 metadata and registry validation are no longer the active readiness thread
 unless a CI or release blocker appears.
 
-- [ ] Review `sys.str.*` contracts and move deterministic behavior into AiLang
+- [x] Review `sys.str.*` contracts and move deterministic behavior into AiLang
   core libraries.
 - [x] Review `sys.bytes.*` contracts and move deterministic behavior into
   AiLang core libraries.
@@ -65,8 +65,8 @@ unless a CI or release blocker appears.
 - [ ] Keep `sys.crypto.randomBytes` as host-boundary because host entropy is
   nondeterministic.
 - [x] Update AiLang callers before removing moved syscalls.
-- [x] Remove moved `sys.bytes.*` syscall contracts completely; do not leave compatibility
-  adapters before the first major or minor release.
+- [x] Remove moved `sys.str.*` and `sys.bytes.*` syscall contracts completely;
+  do not leave compatibility adapters before the first major or minor release.
 
 Current audit:
 
@@ -100,9 +100,8 @@ Current audit:
   the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
 - AiLang CI now rejects new direct `sys.str.*` or `sys.bytes.*` usage outside
   syscall-level regression files.
-- AiVM syscall contract checks allowlist only the remaining temporary
-  `sys.str.*` contracts and fail if new deterministic utility contracts are
-  added while contract-table removal is pending.
+- AiVM syscall contract checks fail if deterministic text/bytes utility
+  contracts are reintroduced.
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
@@ -117,8 +116,8 @@ Migration order:
 3. Update compiler/runtime callers to use the AiLang library surface or a
    compiler-owned internal helper, not `sys.*`.
 4. Remove the migrated syscall contracts, docs, and tests completely.
-5. Add a guard that rejects new deterministic `sys.str.*` and `sys.bytes.*`
-   usage outside syscall ABI regression files.
+5. Keep guard coverage that rejects reintroduced deterministic `sys.str.*` and
+   `sys.bytes.*` syscall contracts.
 
 ## Production Defaults
 

@@ -203,13 +203,6 @@ as a syscall requires a written host-boundary reason stronger than convenience.
 | `sys.crypto.sha1` | AiLang core library | Deterministic hashing. |
 | `sys.crypto.sha256` | AiLang core library | Deterministic hashing. |
 | `sys.crypto.hmacSha256` | AiLang core library | Deterministic hashing. |
-| `sys.str.utf8ByteCount` | AiLang core library | Deterministic string inspection. |
-| `sys.str.substring` | AiLang core library | Deterministic string transformation. |
-| `sys.str.remove` | AiLang core library | Deterministic string transformation. |
-| `sys.str.find` | AiLang core library | Deterministic string search. |
-| `sys.str.fromCodePoint` | AiLang core library | Deterministic string construction. |
-| `sys.str.decodeUnicodeHex4` | AiLang core library | Deterministic string decoding. |
-| `sys.str.decodeUnicodeSurrogatePairHex4` | AiLang core library | Deterministic string decoding. |
 
 ### Production Hardening Work
 
@@ -337,20 +330,12 @@ baseline.
 | 87 | `sys.debug.assert` | 3 | `void` |
 | 88 | `sys.debug.artifactWrite` | 2 | `bool` |
 | 89 | `sys.debug.traceAsync` | 3 | `void` |
-| 26 | `sys.str.utf8ByteCount` | 1 | `int` |
-| 59 | `sys.str.substring` | 3 | `string` |
-| 60 | `sys.str.remove` | 3 | `string` |
-| 116 | `sys.str.find` | 3 | `int` |
-| 111 | `sys.str.fromCodePoint` | 1 | `string` |
-| 112 | `sys.str.decodeUnicodeHex4` | 1 | `string` |
-| 113 | `sys.str.decodeUnicodeSurrogatePairHex4` | 2 | `string` |
 | 115 | `sys.debug.taskReclaimStats` | 0 | `node` |
 
 ## Review Notes
 
-Several current contracts are deterministic utility-style operations, especially
-`sys.str.*`. They are listed here because they currently
-exist, not because they are automatically endorsed as permanent VM syscalls.
-Before the first major or minor release, each one should be reviewed and either
-kept with explicit host-boundary justification or moved into AiLang core
-libraries.
+Deterministic text and bytes helpers are no longer public VM syscalls. They are
+owned by AiLang core libraries and lower through intrinsic bytecode operations.
+Before the first major or minor release, the remaining deterministic crypto
+helpers should either move into AiLang libraries or receive explicit
+host-boundary justification.

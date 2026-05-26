@@ -5,7 +5,7 @@ Program {
     Fn(params=_) {
       Block {
         Return {
-          Call(target=sys.str.find) {
+          StringFind {
             Lit(value="76103")
             Lit(value="7")
             Lit(value=0)

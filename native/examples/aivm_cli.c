@@ -52,7 +52,6 @@
 #endif
 
 static uint8_t* g_cli_bytes_scratch = NULL;
-static char* g_cli_string_scratch = NULL;
 static AivmVm* g_native_active_vm = NULL;
 #if defined(AIVM_DEBUG_RUNTIME)
 static FILE* g_debug_stdout_capture = NULL;
@@ -724,98 +723,6 @@ static int aivm_cli_file_read(
     free(g_cli_bytes_scratch);
     g_cli_bytes_scratch = bytes;
     *result = aivm_value_bytes(g_cli_bytes_scratch, byte_count);
-    return AIVM_SYSCALL_OK;
-}
-
-static int aivm_cli_str_find(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    const char* haystack;
-    const char* needle;
-    const char* found;
-    size_t start;
-    (void)target;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 3U ||
-        args == NULL ||
-        args[0].type != AIVM_VAL_STRING ||
-        args[1].type != AIVM_VAL_STRING ||
-        args[2].type != AIVM_VAL_INT ||
-        args[0].string_value == NULL ||
-        args[1].string_value == NULL ||
-        args[2].int_value < 0) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    haystack = args[0].string_value;
-    needle = args[1].string_value;
-    start = (size_t)args[2].int_value;
-    if (start > strlen(haystack)) {
-        *result = aivm_value_int(-1);
-        return AIVM_SYSCALL_OK;
-    }
-    found = strstr(haystack + start, needle);
-    *result = aivm_value_int(found == NULL ? -1 : (int64_t)(found - haystack));
-    return AIVM_SYSCALL_OK;
-}
-
-static int aivm_cli_str_substring(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    const char* text;
-    size_t text_length;
-    size_t start;
-    size_t length;
-    char* output;
-    (void)target;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 3U ||
-        args == NULL ||
-        args[0].type != AIVM_VAL_STRING ||
-        args[1].type != AIVM_VAL_INT ||
-        args[2].type != AIVM_VAL_INT ||
-        args[0].string_value == NULL) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    text = args[0].string_value;
-    text_length = strlen(text);
-    if (args[1].int_value <= 0) {
-        start = 0U;
-    } else if ((uint64_t)args[1].int_value >= (uint64_t)text_length) {
-        start = text_length;
-    } else {
-        start = (size_t)args[1].int_value;
-    }
-    if (args[2].int_value <= 0) {
-        length = 0U;
-    } else if ((uint64_t)args[2].int_value > (uint64_t)(text_length - start)) {
-        length = text_length - start;
-    } else {
-        length = (size_t)args[2].int_value;
-    }
-    output = (char*)malloc(length + 1U);
-    if (output == NULL) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    if (length > 0U) {
-        memcpy(output, text + start, length);
-    }
-    output[length] = '\0';
-    free(g_cli_string_scratch);
-    g_cli_string_scratch = output;
-    *result = aivm_value_string(g_cli_string_scratch);
     return AIVM_SYSCALL_OK;
 }
 
@@ -1904,9 +1811,7 @@ static int execute_bytes(
         { "sys.fs.dir.delete", aivm_cli_dir_delete },
         { "sys.fs.file.delete", aivm_cli_file_delete },
         { "sys.fs.file.write", aivm_cli_file_write },
-        { "sys.fs.file.read", aivm_cli_file_read },
-        { "sys.str.find", aivm_cli_str_find },
-        { "sys.str.substring", aivm_cli_str_substring }
+        { "sys.fs.file.read", aivm_cli_file_read }
     };
 
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);

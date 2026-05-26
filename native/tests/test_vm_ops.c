@@ -67,54 +67,22 @@ static int host_slow_noop(
     return AIVM_SYSCALL_OK;
 }
 
-static int host_str_substring(
+static int host_remote_call_echo_int(
     const char* target,
     const AivmValue* args,
     size_t arg_count,
     AivmValue* result)
 {
     (void)target;
-    if (arg_count != 3U) {
+    if (args == NULL || arg_count != 3U) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
-    if (args[0].type != AIVM_VAL_STRING || args[1].type != AIVM_VAL_INT || args[2].type != AIVM_VAL_INT) {
+    if (args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
-    *result = aivm_value_string("sub_ok");
-    return AIVM_SYSCALL_OK;
-}
-
-static int host_str_remove(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    (void)target;
-    if (arg_count != 3U) {
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    if (args[0].type != AIVM_VAL_STRING || args[1].type != AIVM_VAL_INT || args[2].type != AIVM_VAL_INT) {
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    *result = aivm_value_string("rem_ok");
-    return AIVM_SYSCALL_OK;
-}
-
-static int host_str_utf8_byte_count(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    (void)target;
-    if (arg_count != 1U) {
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    if (args[0].type != AIVM_VAL_STRING) {
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    *result = aivm_value_int(7);
+    *result = aivm_value_int(args[2].int_value);
     return AIVM_SYSCALL_OK;
 }
 
@@ -1734,81 +1702,7 @@ static int test_call_sys_elapsed_limit_sets_vm_error(void)
     return 0;
 }
 
-static int test_call_sys_string_contracts_success(void)
-{
-    static AivmVm vm;
-    AivmValue out;
-    static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 4 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 5 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 6 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 7 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
-    };
-    static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
-        { .type = AIVM_VAL_STRING, .string_value = "abcde" },
-        { .type = AIVM_VAL_INT, .int_value = 1 },
-        { .type = AIVM_VAL_INT, .int_value = 2 },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.remove" },
-        { .type = AIVM_VAL_STRING, .string_value = "vwxyz" },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
-        { .type = AIVM_VAL_STRING, .string_value = "a😀bc" }
-    };
-    static const AivmSyscallBinding bindings[] = {
-        { "sys.str.substring", host_str_substring },
-        { "sys.str.remove", host_str_remove },
-        { "sys.str.utf8ByteCount", host_str_utf8_byte_count }
-    };
-    static const AivmProgram program = {
-        .instructions = instructions,
-        .instruction_count = 14U,
-        .constants = constants,
-        .constant_count = 8U,
-        .format_version = 0U,
-        .format_flags = 0U,
-        .section_count = 0U
-    };
-
-    aivm_init_with_syscalls(&vm, &program, bindings, 3U);
-    aivm_run(&vm);
-    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
-        return 1;
-    }
-    if (expect(vm.stack_count == 3U) != 0) {
-        return 1;
-    }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
-        return 1;
-    }
-    if (expect(out.type == AIVM_VAL_INT && out.int_value == 7) != 0) {
-        return 1;
-    }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
-        return 1;
-    }
-    if (expect(aivm_value_equals(out, aivm_value_string("rem_ok")) == 1) != 0) {
-        return 1;
-    }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
-        return 1;
-    }
-    if (expect(aivm_value_equals(out, aivm_value_string("sub_ok")) == 1) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
-static int test_call_sys_string_contract_type_mismatch_sets_error(void)
+static int test_call_sys_contract_type_mismatch_sets_error(void)
 {
     static AivmVm vm;
     static const AivmInstruction instructions[] = {
@@ -1828,13 +1722,13 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
         { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
-        { .type = AIVM_VAL_STRING, .string_value = "abcde" },
-        { .type = AIVM_VAL_STRING, .string_value = "bad_start_type" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_INT, .int_value = 404 },
         { .type = AIVM_VAL_INT, .int_value = 2 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str.substring", host_str_substring }
+        { "sys.remote.call", host_remote_call_echo_int }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -1857,10 +1751,10 @@ static int test_call_sys_string_contract_type_mismatch_sets_error(void)
     if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS004/AIVMC003: Syscall argument type was invalid.") != NULL) != 0) {
         return 1;
     }
-    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.str.substring") != NULL) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.remote.call") != NULL) != 0) {
         return 1;
     }
-    if (expect(strstr(aivm_vm_error_detail(&vm), "local0=string(\"abcde\")") != NULL) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "local0=string(\"cap.remote\")") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -1873,22 +1767,23 @@ static int test_call_sys_missing_binding_sets_unbound_error(void)
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_CONST, .operand_int = 2 },
-        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" },
-        { .type = AIVM_VAL_STRING, .string_value = "abcde" },
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str.remove", host_str_remove }
+        { "sys.ui.createWindow", host_remote_call_echo_int }
     };
     static const AivmProgram program = {
         .instructions = instructions,
         .instruction_count = 5U,
         .constants = constants,
-        .constant_count = 3U,
+        .constant_count = 4U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -1905,7 +1800,7 @@ static int test_call_sys_missing_binding_sets_unbound_error(void)
     if (expect(strstr(aivm_vm_error_detail(&vm), "AIVMS006: Syscall target is known but has no host binding.") != NULL) != 0) {
         return 1;
     }
-    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.str.substring") != NULL) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "target=sys.remote.call") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -1921,7 +1816,7 @@ static int test_call_sys_does_not_recover_non_syscall_string_target_from_args(vo
     };
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = "not_a_syscall" },
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.substring" }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -2458,22 +2353,26 @@ static int test_async_call_sys_and_await_roundtrip(void)
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
-        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 3 },
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.str.utf8ByteCount" },
-        { .type = AIVM_VAL_STRING, .string_value = "a😀bc" }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.str.utf8ByteCount", host_str_utf8_byte_count }
+        { "sys.remote.call", host_remote_call_echo_int }
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 5U,
+        .instruction_count = 7U,
         .constants = constants,
-        .constant_count = 2U,
+        .constant_count = 4U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -4324,10 +4223,7 @@ int main(void)
     if (test_call_sys_elapsed_limit_sets_vm_error() != 0) {
         return 1;
     }
-    if (test_call_sys_string_contracts_success() != 0) {
-        return 1;
-    }
-    if (test_call_sys_string_contract_type_mismatch_sets_error() != 0) {
+    if (test_call_sys_contract_type_mismatch_sets_error() != 0) {
         return 1;
     }
     if (test_call_sys_missing_binding_sets_unbound_error() != 0) {
