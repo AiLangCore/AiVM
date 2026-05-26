@@ -3817,6 +3817,23 @@ void aivm_init_with_syscalls_and_argv(
     aivm_reset_state(vm);
 }
 
+int aivm_collect_safe_point(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->node_count > 0U) {
+        if (!compact_node_arenas_with_map(vm, NULL, 0U, NULL)) {
+            return 0;
+        }
+        vm->node_allocations_since_gc = 0U;
+    }
+    if (vm->string_arena_used > 0U && !compact_string_arena(vm)) {
+        return 0;
+    }
+    return 1;
+}
+
 void aivm_halt(AivmVm* vm)
 {
     if (vm == NULL || vm->program == NULL) {

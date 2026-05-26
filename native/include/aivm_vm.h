@@ -287,6 +287,7 @@ void aivm_init_with_syscalls_and_argv(
     size_t process_argv_count);
 void aivm_reset_state(AivmVm* vm);
 void aivm_dispose(AivmVm* vm);
+int aivm_collect_safe_point(AivmVm* vm);
 void aivm_halt(AivmVm* vm);
 int aivm_stack_push(AivmVm* vm, AivmValue value);
 int aivm_stack_pop(AivmVm* vm, AivmValue* out_value);

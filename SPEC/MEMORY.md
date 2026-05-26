@@ -217,6 +217,7 @@ Required safe points include:
 
 - before arena capacity failure is reported
 - before proactive node compaction
+- explicit `aivm_collect_safe_point` calls from host/tooling phase boundaries
 - at explicit VM reset/dispose boundaries
 - at allocation paths that can prove all temporary handles are protected
 - at deterministic compiler/tooling phase boundaries

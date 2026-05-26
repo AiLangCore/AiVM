@@ -176,7 +176,7 @@ requirement.
   construction, and compiler analysis passes.
 - [ ] Beta: reduce retained parser intermediate nodes so compiler source
   parsing does not depend on repeatedly raising arena ceilings.
-- [ ] Beta: formalize deterministic safe-point compaction beyond allocation
+- [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [ ] Beta: add worker-local heap strategy for mechanical background work.
 - [ ] Beta: add immutable message passing through deterministic queue dispatch.
@@ -246,8 +246,10 @@ These are the immediate hardening tasks before beta:
 - Parser/compiler scratch arenas: route parser/compiler internals through
   scratch storage where possible while keeping final AST nodes in semantic node
   storage.
-- Safe-point compaction: define deterministic safe points for allocation,
-  compiler/tooling phase boundaries, and worker result handoff.
+- Safe-point compaction: `aivm_collect_safe_point` exposes explicit
+  deterministic compaction for phase boundaries and tests cover reclamation
+  below proactive pressure thresholds. Remaining work is wiring it into
+  compiler/tooling phase boundaries and worker result handoff.
 - Worker-local heaps and messaging: document and implement worker-local
   mechanical storage plus immutable deterministic queue messages.
 - Shared immutable module cache: design read-only module/cache storage that can
