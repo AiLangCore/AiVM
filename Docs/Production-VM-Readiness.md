@@ -248,8 +248,10 @@ These are the immediate hardening tasks before beta:
   storage.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
   deterministic compaction for phase boundaries and tests cover reclamation
-  below proactive pressure thresholds. Remaining work is wiring it into
-  compiler/tooling phase boundaries and worker result handoff.
+  below proactive pressure thresholds. `aivm_execute_program*` now runs the
+  safe point after successful execution so CLI/tooling and embedders compact at
+  a deterministic run-complete boundary. Remaining work is wiring worker result
+  handoff boundaries.
 - Worker-local heaps and messaging: document and implement worker-local
   mechanical storage plus immutable deterministic queue messages.
 - Shared immutable module cache: design read-only module/cache storage that can

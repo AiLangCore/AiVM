@@ -1,12 +1,19 @@
 #include <string.h>
+#include <stdio.h>
 
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 
-static int expect(int condition)
+static int expect_line(int condition, int line)
 {
-    return condition ? 0 : 1;
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
 }
+
+#define expect(condition) expect_line((condition), __LINE__)
 
 typedef struct {
     size_t enqueued_count;
@@ -25,17 +32,21 @@ typedef struct {
     size_t drained_checksum;
 } StressQueueState;
 
-static int host_ui_get_window_size(
+static int host_remote_call(
     const char* target,
     const AivmValue* args,
     size_t arg_count,
     AivmValue* result)
 {
     (void)target;
-    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+    if (args == NULL ||
+        arg_count != 3U ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
-    *result = aivm_value_node(320200);
+    *result = aivm_value_int(args[2].int_value);
     return AIVM_SYSCALL_OK;
 }
 
@@ -264,21 +275,25 @@ int main(void)
     static const AivmInstruction instructions_sys[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants_sys[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.getWindowSize" },
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.ui.getWindowSize", host_ui_get_window_size }
+        { "sys.remote.call", host_remote_call }
     };
     static const AivmProgram program_sys = {
         .instructions = instructions_sys,
-        .instruction_count = 4U,
+        .instruction_count = 6U,
         .constants = constants_sys,
-        .constant_count = 2U,
+        .constant_count = 4U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -355,6 +370,40 @@ int main(void)
         "one",
         "two"
     };
+    static AivmInstruction instructions_safe_point[128U * 3U + 3U];
+    AivmValue constants_safe_point[1];
+    AivmProgram program_safe_point;
+    size_t ip = 0U;
+    size_t i;
+    size_t transient_nodes = 128U;
+
+    constants_safe_point[0] = aivm_value_string("tmp");
+    for (i = 0U; i < transient_nodes; i += 1U) {
+        instructions_safe_point[ip].opcode = AIVM_OP_CONST;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+        instructions_safe_point[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+        instructions_safe_point[ip].opcode = AIVM_OP_POP;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions_safe_point[ip].opcode = AIVM_OP_CONST;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+    instructions_safe_point[ip].opcode = AIVM_OP_MAKE_BLOCK;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+    instructions_safe_point[ip].opcode = AIVM_OP_HALT;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program_safe_point, 0, sizeof(program_safe_point));
+    program_safe_point.instructions = instructions_safe_point;
+    program_safe_point.instruction_count = ip;
+    program_safe_point.constants = constants_safe_point;
+    program_safe_point.constant_count = 1U;
 
     if (expect(aivm_execute_program(&program_ok, &vm) == 1) != 0) {
         return 1;
@@ -441,6 +490,30 @@ int main(void)
         return 1;
     }
     if (expect(vm.stack[11].type == AIVM_VAL_BOOL && vm.stack[11].bool_value == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_execute_program(&program_safe_point, &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == transient_nodes) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack[0].type == AIVM_VAL_NODE && vm.stack[0].node_handle == 2) != 0) {
         return 1;
     }
 

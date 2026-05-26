@@ -1,21 +1,33 @@
+#include <stdio.h>
+
 #include "aivm_c_api.h"
 
-static int expect(int condition)
+static int expect_line(int condition, int line)
 {
-    return condition ? 0 : 1;
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
 }
 
-static int host_ui_get_window_size(
+#define expect(condition) expect_line((condition), __LINE__)
+
+static int host_remote_call(
     const char* target,
     const AivmValue* args,
     size_t arg_count,
     AivmValue* result)
 {
     (void)target;
-    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
+    if (args == NULL ||
+        arg_count != 3U ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
         return AIVM_SYSCALL_ERR_INVALID;
     }
-    *result = aivm_value_node(111222);
+    *result = aivm_value_int(args[2].int_value);
     return AIVM_SYSCALL_OK;
 }
 
@@ -32,7 +44,7 @@ int main(void)
         { .opcode = (AivmOpcode)99, .operand_int = 0 }
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.ui.getWindowSize", host_ui_get_window_size }
+        { "sys.remote.call", host_remote_call }
     };
     static const uint8_t bad_magic_program[16] = {
         'X', 'I', 'B', 'C',
@@ -56,18 +68,22 @@ int main(void)
     static const AivmInstruction call_sys_instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
-        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue call_sys_constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.ui.getWindowSize" },
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
     };
     static const AivmProgram call_sys_program = {
         .instructions = call_sys_instructions,
-        .instruction_count = 4U,
+        .instruction_count = 6U,
         .constants = call_sys_constants,
-        .constant_count = 2U,
+        .constant_count = 4U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -124,9 +140,9 @@ int main(void)
 
     result = aivm_c_execute_instructions_with_constants(
         call_sys_instructions,
-        4U,
+        6U,
         call_sys_constants,
-        2U);
+        4U);
     if (expect(result.ok == 0) != 0) {
         return 1;
     }
@@ -136,9 +152,9 @@ int main(void)
 
     result = aivm_c_execute_instructions_with_syscalls(
         call_sys_instructions,
-        4U,
+        6U,
         call_sys_constants,
-        2U,
+        4U,
         bindings,
         1U);
     if (expect(result.ok == 1) != 0) {

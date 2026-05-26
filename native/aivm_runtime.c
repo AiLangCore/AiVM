@@ -80,5 +80,9 @@ int aivm_execute_program_with_syscalls_and_argv(
         return 0;
     }
 
+    if (!aivm_collect_safe_point(vm_out)) {
+        return 0;
+    }
+
     return 1;
 }
