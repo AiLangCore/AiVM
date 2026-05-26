@@ -727,54 +727,6 @@ static int aivm_cli_file_read(
     return AIVM_SYSCALL_OK;
 }
 
-static int aivm_cli_bytes_from_utf8_string(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    (void)target;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    *result = aivm_value_bytes((const uint8_t*)args[0].string_value, strlen(args[0].string_value));
-    return AIVM_SYSCALL_OK;
-}
-
-static int aivm_cli_bytes_to_utf8_string(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
-{
-    char* text;
-    (void)target;
-    if (result == NULL) {
-        return AIVM_SYSCALL_ERR_NULL_RESULT;
-    }
-    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_BYTES) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    text = (char*)malloc(args[0].bytes_value.length + 1U);
-    if (text == NULL) {
-        *result = aivm_value_void();
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    if (args[0].bytes_value.length > 0U) {
-        memcpy(text, args[0].bytes_value.data, args[0].bytes_value.length);
-    }
-    text[args[0].bytes_value.length] = '\0';
-    free(g_cli_string_scratch);
-    g_cli_string_scratch = text;
-    *result = aivm_value_string(g_cli_string_scratch);
-    return AIVM_SYSCALL_OK;
-}
-
 static int aivm_cli_str_find(
     const char* target,
     const AivmValue* args,
@@ -1953,8 +1905,6 @@ static int execute_bytes(
         { "sys.fs.file.delete", aivm_cli_file_delete },
         { "sys.fs.file.write", aivm_cli_file_write },
         { "sys.fs.file.read", aivm_cli_file_read },
-        { "sys.bytes.fromUtf8String", aivm_cli_bytes_from_utf8_string },
-        { "sys.bytes.toUtf8String", aivm_cli_bytes_to_utf8_string },
         { "sys.str.find", aivm_cli_str_find },
         { "sys.str.substring", aivm_cli_str_substring }
     };

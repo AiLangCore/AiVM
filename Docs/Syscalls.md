@@ -210,14 +210,6 @@ as a syscall requires a written host-boundary reason stronger than convenience.
 | `sys.str.fromCodePoint` | AiLang core library | Deterministic string construction. |
 | `sys.str.decodeUnicodeHex4` | AiLang core library | Deterministic string decoding. |
 | `sys.str.decodeUnicodeSurrogatePairHex4` | AiLang core library | Deterministic string decoding. |
-| `sys.bytes.length` | AiLang core library | Deterministic byte inspection. |
-| `sys.bytes.fromBase64` | AiLang core library | Deterministic decoding. |
-| `sys.bytes.toBase64` | AiLang core library | Deterministic encoding. |
-| `sys.bytes.at` | AiLang core library | Deterministic byte inspection. |
-| `sys.bytes.slice` | AiLang core library | Deterministic byte transformation. |
-| `sys.bytes.concat` | AiLang core library | Deterministic byte transformation. |
-| `sys.bytes.toUtf8String` | AiLang core library | Deterministic decoding. |
-| `sys.bytes.fromUtf8String` | AiLang core library | Deterministic encoding. |
 
 ### Production Hardening Work
 
@@ -352,20 +344,12 @@ baseline.
 | 111 | `sys.str.fromCodePoint` | 1 | `string` |
 | 112 | `sys.str.decodeUnicodeHex4` | 1 | `string` |
 | 113 | `sys.str.decodeUnicodeSurrogatePairHex4` | 2 | `string` |
-| 97 | `sys.bytes.length` | 1 | `int` |
-| 98 | `sys.bytes.fromBase64` | 1 | `bytes` |
-| 99 | `sys.bytes.toBase64` | 1 | `string` |
-| 100 | `sys.bytes.at` | 2 | `int` |
-| 101 | `sys.bytes.slice` | 3 | `bytes` |
-| 102 | `sys.bytes.concat` | 2 | `bytes` |
-| 114 | `sys.bytes.toUtf8String` | 1 | `string` |
-| 118 | `sys.bytes.fromUtf8String` | 1 | `bytes` |
 | 115 | `sys.debug.taskReclaimStats` | 0 | `node` |
 
 ## Review Notes
 
 Several current contracts are deterministic utility-style operations, especially
-`sys.str.*` and `sys.bytes.*`. They are listed here because they currently
+`sys.str.*`. They are listed here because they currently
 exist, not because they are automatically endorsed as permanent VM syscalls.
 Before the first major or minor release, each one should be reviewed and either
 kept with explicit host-boundary justification or moved into AiLang core

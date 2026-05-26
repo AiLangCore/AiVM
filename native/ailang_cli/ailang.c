@@ -4449,7 +4449,7 @@ static int run_native_compiled_program(
     size_t process_argv_count,
     const NativeDebugOptions* debug_options)
 {
-    AivmSyscallBinding bindings[112];
+    AivmSyscallBinding bindings[112] = { 0 };
     size_t binding_count;
     static AivmVm vm;
     int ok;
@@ -4511,18 +4511,6 @@ static int run_native_compiled_program(
     bindings[2].handler = native_syscall_stdout_write_line;
     bindings[3].target = "sys.process.args";
     bindings[3].handler = native_syscall_process_argv;
-    bindings[4].target = "sys.bytes.length";
-    bindings[4].handler = native_syscall_bytes_length;
-    bindings[5].target = "sys.bytes.at";
-    bindings[5].handler = native_syscall_bytes_at;
-    bindings[6].target = "sys.bytes.slice";
-    bindings[6].handler = native_syscall_bytes_slice;
-    bindings[7].target = "sys.bytes.concat";
-    bindings[7].handler = native_syscall_bytes_concat;
-    bindings[8].target = "sys.bytes.fromBase64";
-    bindings[8].handler = native_syscall_bytes_from_base64;
-    bindings[9].target = "sys.bytes.toBase64";
-    bindings[9].handler = native_syscall_bytes_to_base64;
     bindings[10].target = "sys.fs.file.delete";
     bindings[10].handler = native_syscall_fs_file_delete;
     bindings[11].target = "sys.fs.dir.delete";
@@ -4545,8 +4533,6 @@ static int run_native_compiled_program(
     bindings[19].handler = native_syscall_str_decode_unicode_hex4;
     bindings[20].target = "sys.str.decodeUnicodeSurrogatePairHex4";
     bindings[20].handler = native_syscall_str_decode_unicode_surrogate_pair_hex4;
-    bindings[21].target = "sys.bytes.toUtf8String";
-    bindings[21].handler = native_syscall_bytes_to_utf8_string;
     bindings[22].target = "sys.str.substring";
     bindings[22].handler = native_syscall_str_substring;
     bindings[23].target = "sys.str.find";
@@ -4708,8 +4694,6 @@ static int run_native_compiled_program(
     bindings[100].handler = native_syscall_host_open_default;
     bindings[101].target = "sys.image.decodeToRgbaBase64";
     bindings[101].handler = native_syscall_image_decode_to_rgba_base64;
-    bindings[102].target = "sys.bytes.fromUtf8String";
-    bindings[102].handler = native_syscall_bytes_from_utf8_string;
     bindings[103].target = "sys.fs.file.openRead";
     bindings[103].handler = native_syscall_fs_file_open_read;
     bindings[104].target = "sys.fs.file.readChunk";
@@ -5051,6 +5035,10 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(MAKE_MAP)
     MAP_OP(MAKE_NODE_EMPTY)
     MAP_OP(APPEND_ATTR)
+    MAP_OP(BYTES_FROM_UTF8_STRING)
+    MAP_OP(BYTES_TO_UTF8_STRING)
+    MAP_OP(BYTES_FROM_BASE64)
+    MAP_OP(BYTES_TO_BASE64)
 #undef MAP_OP
     return 0;
 }

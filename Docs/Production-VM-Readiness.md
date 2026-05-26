@@ -59,13 +59,13 @@ unless a CI or release blocker appears.
 
 - [ ] Review `sys.str.*` contracts and move deterministic behavior into AiLang
   core libraries.
-- [ ] Review `sys.bytes.*` contracts and move deterministic behavior into
+- [x] Review `sys.bytes.*` contracts and move deterministic behavior into
   AiLang core libraries.
 - [ ] Review deterministic crypto helpers such as base64 and hashes.
 - [ ] Keep `sys.crypto.randomBytes` as host-boundary because host entropy is
   nondeterministic.
-- [ ] Update AiLang callers before removing moved syscalls.
-- [ ] Remove moved syscall contracts completely; do not leave compatibility
+- [x] Update AiLang callers before removing moved syscalls.
+- [x] Remove moved `sys.bytes.*` syscall contracts completely; do not leave compatibility
   adapters before the first major or minor release.
 
 Current audit:
@@ -100,9 +100,9 @@ Current audit:
   the staged `std.bytes` surface instead of direct `sys.bytes.*` calls.
 - AiLang CI now rejects new direct `sys.str.*` or `sys.bytes.*` usage outside
   syscall-level regression files.
-- AiVM syscall contract checks now allowlist the current temporary
-  `sys.str.*`/`sys.bytes.*` contracts and fail if new deterministic utility
-  contracts are added while contract-table removal is pending.
+- AiVM syscall contract checks allowlist only the remaining temporary
+  `sys.str.*` contracts and fail if new deterministic utility contracts are
+  added while contract-table removal is pending.
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
 - Deterministic crypto helpers and base64 should become AiLang libraries or
   optional packages unless a measured VM/runtime reason justifies keeping a
@@ -118,7 +118,7 @@ Migration order:
    compiler-owned internal helper, not `sys.*`.
 4. Remove the migrated syscall contracts, docs, and tests completely.
 5. Add a guard that rejects new deterministic `sys.str.*` and `sys.bytes.*`
-   usage outside the active migration files.
+   usage outside syscall ABI regression files.
 
 ## Production Defaults
 

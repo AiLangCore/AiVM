@@ -34,10 +34,7 @@ int main(void)
     AivmValue int_string_string_args[3];
     AivmValue str_args[3];
     AivmValue utf8_count_args[1];
-    AivmValue bytes_arg[1];
-    AivmValue bytes_int_args[2];
     AivmValue bytes_range_args[3];
-    AivmValue two_bytes_args[2];
     AivmValue str_pair_args[2];
     AivmValue process_spawn_args[4];
     AivmValue image_decode_args[2];
@@ -724,7 +721,7 @@ int main(void)
     if (expect(aivm_syscall_contract_capability("sys.fs.file.openRead") == AIVM_SYSCALL_CAPABILITY_FILESYSTEM) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_capability("sys.bytes.slice") == AIVM_SYSCALL_CAPABILITY_CORE) != 0) {
+    if (expect(aivm_syscall_contract_capability("sys.str.substring") == AIVM_SYSCALL_CAPABILITY_CORE) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_capability("sys.unknown") == AIVM_SYSCALL_CAPABILITY_NONE) != 0) {
@@ -963,88 +960,17 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(113U, str_pair_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
-    bytes_arg[0] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
-    if (expect(aivm_syscall_contract_validate("sys.bytes.length", bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(97U, bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.bytes.toBase64", bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.bytes.toUtf8String", bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_STRING) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(114U, bytes_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.bytes.fromBase64", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.bytes.fromUtf8String", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(118U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    bytes_int_args[0] = bytes_arg[0];
-    bytes_int_args[1] = aivm_value_int(1);
-    if (expect(aivm_syscall_contract_validate("sys.bytes.at", bytes_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_INT) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(100U, bytes_int_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    bytes_range_args[0] = bytes_arg[0];
-    bytes_range_args[1] = aivm_value_int(0);
-    bytes_range_args[2] = aivm_value_int(2);
-    if (expect(aivm_syscall_contract_validate("sys.bytes.slice", bytes_range_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(101U, bytes_range_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    two_bytes_args[0] = bytes_arg[0];
-    two_bytes_args[1] = bytes_arg[0];
-    if (expect(aivm_syscall_contract_validate("sys.bytes.concat", two_bytes_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(return_type == AIVM_VAL_BYTES) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(102U, two_bytes_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
     str_args[1] = aivm_value_string("bad");
     if (expect(aivm_syscall_contract_validate("sys.str.remove", str_args, 3U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(99U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
+    bytes_range_args[0] = aivm_value_int(1);
+    bytes_range_args[1] = aivm_value_bytes(raw_bytes, sizeof(raw_bytes));
+    bytes_range_args[2] = aivm_value_void();
+    if (expect(aivm_syscall_contract_validate_id(24U, bytes_range_args, 2U, &return_type) == AIVM_CONTRACT_ERR_ARG_TYPE) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate_id(100U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_COUNT) != 0) {
+    if (expect(aivm_syscall_contract_validate_id(24U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_ERR_ARG_COUNT) != 0) {
         return 1;
     }
 

@@ -548,7 +548,7 @@ static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.bytes.fromBase64" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.fs.file.read" },
         { .type = AIVM_VAL_STRING, .string_value = "ignored" }
     };
     static const AivmProgram program = {
@@ -561,7 +561,7 @@ static int test_reset_clears_bytes_arena_after_syscall_materialization(void)
         .section_count = 0U
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.bytes.fromBase64", host_core_bytes_small }
+        { "sys.fs.file.read", host_core_bytes_small }
     };
 
     aivm_init_with_syscalls(&vm, &program, bindings, 1U);
@@ -656,7 +656,7 @@ static int test_reset_clears_pressure_counters_after_bytes_failure(void)
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_STRING, .string_value = "sys.bytes.fromBase64" },
+        { .type = AIVM_VAL_STRING, .string_value = "sys.fs.file.read" },
         { .type = AIVM_VAL_STRING, .string_value = "ignored" }
     };
     static const AivmProgram program = {
@@ -669,7 +669,7 @@ static int test_reset_clears_pressure_counters_after_bytes_failure(void)
         .section_count = 0U
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.bytes.fromBase64", host_core_bytes_large }
+        { "sys.fs.file.read", host_core_bytes_large }
     };
 
     aivm_init_with_syscalls(&vm, &program, bindings, 1U);
