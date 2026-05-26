@@ -4158,11 +4158,6 @@ static int native_is_valid_utf8_without_nul(const uint8_t* data, size_t len)
     return 1;
 }
 
-typedef struct {
-    uint32_t state[5];
-    uint64_t bit_count;
-    uint8_t buffer[64];
-    size_t buffer_used;
 #include "airun_crypto_host.inc"
 
 #include "airun_text_host.inc"
@@ -4664,16 +4659,6 @@ static int run_native_compiled_program(
     bindings[92].handler = native_syscall_net_udp_send;
     bindings[93].target = "sys.net.dns.lookup";
     bindings[93].handler = native_syscall_net_dns_lookup;
-    bindings[94].target = "sys.crypto.base64Encode";
-    bindings[94].handler = native_syscall_crypto_string_base64_encode;
-    bindings[95].target = "sys.crypto.base64Decode";
-    bindings[95].handler = native_syscall_crypto_string_base64_decode;
-    bindings[96].target = "sys.crypto.sha1";
-    bindings[96].handler = native_syscall_crypto_sha1;
-    bindings[97].target = "sys.crypto.sha256";
-    bindings[97].handler = native_syscall_crypto_sha256;
-    bindings[98].target = "sys.crypto.hmacSha256";
-    bindings[98].handler = native_syscall_crypto_hmac_sha256;
     bindings[99].target = "sys.crypto.randomBytes";
     bindings[99].handler = native_syscall_crypto_random_bytes;
     bindings[100].target = "sys.host.openDefault";

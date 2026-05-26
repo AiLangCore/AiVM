@@ -191,15 +191,16 @@ static int handler_fs_read_file(
     return AIVM_SYSCALL_ERR_INVALID;
 }
 
-static int handler_crypto_base64_encode(
+static int handler_crypto_random_bytes(
     const char* target,
     const AivmValue* args,
     size_t arg_count,
     AivmValue* result)
 {
+    static const uint8_t bytes[] = { 0xAAU };
     (void)target;
-    if (args != NULL && arg_count == 1U && args[0].type == AIVM_VAL_STRING) {
-        *result = aivm_value_string("ZW5jb2RlZA==");
+    if (args != NULL && arg_count == 1U && args[0].type == AIVM_VAL_INT && args[0].int_value == 1) {
+        *result = aivm_value_bytes(bytes, sizeof(bytes));
         return AIVM_SYSCALL_OK;
     }
     *result = aivm_value_void();
@@ -338,7 +339,7 @@ int main(void)
         { "sys.fs.file.read", handler_fs_read_file }
     };
     static const AivmSyscallBinding crypto_bindings[] = {
-        { "sys.crypto.base64Encode", handler_crypto_base64_encode }
+        { "sys.crypto.randomBytes", handler_crypto_random_bytes }
     };
     static const AivmSyscallBinding worker_bindings[] = {
         { "sys.worker.poll", handler_worker_poll },
@@ -526,14 +527,14 @@ int main(void)
     if (expect(result.type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
-    status = aivm_syscall_dispatch_checked(crypto_bindings, 1U, "sys.crypto.base64Encode", &arg, 1U, &result);
+    arg = aivm_value_int(1);
+    status = aivm_syscall_dispatch_checked(crypto_bindings, 1U, "sys.crypto.randomBytes", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK) != 0) {
         return 1;
     }
-    if (expect(result.type == AIVM_VAL_STRING) != 0) {
+    if (expect(result.type == AIVM_VAL_BYTES) != 0) {
         return 1;
     }
-    arg = aivm_value_int(1);
     status = aivm_syscall_dispatch_checked(worker_bindings, 4U, "sys.worker.poll", &arg, 1U, &result);
     if (expect(status == AIVM_SYSCALL_OK && result.type == AIVM_VAL_INT && result.int_value == 0) != 0) {
         return 1;

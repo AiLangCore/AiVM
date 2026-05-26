@@ -415,38 +415,6 @@ int main(void)
     if (expect(return_type == AIVM_VAL_INT) != 0) {
         return 1;
     }
-    if (expect(aivm_syscall_contract_validate("sys.crypto.base64Encode", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(37U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.crypto.base64Decode", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(38U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.crypto.sha1", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(39U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate("sys.crypto.sha256", console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(40U, console_write_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    crypto_hmac_args[0] = aivm_value_string("k");
-    crypto_hmac_args[1] = aivm_value_string("m");
-    if (expect(aivm_syscall_contract_validate("sys.crypto.hmacSha256", crypto_hmac_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
-    if (expect(aivm_syscall_contract_validate_id(41U, crypto_hmac_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
-        return 1;
-    }
     if (expect(aivm_syscall_contract_validate("sys.crypto.randomBytes", int_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
@@ -563,6 +531,8 @@ int main(void)
     if (expect(aivm_syscall_contract_validate("sys.net.udp.send", net_udp_send_args, 4U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    crypto_hmac_args[0] = aivm_value_string("worker.aibc1");
+    crypto_hmac_args[1] = aivm_value_string("entry");
     if (expect(aivm_syscall_contract_validate("sys.worker.start", crypto_hmac_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }

@@ -190,19 +190,12 @@ release bindings.
 | `sys.debug.traceAsync` | `debug` | Emits host debug async trace data. |
 | `sys.debug.taskReclaimStats` | `debug` | Reads host runtime debug counters. |
 
-### Deterministic Library Candidates
+### Removed Deterministic Utilities
 
-These targets are deterministic utility operations. They should be reviewed for
-movement into AiLang core libraries before a major or minor release. Keeping one
-as a syscall requires a written host-boundary reason stronger than convenience.
-
-| Target | Proposed owner | Reason |
-| --- | --- | --- |
-| `sys.crypto.base64Encode` | AiLang core library | Deterministic encoding. |
-| `sys.crypto.base64Decode` | AiLang core library | Deterministic decoding. |
-| `sys.crypto.sha1` | AiLang core library | Deterministic hashing. |
-| `sys.crypto.sha256` | AiLang core library | Deterministic hashing. |
-| `sys.crypto.hmacSha256` | AiLang core library | Deterministic hashing. |
+Deterministic text, bytes, base64, hash, and HMAC helpers are not public VM
+syscalls. They belong in AiLang libraries, packages, or intrinsic bytecode when
+there is a measured runtime reason. `sys.crypto.randomBytes` remains a syscall
+because it reads host entropy.
 
 ### Production Hardening Work
 
@@ -273,11 +266,6 @@ baseline.
 | 126 | `sys.fs.file.close` | 1 | `bool` |
 | 127 | `sys.fs.file.openWrite` | 1 | `int` |
 | 128 | `sys.fs.file.writeChunk` | 2 | `int` |
-| 37 | `sys.crypto.base64Encode` | 1 | `string` |
-| 38 | `sys.crypto.base64Decode` | 1 | `string` |
-| 39 | `sys.crypto.sha1` | 1 | `string` |
-| 40 | `sys.crypto.sha256` | 1 | `string` |
-| 41 | `sys.crypto.hmacSha256` | 2 | `string` |
 | 42 | `sys.crypto.randomBytes` | 1 | `bytes` |
 | 27 | `sys.net.tcp.connect` | 2 | `int` |
 | 32 | `sys.net.tcp.listen` | 2 | `int` |

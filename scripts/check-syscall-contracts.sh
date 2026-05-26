@@ -61,13 +61,15 @@ if [ "${missing_capability}" -ne 0 ] || [ "${missing_docs}" -ne 0 ] || [ "${miss
   exit 1
 fi
 
-cut -d ' ' -f 2- "${CONTRACT_LIST}" | grep -E '^sys\.(str|bytes)\.' | sort > "${DETERMINISTIC_ACTUAL}" || true
+cut -d ' ' -f 2- "${CONTRACT_LIST}" |
+  grep -E '^sys\.(str|bytes)\.|^sys\.crypto\.(base64Encode|base64Decode|sha1|sha256|hmacSha256)$' |
+  sort > "${DETERMINISTIC_ACTUAL}" || true
 cat > "${DETERMINISTIC_ALLOWED}" <<'EOF'
 EOF
 
 if ! diff -u "${DETERMINISTIC_ALLOWED}" "${DETERMINISTIC_ACTUAL}" >/dev/null; then
   echo "syscall check: deterministic utility syscall surface changed" >&2
-  echo "syscall check: deterministic text/bytes syscall contracts have been removed" >&2
+  echo "syscall check: deterministic text/bytes/crypto syscall contracts have been removed" >&2
   diff -u "${DETERMINISTIC_ALLOWED}" "${DETERMINISTIC_ACTUAL}" >&2 || true
   exit 1
 fi

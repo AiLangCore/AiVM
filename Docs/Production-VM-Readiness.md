@@ -61,8 +61,8 @@ unless a CI or release blocker appears.
   core libraries.
 - [x] Review `sys.bytes.*` contracts and move deterministic behavior into
   AiLang core libraries.
-- [ ] Review deterministic crypto helpers such as base64 and hashes.
-- [ ] Keep `sys.crypto.randomBytes` as host-boundary because host entropy is
+- [x] Review deterministic crypto helpers such as base64 and hashes.
+- [x] Keep `sys.crypto.randomBytes` as host-boundary because host entropy is
   nondeterministic.
 - [x] Update AiLang callers before removing moved syscalls.
 - [x] Remove moved `sys.str.*` and `sys.bytes.*` syscall contracts completely;
@@ -102,10 +102,12 @@ Current audit:
   syscall-level regression files.
 - AiVM syscall contract checks fail if deterministic text/bytes utility
   contracts are reintroduced.
+- AiVM no longer exposes deterministic crypto/base64/hash/HMAC utility
+  syscalls; optional crypto packages should own those APIs.
 - `sys.crypto.randomBytes` remains a valid host-boundary syscall.
-- Deterministic crypto helpers and base64 should become AiLang libraries or
-  optional packages unless a measured VM/runtime reason justifies keeping a
-  host primitive.
+- Deterministic crypto helpers and base64 should become AiLang libraries,
+  intrinsic bytecode, or optional packages unless a measured VM/runtime reason
+  justifies keeping a host primitive.
 
 Migration order:
 
