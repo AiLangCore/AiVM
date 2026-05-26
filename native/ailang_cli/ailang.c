@@ -4233,6 +4233,10 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_STR_FROM_CODEPOINT: return "STR_FROM_CODEPOINT";
         case AIVM_OP_STR_DECODE_UNICODE_HEX4: return "STR_DECODE_UNICODE_HEX4";
         case AIVM_OP_STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4: return "STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4";
+        case AIVM_OP_BYTES_LENGTH: return "BYTES_LENGTH";
+        case AIVM_OP_BYTES_AT: return "BYTES_AT";
+        case AIVM_OP_BYTES_SLICE: return "BYTES_SLICE";
+        case AIVM_OP_BYTES_CONCAT: return "BYTES_CONCAT";
         default: return "UNKNOWN";
     }
 }
@@ -7039,6 +7043,48 @@ static int simple_compile_expr_ext(
             return 0;
         }
         return simple_emit_instruction(program, AIVM_OP_STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4, 0);
+    }
+    if (strcmp(node->kind, "BytesLength") == 0) {
+        SimpleNodeView data;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &data)) {
+            return simple_fail("BytesLength missing arg");
+        }
+        if (!simple_compile_expr_ext(&data, program, locals, ctx)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_BYTES_LENGTH, 0);
+    }
+    if (strcmp(node->kind, "BytesAt") == 0 || strcmp(node->kind, "BytesConcat") == 0) {
+        SimpleNodeView left;
+        SimpleNodeView right;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &left) ||
+            !simple_parse_next_node(left.next, node->body_end, &right)) {
+            return simple_failf("%s missing args", node->kind);
+        }
+        if (!simple_compile_expr_ext(&left, program, locals, ctx) ||
+            !simple_compile_expr_ext(&right, program, locals, ctx)) {
+            return 0;
+        }
+        if (strcmp(node->kind, "BytesAt") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_AT, 0);
+        }
+        return simple_emit_instruction(program, AIVM_OP_BYTES_CONCAT, 0);
+    }
+    if (strcmp(node->kind, "BytesSlice") == 0) {
+        SimpleNodeView data;
+        SimpleNodeView start;
+        SimpleNodeView length;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &data) ||
+            !simple_parse_next_node(data.next, node->body_end, &start) ||
+            !simple_parse_next_node(start.next, node->body_end, &length)) {
+            return simple_fail("BytesSlice missing args");
+        }
+        if (!simple_compile_expr_ext(&data, program, locals, ctx) ||
+            !simple_compile_expr_ext(&start, program, locals, ctx) ||
+            !simple_compile_expr_ext(&length, program, locals, ctx)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_BYTES_SLICE, 0);
     }
     if (strcmp(node->kind, "StringSlice") == 0 || strcmp(node->kind, "StringRemove") == 0 ||
         strcmp(node->kind, "StringFind") == 0) {

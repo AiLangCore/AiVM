@@ -77,7 +77,12 @@ Current audit:
   `StringFromCodePoint`, `StringDecodeUnicodeHex4`,
   `StringDecodeUnicodeSurrogatePairHex4`, and `StringUtf8ByteCount`) backed by
   VM opcodes.
-- `std.bytes` still delegates to temporary VM syscall contracts.
+- `std.bytes.length`, `std.bytes.at`, `std.bytes.slice`, and
+  `std.bytes.concat` now lower through non-syscall intrinsic nodes
+  (`BytesLength`, `BytesAt`, `BytesSlice`, and `BytesConcat`) backed by VM
+  opcodes.
+- `std.bytes` base64 and UTF-8 conversion helpers still delegate to temporary
+  VM syscall contracts.
 - AiLang now has a canonical primitive migration note at
   `Docs/Deterministic-Text-Bytes-Primitives.md`; VM contracts should not be
   removed until the required non-syscall text/bytes primitive surface exists.

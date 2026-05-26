@@ -1229,6 +1229,16 @@ static int push_string_copy(AivmVm* vm, const char* input)
     return aivm_stack_push(vm, aivm_value_string(output));
 }
 
+static int push_bytes_copy(AivmVm* vm, const uint8_t* input, size_t length)
+{
+    uint8_t* output;
+    output = copy_bytes_to_arena(vm, input, length);
+    if (output == NULL && length > 0U) {
+        return 0;
+    }
+    return aivm_stack_push(vm, aivm_value_bytes(output, length));
+}
+
 static int materialize_syscall_result(AivmVm* vm, AivmValue* io_result)
 {
     char* copied_string;
@@ -4568,6 +4578,154 @@ void aivm_step(AivmVm* vm)
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_LENGTH: {
+            AivmValue bytes_value;
+            if (!aivm_stack_pop(vm, &bytes_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (bytes_value.type != AIVM_VAL_BYTES) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_LENGTH requires bytes operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_int((int64_t)bytes_value.bytes_value.length))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_AT: {
+            AivmValue index_value;
+            AivmValue bytes_value;
+            size_t index;
+            if (!aivm_stack_pop(vm, &index_value) ||
+                !aivm_stack_pop(vm, &bytes_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (bytes_value.type != AIVM_VAL_BYTES || index_value.type != AIVM_VAL_INT) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_AT requires (bytes,int).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (index_value.int_value < 0) {
+                if (!aivm_stack_push(vm, aivm_value_int(-1))) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else {
+                index = (size_t)index_value.int_value;
+                if (index >= bytes_value.bytes_value.length || bytes_value.bytes_value.data == NULL) {
+                    if (!aivm_stack_push(vm, aivm_value_int(-1))) {
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                } else if (!aivm_stack_push(vm, aivm_value_int((int64_t)bytes_value.bytes_value.data[index]))) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_SLICE: {
+            AivmValue length_value;
+            AivmValue start_value;
+            AivmValue bytes_value;
+            size_t start;
+            size_t length;
+            size_t end;
+            if (!aivm_stack_pop(vm, &length_value) ||
+                !aivm_stack_pop(vm, &start_value) ||
+                !aivm_stack_pop(vm, &bytes_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (bytes_value.type != AIVM_VAL_BYTES ||
+                start_value.type != AIVM_VAL_INT ||
+                length_value.type != AIVM_VAL_INT) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_SLICE requires (bytes,int,int).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (start_value.int_value <= 0) {
+                start = 0U;
+            } else if ((uint64_t)start_value.int_value >= (uint64_t)bytes_value.bytes_value.length) {
+                start = bytes_value.bytes_value.length;
+            } else {
+                start = (size_t)start_value.int_value;
+            }
+            length = (length_value.int_value <= 0) ? 0U : (size_t)length_value.int_value;
+            end = start + length;
+            if (end < start || end > bytes_value.bytes_value.length) {
+                end = bytes_value.bytes_value.length;
+            }
+            if (start >= end || bytes_value.bytes_value.data == NULL) {
+                if (!push_bytes_copy(vm, NULL, 0U)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else if (!push_bytes_copy(vm, &bytes_value.bytes_value.data[start], end - start)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_CONCAT: {
+            AivmValue right_value;
+            AivmValue left_value;
+            size_t total_length;
+            uint8_t* output;
+            if (!aivm_stack_pop(vm, &right_value) ||
+                !aivm_stack_pop(vm, &left_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (left_value.type != AIVM_VAL_BYTES || right_value.type != AIVM_VAL_BYTES) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_CONCAT requires (bytes,bytes).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!size_add_checked(left_value.bytes_value.length, right_value.bytes_value.length, &total_length)) {
+                set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            output = bytes_arena_alloc(vm, total_length);
+            if (output == NULL) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (left_value.bytes_value.length > 0U) {
+                if (left_value.bytes_value.data == NULL) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_CONCAT requires non-null left bytes data.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                memcpy(output, left_value.bytes_value.data, left_value.bytes_value.length);
+            }
+            if (right_value.bytes_value.length > 0U) {
+                if (right_value.bytes_value.data == NULL) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_CONCAT requires non-null right bytes data.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                memcpy(output + left_value.bytes_value.length, right_value.bytes_value.data, right_value.bytes_value.length);
+            }
+            if (!aivm_stack_push(vm, aivm_value_bytes(output, total_length))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
             }
             vm->instruction_pointer += 1U;
             break;
