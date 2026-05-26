@@ -1535,6 +1535,99 @@ static int push_remove_by_runes(AivmVm* vm, const char* text, int64_t start, int
     return aivm_stack_push(vm, aivm_value_string(output));
 }
 
+static int push_find_by_runes(AivmVm* vm, const char* text, const char* pattern, int64_t start)
+{
+    size_t text_runes;
+    size_t pattern_runes;
+    size_t start_rune;
+    size_t candidate_rune;
+    size_t candidate_byte;
+    size_t pattern_bytes;
+    size_t haystack_bytes;
+
+    if (vm == NULL || text == NULL || pattern == NULL) {
+        return 0;
+    }
+
+    text_runes = utf8_rune_count(text);
+    pattern_runes = utf8_rune_count(pattern);
+    start_rune = clamp_rune_index(start, text_runes);
+    if (pattern_runes == 0U) {
+        return aivm_stack_push(vm, aivm_value_int((int64_t)start_rune));
+    }
+    if (pattern_runes > text_runes || start_rune > text_runes - pattern_runes) {
+        return aivm_stack_push(vm, aivm_value_int(-1));
+    }
+
+    pattern_bytes = strlen(pattern);
+    haystack_bytes = strlen(text);
+    candidate_byte = utf8_byte_offset_for_rune(text, start_rune);
+    for (candidate_rune = start_rune; candidate_byte + pattern_bytes <= haystack_bytes; candidate_rune += 1U) {
+        if (memcmp(text + candidate_byte, pattern, pattern_bytes) == 0) {
+            return aivm_stack_push(vm, aivm_value_int((int64_t)candidate_rune));
+        }
+        if (candidate_rune >= text_runes - pattern_runes) {
+            break;
+        }
+        candidate_byte = utf8_byte_offset_for_rune(text, candidate_rune + 1U);
+    }
+    return aivm_stack_push(vm, aivm_value_int(-1));
+}
+
+static int push_string_from_codepoint(AivmVm* vm, uint32_t cp)
+{
+    char scratch[5];
+
+    if (vm == NULL || cp > 0x10FFFFU || (cp >= 0xD800U && cp <= 0xDFFFU)) {
+        return vm == NULL ? 0 : push_string_copy(vm, "");
+    }
+    if (cp <= 0x7FU) {
+        scratch[0] = (char)cp;
+        scratch[1] = '\0';
+    } else if (cp <= 0x7FFU) {
+        scratch[0] = (char)(0xC0U | (cp >> 6U));
+        scratch[1] = (char)(0x80U | (cp & 0x3FU));
+        scratch[2] = '\0';
+    } else if (cp <= 0xFFFFU) {
+        scratch[0] = (char)(0xE0U | (cp >> 12U));
+        scratch[1] = (char)(0x80U | ((cp >> 6U) & 0x3FU));
+        scratch[2] = (char)(0x80U | (cp & 0x3FU));
+        scratch[3] = '\0';
+    } else {
+        scratch[0] = (char)(0xF0U | (cp >> 18U));
+        scratch[1] = (char)(0x80U | ((cp >> 12U) & 0x3FU));
+        scratch[2] = (char)(0x80U | ((cp >> 6U) & 0x3FU));
+        scratch[3] = (char)(0x80U | (cp & 0x3FU));
+        scratch[4] = '\0';
+    }
+    return push_string_copy(vm, scratch);
+}
+
+static int hex4_to_u32(const char* text, uint32_t* out)
+{
+    size_t i;
+    uint32_t value = 0U;
+    if (text == NULL || out == NULL || strlen(text) != 4U) {
+        return 0;
+    }
+    for (i = 0U; i < 4U; i += 1U) {
+        char ch = text[i];
+        uint32_t nibble;
+        if (ch >= '0' && ch <= '9') {
+            nibble = (uint32_t)(ch - '0');
+        } else if (ch >= 'a' && ch <= 'f') {
+            nibble = (uint32_t)(10 + ch - 'a');
+        } else if (ch >= 'A' && ch <= 'F') {
+            nibble = (uint32_t)(10 + ch - 'A');
+        } else {
+            return 0;
+        }
+        value = (value << 4U) | nibble;
+    }
+    *out = value;
+    return 1;
+}
+
 static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_result)
 {
     AivmValue args[AIVM_VM_MAX_SYSCALL_ARGS];
@@ -4361,6 +4454,120 @@ void aivm_step(AivmVm* vm)
             if (!push_remove_by_runes(vm, text_value.string_value, start_value.int_value, length_value.int_value)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_STR_FIND: {
+            AivmValue start_value;
+            AivmValue pattern_value;
+            AivmValue text_value;
+            if (!aivm_stack_pop(vm, &start_value) ||
+                !aivm_stack_pop(vm, &pattern_value) ||
+                !aivm_stack_pop(vm, &text_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (text_value.type != AIVM_VAL_STRING ||
+                pattern_value.type != AIVM_VAL_STRING ||
+                start_value.type != AIVM_VAL_INT ||
+                text_value.string_value == NULL ||
+                pattern_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "STR_FIND requires (string,string,int).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!push_find_by_runes(vm, text_value.string_value, pattern_value.string_value, start_value.int_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_STR_FROM_CODEPOINT: {
+            AivmValue codepoint_value;
+            if (!aivm_stack_pop(vm, &codepoint_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (codepoint_value.type != AIVM_VAL_INT) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "STR_FROM_CODEPOINT requires int operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (codepoint_value.int_value < 0) {
+                if (!push_string_copy(vm, "")) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else if (!push_string_from_codepoint(vm, (uint32_t)codepoint_value.int_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_STR_DECODE_UNICODE_HEX4: {
+            AivmValue text_value;
+            uint32_t cp;
+            if (!aivm_stack_pop(vm, &text_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (text_value.type != AIVM_VAL_STRING || text_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "STR_DECODE_UNICODE_HEX4 requires string operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!hex4_to_u32(text_value.string_value, &cp)) {
+                if (!push_string_copy(vm, "")) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else if (!push_string_from_codepoint(vm, cp)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4: {
+            AivmValue low_value;
+            AivmValue high_value;
+            uint32_t high_surrogate;
+            uint32_t low_surrogate;
+            uint32_t cp;
+            if (!aivm_stack_pop(vm, &low_value) ||
+                !aivm_stack_pop(vm, &high_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (high_value.type != AIVM_VAL_STRING ||
+                low_value.type != AIVM_VAL_STRING ||
+                high_value.string_value == NULL ||
+                low_value.string_value == NULL) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4 requires (string,string).");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!hex4_to_u32(high_value.string_value, &high_surrogate) ||
+                !hex4_to_u32(low_value.string_value, &low_surrogate) ||
+                high_surrogate < 0xD800U || high_surrogate > 0xDBFFU ||
+                low_surrogate < 0xDC00U || low_surrogate > 0xDFFFU) {
+                if (!push_string_copy(vm, "")) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else {
+                cp = 0x10000U + ((high_surrogate - 0xD800U) << 10U) + (low_surrogate - 0xDC00U);
+                if (!push_string_from_codepoint(vm, cp)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
             }
             vm->instruction_pointer += 1U;
             break;

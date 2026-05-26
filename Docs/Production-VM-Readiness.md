@@ -72,11 +72,12 @@ Current audit:
 
 - Baseline wrappers exist in `AiLang/src/std/str.aos` and
   `AiLang/src/std/bytes.aos`.
-- `std.str.substring`, `std.str.remove`, and `std.str.utf8ByteCount` now lower
-  through non-syscall intrinsic nodes (`StringSlice`, `StringRemove`, and
-  `StringUtf8ByteCount`) backed by existing VM opcodes.
-- `std.str.find`, Unicode code point construction, Unicode escape decoding,
-  and `std.bytes` still delegate to temporary VM syscall contracts.
+- `std.str` now lowers deterministic string helpers through non-syscall
+  intrinsic nodes (`StringSlice`, `StringRemove`, `StringFind`,
+  `StringFromCodePoint`, `StringDecodeUnicodeHex4`,
+  `StringDecodeUnicodeSurrogatePairHex4`, and `StringUtf8ByteCount`) backed by
+  VM opcodes.
+- `std.bytes` still delegates to temporary VM syscall contracts.
 - AiLang now has a canonical primitive migration note at
   `Docs/Deterministic-Text-Bytes-Primitives.md`; VM contracts should not be
   removed until the required non-syscall text/bytes primitive surface exists.

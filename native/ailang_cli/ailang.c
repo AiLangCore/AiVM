@@ -4229,6 +4229,10 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
         case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
         case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
+        case AIVM_OP_STR_FIND: return "STR_FIND";
+        case AIVM_OP_STR_FROM_CODEPOINT: return "STR_FROM_CODEPOINT";
+        case AIVM_OP_STR_DECODE_UNICODE_HEX4: return "STR_DECODE_UNICODE_HEX4";
+        case AIVM_OP_STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4: return "STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4";
         default: return "UNKNOWN";
     }
 }
@@ -7005,32 +7009,57 @@ static int simple_compile_expr_ext(
         }
         return 1;
     }
-    if (strcmp(node->kind, "StringUtf8ByteCount") == 0) {
+    if (strcmp(node->kind, "StringUtf8ByteCount") == 0 ||
+        strcmp(node->kind, "StringFromCodePoint") == 0 ||
+        strcmp(node->kind, "StringDecodeUnicodeHex4") == 0) {
         SimpleNodeView value;
         if (!simple_parse_next_node(node->body_start, node->body_end, &value)) {
-            return simple_fail("StringUtf8ByteCount missing arg");
+            return simple_failf("%s missing arg", node->kind);
         }
         if (!simple_compile_expr_ext(&value, program, locals, ctx)) {
             return 0;
         }
-        return simple_emit_instruction(program, AIVM_OP_STR_UTF8_BYTE_COUNT, 0);
+        if (strcmp(node->kind, "StringUtf8ByteCount") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_STR_UTF8_BYTE_COUNT, 0);
+        }
+        if (strcmp(node->kind, "StringFromCodePoint") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_STR_FROM_CODEPOINT, 0);
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_DECODE_UNICODE_HEX4, 0);
     }
-    if (strcmp(node->kind, "StringSlice") == 0 || strcmp(node->kind, "StringRemove") == 0) {
+    if (strcmp(node->kind, "StringDecodeUnicodeSurrogatePairHex4") == 0) {
+        SimpleNodeView high;
+        SimpleNodeView low;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &high) ||
+            !simple_parse_next_node(high.next, node->body_end, &low)) {
+            return simple_fail("StringDecodeUnicodeSurrogatePairHex4 missing args");
+        }
+        if (!simple_compile_expr_ext(&high, program, locals, ctx) ||
+            !simple_compile_expr_ext(&low, program, locals, ctx)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_DECODE_UNICODE_SURROGATE_PAIR_HEX4, 0);
+    }
+    if (strcmp(node->kind, "StringSlice") == 0 || strcmp(node->kind, "StringRemove") == 0 ||
+        strcmp(node->kind, "StringFind") == 0) {
         SimpleNodeView text;
         SimpleNodeView start;
-        SimpleNodeView length;
+        SimpleNodeView third;
         if (!simple_parse_next_node(node->body_start, node->body_end, &text) ||
             !simple_parse_next_node(text.next, node->body_end, &start) ||
-            !simple_parse_next_node(start.next, node->body_end, &length)) {
+            !simple_parse_next_node(start.next, node->body_end, &third)) {
             return simple_failf("%s missing args", node->kind);
         }
         if (!simple_compile_expr_ext(&text, program, locals, ctx) ||
             !simple_compile_expr_ext(&start, program, locals, ctx) ||
-            !simple_compile_expr_ext(&length, program, locals, ctx)) {
+            !simple_compile_expr_ext(&third, program, locals, ctx)) {
             return 0;
         }
         if (strcmp(node->kind, "StringSlice") == 0) {
             return simple_emit_instruction(program, AIVM_OP_STR_SUBSTRING, 0);
+        }
+        if (strcmp(node->kind, "StringFind") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_STR_FIND, 0);
         }
         return simple_emit_instruction(program, AIVM_OP_STR_REMOVE, 0);
     }
