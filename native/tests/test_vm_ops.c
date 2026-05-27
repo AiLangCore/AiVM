@@ -2555,6 +2555,85 @@ static int test_await_failed_task_non_err_result_sets_error(void)
     return 0;
 }
 
+static int test_terminal_task_cleanup_stress(void)
+{
+    enum { terminal_task_count = 64 };
+    static AivmVm vm;
+    static AivmInstruction instructions[(terminal_task_count * 3) + 1];
+    static AivmValue constants[terminal_task_count];
+    AivmProgram program;
+    size_t ip = 0U;
+    size_t i;
+
+    for (i = 0U; i < terminal_task_count; i += 1U) {
+        constants[i] = aivm_value_int((int64_t)i + 1);
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = (int64_t)i;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_AWAIT;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_POP;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = terminal_task_count;
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = terminal_task_count;
+    vm.next_task_handle = (int64_t)terminal_task_count + 1;
+    vm.node_count = terminal_task_count + 1U;
+    for (i = 0U; i < terminal_task_count; i += 1U) {
+        vm.completed_tasks[i].state = (i % 2U == 0U) ? AIVM_TASK_STATE_FAILED : AIVM_TASK_STATE_CANCELED;
+        vm.completed_tasks[i].handle = (int64_t)i + 1;
+        vm.completed_tasks[i].result = aivm_value_node((int64_t)i + 2);
+        vm.nodes[i + 1U].kind = "Err";
+        vm.nodes[i + 1U].id = "terminal_task_err";
+        vm.nodes[i + 1U].attr_start = 0U;
+        vm.nodes[i + 1U].attr_count = 0U;
+        vm.nodes[i + 1U].child_start = 0U;
+        vm.nodes[i + 1U].child_count = 0U;
+    }
+
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_task_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_count == terminal_task_count) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_skip_pinned_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_exhausted_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count >= terminal_task_count) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes >= terminal_task_count - 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count <= 2U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 0U) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_parallel_join_resolves_canceled_task_handles(void)
 {
     static AivmVm vm;
@@ -4555,6 +4634,9 @@ int main(void)
         return 1;
     }
     if (test_await_failed_task_non_err_result_sets_error() != 0) {
+        return 1;
+    }
+    if (test_terminal_task_cleanup_stress() != 0) {
         return 1;
     }
     if (test_parallel_begin_fork_join_and_cancel() != 0) {
