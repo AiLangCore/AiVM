@@ -252,10 +252,11 @@ These are the immediate hardening tasks before beta:
   after host dispatch returns, and `aivm-debug` enforces artifact byte budgets
   before publishing artifact files.
 - Parser retained nodes: parser memory attribution now gates final node count,
-  node high-water, and scratch-pair use. Token nodes are scratch strings in
-  AiLang. Parser result helpers lower to bounded AiVM scratch-pair values and
-  pair access opcodes that safely root/remap contained node references during
-  compaction.
+  node high-water, and scratch-pair use for representative compiler sources
+  (`format.aos`, `validate.aos`, and `aic.aos`). Token nodes are scratch
+  strings in AiLang. Parser result helpers lower to bounded AiVM scratch-pair
+  values and pair access opcodes that safely root/remap contained node
+  references during compaction.
 - Parser/compiler scratch storage: parser tokenization and parse-result
   construction are routed through scratch storage while final AST nodes remain
   in semantic node storage. Validation state now uses scratch pairs for the
