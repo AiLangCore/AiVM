@@ -3547,10 +3547,10 @@ static int native_base64_decode_char(char ch)
 
 #define NATIVE_BYTES_SCRATCH_CAPACITY 131072U
 static uint8_t g_native_bytes_scratch[NATIVE_BYTES_SCRATCH_CAPACITY];
+#if defined(_WIN32) || defined(__APPLE__)
 static char* g_native_string_scratch = NULL;
 static size_t g_native_string_scratch_capacity = 0U;
 
-#if defined(_WIN32) || defined(__APPLE__)
 static int native_string_scratch_ensure_capacity(size_t required_capacity)
 {
     char* grown;
