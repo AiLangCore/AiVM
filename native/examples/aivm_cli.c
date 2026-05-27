@@ -833,11 +833,25 @@ typedef struct DebugArtifactFile
 
 static size_t debug_artifact_file_size(const char* path)
 {
-    struct stat info;
-    if (path == NULL || stat(path, &info) != 0 || info.st_size < 0) {
+    FILE* file;
+    long size;
+    if (path == NULL) {
         return 0U;
     }
-    return (size_t)info.st_size;
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return 0U;
+    }
+    if (fseek(file, 0L, SEEK_END) != 0) {
+        fclose(file);
+        return 0U;
+    }
+    size = ftell(file);
+    fclose(file);
+    if (size < 0) {
+        return 0U;
+    }
+    return (size_t)size;
 }
 
 static void debug_artifact_budget_init(DebugArtifactBudget* budget, size_t limit_bytes)
