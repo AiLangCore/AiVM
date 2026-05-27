@@ -511,6 +511,9 @@ static void airun_format_value_preview(const AivmValue* value, char* buffer, siz
         case AIVM_VAL_NODE:
             (void)snprintf(buffer, buffer_size, "node(%lld)", (long long)value->node_handle);
             break;
+        case AIVM_VAL_PAIR:
+            (void)snprintf(buffer, buffer_size, "pair(%lld)", (long long)value->pair_handle);
+            break;
         case AIVM_VAL_BYTES:
             (void)snprintf(buffer, buffer_size, "bytes(len=%llu)", (unsigned long long)value->bytes_value.length);
             break;
@@ -4043,6 +4046,9 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_TO_UTF8_STRING: return "BYTES_TO_UTF8_STRING";
         case AIVM_OP_BYTES_FROM_BASE64: return "BYTES_FROM_BASE64";
         case AIVM_OP_BYTES_TO_BASE64: return "BYTES_TO_BASE64";
+        case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
+        case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
+        case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
         default: return "UNKNOWN";
     }
 }
@@ -4057,6 +4063,7 @@ static const char* airun_value_type_name(AivmValueType type)
         case AIVM_VAL_STRING: return "string";
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
+        case AIVM_VAL_PAIR: return "pair";
         default: return "unknown";
     }
 }
@@ -4817,6 +4824,9 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(BYTES_TO_UTF8_STRING)
     MAP_OP(BYTES_FROM_BASE64)
     MAP_OP(BYTES_TO_BASE64)
+    MAP_OP(MAKE_PAIR)
+    MAP_OP(PAIR_FIRST)
+    MAP_OP(PAIR_SECOND)
 #undef MAP_OP
     return 0;
 }

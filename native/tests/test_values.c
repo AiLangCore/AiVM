@@ -23,6 +23,8 @@ int main(void)
     AivmValue bytes_b;
     AivmValue node_a;
     AivmValue node_b;
+    AivmValue pair_a;
+    AivmValue pair_b;
     const char hello_chars[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
     const char hello_chars_copy[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
     const uint8_t bytes_raw[] = { 0x00U, 0x01U, 0x7fU, 0xffU };
@@ -120,6 +122,17 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(node_a, aivm_value_node(11)) == 0) != 0) {
+        return 1;
+    }
+    pair_a = aivm_value_pair(3);
+    pair_b = aivm_value_pair(3);
+    if (expect(pair_a.type == AIVM_VAL_PAIR) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(pair_a, pair_b) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(pair_a, aivm_value_pair(4)) == 0) != 0) {
         return 1;
     }
 

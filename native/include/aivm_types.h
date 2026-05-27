@@ -18,7 +18,8 @@ typedef enum {
     AIVM_VAL_STRING = 4,
     AIVM_VAL_BYTES = 5,
     AIVM_VAL_NODE = 6,
-    AIVM_VAL_UNKNOWN = 7
+    AIVM_VAL_PAIR = 7,
+    AIVM_VAL_UNKNOWN = 8
 } AivmValueType;
 
 typedef struct {
@@ -29,6 +30,7 @@ typedef struct {
         const char* string_value;
         AivmBytesView bytes_value;
         int64_t node_handle;
+        int64_t pair_handle;
     };
 } AivmValue;
 
@@ -41,6 +43,7 @@ AivmValue aivm_value_null(void);
 AivmValue aivm_value_string(const char* value);
 AivmValue aivm_value_bytes(const uint8_t* data, size_t length);
 AivmValue aivm_value_node(int64_t handle);
+AivmValue aivm_value_pair(int64_t handle);
 int aivm_value_equals(AivmValue left, AivmValue right);
 
 #endif

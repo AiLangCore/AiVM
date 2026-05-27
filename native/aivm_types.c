@@ -93,6 +93,14 @@ AivmValue aivm_value_node(int64_t input)
     return value;
 }
 
+AivmValue aivm_value_pair(int64_t input)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_PAIR;
+    value.pair_handle = input;
+    return value;
+}
+
 int aivm_value_equals(AivmValue left, AivmValue right)
 {
     if (left.type != right.type) {
@@ -136,6 +144,9 @@ int aivm_value_equals(AivmValue left, AivmValue right)
 
         case AIVM_VAL_NODE:
             return left.node_handle == right.node_handle ? 1 : 0;
+
+        case AIVM_VAL_PAIR:
+            return left.pair_handle == right.pair_handle ? 1 : 0;
 
         case AIVM_VAL_UNKNOWN:
             return 1;

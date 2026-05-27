@@ -46,6 +46,7 @@ typedef struct {
     size_t node_child_capacity;
     size_t task_capacity;
     size_t par_value_capacity;
+    size_t scratch_pair_capacity;
     size_t file_read_bytes;
     size_t file_write_bytes;
     size_t network_read_bytes;
@@ -141,6 +142,11 @@ typedef struct {
     size_t start_index;
 } AivmParContext;
 
+typedef struct {
+    AivmValue first;
+    AivmValue second;
+} AivmScratchPair;
+
 enum {
     AIVM_VM_STACK_CAPACITY = 20000,
     AIVM_VM_STACK_INITIAL_CAPACITY = 1024,
@@ -164,6 +170,7 @@ enum {
     AIVM_VM_TASK_CAPACITY = 256,
     AIVM_VM_PAR_CONTEXT_CAPACITY = 64,
     AIVM_VM_PAR_VALUE_CAPACITY = 1024,
+    AIVM_VM_SCRATCH_PAIR_CAPACITY = 32768,
     AIVM_VM_FILE_READ_BYTES = 16 * 1024 * 1024,
     AIVM_VM_FILE_WRITE_BYTES = 16 * 1024 * 1024,
     AIVM_VM_NETWORK_READ_BYTES = 1024 * 1024,
@@ -214,7 +221,7 @@ typedef struct {
     size_t recent_opcode_count;
 #if defined(AIVM_DEBUG_RUNTIME)
     size_t profile_instruction_count;
-    size_t profile_opcode_counts[64];
+    size_t profile_opcode_counts[67];
     size_t profile_syscall_count;
     double profile_syscall_elapsed_seconds;
     AivmProfileSyscallTargetCount profile_syscall_targets[AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY];
@@ -246,6 +253,8 @@ typedef struct {
     size_t par_context_count;
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];
     size_t par_value_count;
+    AivmScratchPair* scratch_pairs;
+    size_t scratch_pair_count;
     int64_t next_par_node_id;
     AivmNodeRecord* nodes;
     size_t node_count;

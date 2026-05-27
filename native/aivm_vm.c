@@ -65,13 +65,17 @@ static int ensure_vm_storage(AivmVm* vm)
     if (vm->node_children == NULL) {
         vm->node_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(vm->node_children[0]));
     }
+    if (vm->scratch_pairs == NULL) {
+        vm->scratch_pairs = (AivmScratchPair*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(vm->scratch_pairs[0]));
+    }
     if (vm->stack == NULL ||
         vm->locals == NULL ||
         vm->string_arena == NULL ||
         vm->bytes_arena == NULL ||
         vm->nodes == NULL ||
         vm->node_attrs == NULL ||
-        vm->node_children == NULL) {
+        vm->node_children == NULL ||
+        vm->scratch_pairs == NULL) {
         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: VM storage allocation failed.");
         return 0;
     }
@@ -145,6 +149,7 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.node_child_capacity = AIVM_VM_NODE_CHILD_CAPACITY;
     limits.task_capacity = AIVM_VM_TASK_CAPACITY;
     limits.par_value_capacity = AIVM_VM_PAR_VALUE_CAPACITY;
+    limits.scratch_pair_capacity = AIVM_VM_SCRATCH_PAIR_CAPACITY;
     limits.file_read_bytes = AIVM_VM_FILE_READ_BYTES;
     limits.file_write_bytes = AIVM_VM_FILE_WRITE_BYTES;
     limits.network_read_bytes = AIVM_VM_NETWORK_READ_BYTES;
@@ -340,6 +345,7 @@ static const char* vm_value_type_name(AivmValueType type)
         case AIVM_VAL_STRING: return "string";
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
+        case AIVM_VAL_PAIR: return "pair";
         default: return "unknown";
     }
 }
@@ -2834,11 +2840,46 @@ static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** 
     return 1;
 }
 
-static int remap_value_node_handle(AivmValue* value, const int64_t* handle_map)
+static int lookup_scratch_pair(const AivmVm* vm, int64_t handle, const AivmScratchPair** out_pair)
+{
+    size_t index;
+    if (vm == NULL || out_pair == NULL || handle <= 0) {
+        return 0;
+    }
+    index = (size_t)(handle - 1);
+    if (index >= vm->scratch_pair_count) {
+        return 0;
+    }
+    *out_pair = &vm->scratch_pairs[index];
+    return 1;
+}
+
+static int create_scratch_pair(AivmVm* vm, AivmValue first, AivmValue second, int64_t* out_handle)
+{
+    size_t next_count;
+    if (vm == NULL || out_handle == NULL) {
+        return 0;
+    }
+    if (vm->scratch_pair_count >= AIVM_VM_SCRATCH_PAIR_CAPACITY ||
+        !size_add_checked(vm->scratch_pair_count, 1U, &next_count)) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: scratch pair capacity exceeded.");
+        return 0;
+    }
+    vm->scratch_pairs[vm->scratch_pair_count].first = first;
+    vm->scratch_pairs[vm->scratch_pair_count].second = second;
+    *out_handle = (int64_t)next_count;
+    vm->scratch_pair_count = next_count;
+    return 1;
+}
+
+static int remap_value_node_handle(AivmVm* vm, AivmValue* value, const int64_t* handle_map)
 {
     int64_t old_handle;
-    if (value == NULL || handle_map == NULL) {
+    if (vm == NULL || value == NULL || handle_map == NULL) {
         return 0;
+    }
+    if (value->type == AIVM_VAL_PAIR) {
+        return value->pair_handle > 0 && value->pair_handle <= (int64_t)vm->scratch_pair_count;
     }
     if (value->type != AIVM_VAL_NODE) {
         return 1;
@@ -2912,6 +2953,14 @@ static int mark_live_node_handles(
     for (i = 0U; i < vm->par_value_count; i += 1U) {
         if (vm->par_values[i].type == AIVM_VAL_NODE) {
             ENQUEUE_HANDLE(vm->par_values[i].node_handle);
+        }
+    }
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (vm->scratch_pairs[i].first.type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->scratch_pairs[i].first.node_handle);
+        }
+        if (vm->scratch_pairs[i].second.type == AIVM_VAL_NODE) {
+            ENQUEUE_HANDLE(vm->scratch_pairs[i].second.node_handle);
         }
     }
     if (extra_handles != NULL) {
@@ -3001,6 +3050,13 @@ static int compact_string_arena(AivmVm* vm)
     }
     for (i = 0U; i < vm->par_value_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->par_values[i], new_arena, &new_used)) {
+            free(new_arena);
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (!compact_relocate_value_string(vm, &vm->scratch_pairs[i].first, new_arena, &new_used) ||
+            !compact_relocate_value_string(vm, &vm->scratch_pairs[i].second, new_arena, &new_used)) {
             free(new_arena);
             return 0;
         }
@@ -3197,26 +3253,33 @@ static int compact_node_arenas_with_map(
     add_counter_saturating(&vm->node_gc_reclaimed_children, old_child_count - new_child_count);
 
     for (i = 0U; i < vm->stack_count; i += 1U) {
-        if (!remap_value_node_handle(&vm->stack[i], handle_map)) {
+        if (!remap_value_node_handle(vm, &vm->stack[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid stack node handle during node GC.");
             goto fail;
         }
     }
     for (i = 0U; i < vm->locals_count; i += 1U) {
-        if (!remap_value_node_handle(&vm->locals[i], handle_map)) {
+        if (!remap_value_node_handle(vm, &vm->locals[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid local node handle during node GC.");
             goto fail;
         }
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
-        if (!remap_value_node_handle(&vm->completed_tasks[i].result, handle_map)) {
+        if (!remap_value_node_handle(vm, &vm->completed_tasks[i].result, handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid completed-task node handle during node GC.");
             goto fail;
         }
     }
     for (i = 0U; i < vm->par_value_count; i += 1U) {
-        if (!remap_value_node_handle(&vm->par_values[i], handle_map)) {
+        if (!remap_value_node_handle(vm, &vm->par_values[i], handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid parallel-value node handle during node GC.");
+            goto fail;
+        }
+    }
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (!remap_value_node_handle(vm, &vm->scratch_pairs[i].first, handle_map) ||
+            !remap_value_node_handle(vm, &vm->scratch_pairs[i].second, handle_map)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid scratch-pair node handle during node GC.");
             goto fail;
         }
     }
@@ -3768,6 +3831,7 @@ void aivm_reset_state(AivmVm* vm)
     vm->task_reclaim_exhausted_count = 0U;
     vm->par_context_count = 0U;
     vm->par_value_count = 0U;
+    vm->scratch_pair_count = 0U;
     vm->next_par_node_id = 1;
     vm->node_count = 0U;
     vm->node_attr_count = 0U;
@@ -3807,6 +3871,7 @@ void aivm_dispose(AivmVm* vm)
     free(vm->nodes);
     free(vm->node_attrs);
     free(vm->node_children);
+    free(vm->scratch_pairs);
     vm->stack = NULL;
     vm->locals = NULL;
     vm->string_arena = NULL;
@@ -3814,11 +3879,13 @@ void aivm_dispose(AivmVm* vm)
     vm->nodes = NULL;
     vm->node_attrs = NULL;
     vm->node_children = NULL;
+    vm->scratch_pairs = NULL;
     vm->stack_count = 0U;
     vm->locals_count = 0U;
     vm->node_count = 0U;
     vm->node_attr_count = 0U;
     vm->node_child_count = 0U;
+    vm->scratch_pair_count = 0U;
 }
 
 void aivm_init(AivmVm* vm, const AivmProgram* program)
@@ -5184,6 +5251,56 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (!aivm_stack_push(vm, aivm_value_string(output))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAKE_PAIR: {
+            AivmValue second;
+            AivmValue first;
+            int64_t handle;
+            if (!aivm_stack_pop(vm, &second) ||
+                !aivm_stack_pop(vm, &first)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!create_scratch_pair(vm, first, second, &handle)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_pair(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_PAIR_FIRST:
+        case AIVM_OP_PAIR_SECOND: {
+            AivmValue pair_value;
+            const AivmScratchPair* pair;
+            if (!aivm_stack_pop(vm, &pair_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (pair_value.type != AIVM_VAL_PAIR ||
+                !lookup_scratch_pair(vm, pair_value.pair_handle, &pair)) {
+                set_vm_error(
+                    vm,
+                    AIVM_VM_ERR_TYPE_MISMATCH,
+                    instruction->opcode == AIVM_OP_PAIR_FIRST
+                        ? "PAIR_FIRST requires pair operand."
+                        : "PAIR_SECOND requires pair operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(
+                    vm,
+                    instruction->opcode == AIVM_OP_PAIR_FIRST ? pair->first : pair->second)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

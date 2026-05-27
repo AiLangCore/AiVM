@@ -258,7 +258,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             for (instruction_index = 0U; instruction_index < instruction_count; instruction_index += 1U) {
                 uint32_t raw_opcode = read_u32_le(bytes, instruction_cursor);
                 int64_t operand_int = read_i64_le(bytes, instruction_cursor + 4U);
-                if (raw_opcode > (uint32_t)AIVM_OP_BYTES_TO_BASE64) {
+                if (raw_opcode > (uint32_t)AIVM_OP_PAIR_SECOND) {
                     result.status = AIVM_PROGRAM_ERR_INVALID_OPCODE;
                     result.error_offset = instruction_cursor;
                     return result;

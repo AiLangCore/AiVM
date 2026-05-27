@@ -124,11 +124,12 @@ workloads may create large volumes of temporary parser nodes and parse results.
 Those temporaries should be placed in scratch regions or shortened lifetimes
 before raising semantic node limits again.
 
-Scratch result pairs or tuples are required before parser result wrapper nodes
-can be removed entirely. The runtime representation must be deterministic,
-bounded, and able to root/remap contained node references during safe-point
-compaction. It must remain a VM/compiler implementation mechanism, not a
-syscall surface or duplicated AiLang concurrency/semantic contract.
+Scratch result pairs are the first runtime mechanism for removing parser result
+wrapper nodes. AiVM owns a bounded scratch-pair arena and `MAKE_PAIR`,
+`PAIR_FIRST`, and `PAIR_SECOND` opcodes. Pair values are VM/compiler
+implementation values, not syscalls or public semantic objects. Contained node
+references are roots during safe-point compaction and are remapped with other
+live node values.
 
 ## Retained Intermediate Node Reduction
 

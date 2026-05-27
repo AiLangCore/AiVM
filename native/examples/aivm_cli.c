@@ -240,6 +240,9 @@ static const char* cli_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
         case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
         case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
+        case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
+        case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
+        case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
         default: return "UNKNOWN";
     }
 }
@@ -254,6 +257,7 @@ static const char* cli_value_type_name(AivmValueType type)
         case AIVM_VAL_STRING: return "string";
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
+        case AIVM_VAL_PAIR: return "pair";
         default: return "unknown";
     }
 }
@@ -286,6 +290,9 @@ static void format_value_preview(const AivmValue* value, char* out, size_t out_l
             break;
         case AIVM_VAL_NODE:
             (void)snprintf(out, out_len, "node(%lld)", (long long)value->node_handle);
+            break;
+        case AIVM_VAL_PAIR:
+            (void)snprintf(out, out_len, "pair(%lld)", (long long)value->pair_handle);
             break;
         case AIVM_VAL_VOID:
             (void)snprintf(out, out_len, "void");
@@ -1132,7 +1139,8 @@ static void write_debug_artifacts(
             fprintf(file, "bytes_arena_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->bytes_arena_high_water));
             fprintf(file, "node_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_count));
             fprintf(file, "node_high_water = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->node_high_water));
-            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
+            fprintf(file, "scratch_pair_count = %llu\n", (unsigned long long)(vm == NULL ? 0U : vm->scratch_pair_count));
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, scratch_pair_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
                 (unsigned long long)profile_limits.stack_capacity,
                 (unsigned long long)profile_limits.call_frame_capacity,
                 (unsigned long long)profile_limits.locals_capacity,
@@ -1143,6 +1151,7 @@ static void write_debug_artifacts(
                 (unsigned long long)profile_limits.node_child_capacity,
                 (unsigned long long)profile_limits.task_capacity,
                 (unsigned long long)profile_limits.par_value_capacity,
+                (unsigned long long)profile_limits.scratch_pair_capacity,
                 (unsigned long long)profile_limits.file_read_bytes,
                 (unsigned long long)profile_limits.file_write_bytes,
                 (unsigned long long)profile_limits.network_read_bytes,
@@ -1357,7 +1366,8 @@ static void write_debug_load_failure_artifacts(
             fprintf(file, "bytes_arena_high_water = 0\n");
             fprintf(file, "node_count = 0\n");
             fprintf(file, "node_high_water = 0\n");
-            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
+            fprintf(file, "scratch_pair_count = 0\n");
+            fprintf(file, "limits = { stack_capacity = %llu, call_frame_capacity = %llu, locals_capacity = %llu, string_arena_capacity = %llu, bytes_arena_capacity = %llu, node_capacity = %llu, node_attr_capacity = %llu, node_child_capacity = %llu, task_capacity = %llu, par_value_capacity = %llu, scratch_pair_capacity = %llu, file_read_bytes = %llu, file_write_bytes = %llu, network_read_bytes = %llu, network_write_bytes = %llu, process_count = %llu, worker_count = %llu, ui_window_count = %llu, debug_artifact_bytes = %llu, syscall_elapsed_ms = %llu }\n",
                 (unsigned long long)profile_limits.stack_capacity,
                 (unsigned long long)profile_limits.call_frame_capacity,
                 (unsigned long long)profile_limits.locals_capacity,
@@ -1368,6 +1378,7 @@ static void write_debug_load_failure_artifacts(
                 (unsigned long long)profile_limits.node_child_capacity,
                 (unsigned long long)profile_limits.task_capacity,
                 (unsigned long long)profile_limits.par_value_capacity,
+                (unsigned long long)profile_limits.scratch_pair_capacity,
                 (unsigned long long)profile_limits.file_read_bytes,
                 (unsigned long long)profile_limits.file_write_bytes,
                 (unsigned long long)profile_limits.network_read_bytes,

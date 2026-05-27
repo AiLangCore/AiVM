@@ -73,6 +73,9 @@ static const char* opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_MAP: return "MAKE_MAP";
         case AIVM_OP_MAKE_NODE_EMPTY: return "MAKE_NODE_EMPTY";
         case AIVM_OP_APPEND_ATTR: return "APPEND_ATTR";
+        case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
+        case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
+        case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
         default: return "UNKNOWN";
     }
 }
