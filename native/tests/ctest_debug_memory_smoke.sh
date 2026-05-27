@@ -76,6 +76,14 @@ if ! grep -q "node_high_water = 16384" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.
   echo "debug memory smoke: expected node_high_water=16384 in diagnostics.toml" >&2
   exit 1
 fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_capacity" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_capacity in diagnostics.toml" >&2
+  exit 1
+fi
 if ! grep -q "node_gc_pressure_threshold_nodes = 12288" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
   echo "debug memory smoke: expected node_gc_pressure_threshold_nodes=12288" >&2
   exit 1
@@ -116,6 +124,14 @@ if ! grep -Eq "node_arena_pressure_count = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_
   echo "debug memory smoke: expected node_arena_pressure_count>0 in state snapshots" >&2
   exit 1
 fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_capacity" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_capacity in state snapshots" >&2
+  exit 1
+fi
 
 TMP_NATIVE_DEBUG_OK_DIR="${ROOT_DIR}/.tmp/ctest-debug-ok"
 TMP_NATIVE_DEBUG_OK_OUT="${ROOT_DIR}/.tmp/ctest-debug-ok-out"
@@ -145,8 +161,16 @@ if ! grep -Eq "node_gc_attempts = [0-9]+" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostic
   echo "debug memory smoke: expected node_gc_attempts field in diagnostics.toml" >&2
   exit 1
 fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in success diagnostics.toml" >&2
+  exit 1
+fi
 if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots.toml"; then
   echo "debug memory smoke: expected node_root_stack_slots in success state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in success state snapshots" >&2
   exit 1
 fi
 if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then

@@ -593,6 +593,8 @@ static int write_native_debug_bundle(
     fprintf(f, "bytes_arena_high_water = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->bytes_arena_high_water));
     fprintf(f, "node_count = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->node_count));
     fprintf(f, "node_high_water = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->node_high_water));
+    fprintf(f, "scratch_pair_count = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->scratch_pair_count));
+    fprintf(f, "scratch_pair_capacity = %d\n", AIVM_VM_SCRATCH_PAIR_CAPACITY);
     fprintf(f, "node_attr_count = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->node_attr_count));
     fprintf(f, "node_attr_high_water = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->node_attr_high_water));
     fprintf(f, "node_child_count = %llu\n", (unsigned long long)((vm == NULL) ? 0U : vm->node_child_count));
@@ -689,13 +691,15 @@ static int write_native_debug_bundle(
     fprintf(f, "runtime = { name = \"ailang-native-c\", abi = %u, exe = \"%s\" }\n",
         aivm_c_abi_version(),
         g_airun_runtime_exe_path[0] == '\0' ? "" : g_airun_runtime_exe_path);
-    fprintf(f, "memory = { string_arena_used = %llu, string_arena_high_water = %llu, bytes_arena_used = %llu, bytes_arena_high_water = %llu, node_count = %llu, node_high_water = %llu, node_attr_count = %llu, node_attr_high_water = %llu, node_child_count = %llu, node_child_high_water = %llu, node_gc_compactions = %llu, node_gc_attempts = %llu, node_gc_reclaimed_nodes = %llu, node_gc_allocations_since_gc = %llu, node_gc_interval_allocations = %d, node_gc_pressure_threshold_nodes = %d, node_gc_pressure_threshold_attrs = %d, node_gc_pressure_threshold_children = %d, string_arena_pressure_count = %llu, bytes_arena_pressure_count = %llu, node_arena_pressure_count = %llu }\n",
+    fprintf(f, "memory = { string_arena_used = %llu, string_arena_high_water = %llu, bytes_arena_used = %llu, bytes_arena_high_water = %llu, node_count = %llu, node_high_water = %llu, scratch_pair_count = %llu, scratch_pair_capacity = %d, node_attr_count = %llu, node_attr_high_water = %llu, node_child_count = %llu, node_child_high_water = %llu, node_gc_compactions = %llu, node_gc_attempts = %llu, node_gc_reclaimed_nodes = %llu, node_gc_allocations_since_gc = %llu, node_gc_interval_allocations = %d, node_gc_pressure_threshold_nodes = %d, node_gc_pressure_threshold_attrs = %d, node_gc_pressure_threshold_children = %d, string_arena_pressure_count = %llu, bytes_arena_pressure_count = %llu, node_arena_pressure_count = %llu }\n",
         (unsigned long long)((vm == NULL) ? 0U : vm->string_arena_used),
         (unsigned long long)((vm == NULL) ? 0U : vm->string_arena_high_water),
         (unsigned long long)((vm == NULL) ? 0U : vm->bytes_arena_used),
         (unsigned long long)((vm == NULL) ? 0U : vm->bytes_arena_high_water),
         (unsigned long long)((vm == NULL) ? 0U : vm->node_count),
         (unsigned long long)((vm == NULL) ? 0U : vm->node_high_water),
+        (unsigned long long)((vm == NULL) ? 0U : vm->scratch_pair_count),
+        AIVM_VM_SCRATCH_PAIR_CAPACITY,
         (unsigned long long)((vm == NULL) ? 0U : vm->node_attr_count),
         (unsigned long long)((vm == NULL) ? 0U : vm->node_attr_high_water),
         (unsigned long long)((vm == NULL) ? 0U : vm->node_child_count),

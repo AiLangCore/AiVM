@@ -58,6 +58,8 @@ if ($diag -notmatch 'node_gc_compactions = [1-9][0-9]*') { throw 'debug memory s
 if ($diag -notmatch 'node_gc_attempts = [1-9][0-9]*') { throw 'debug memory smoke: expected gc attempt activity' }
 if ($diag -notmatch 'node_count = 16384') { throw 'debug memory smoke: expected node_count=16384' }
 if ($diag -notmatch 'node_high_water = 16384') { throw 'debug memory smoke: expected node_high_water=16384' }
+if ($diag -notmatch 'scratch_pair_count = 0') { throw 'debug memory smoke: expected scratch_pair_count=0 in diagnostics' }
+if ($diag -notmatch 'scratch_pair_capacity') { throw 'debug memory smoke: expected scratch_pair_capacity in diagnostics' }
 if ($diag -notmatch 'node_gc_pressure_threshold_nodes = 12288') { throw 'debug memory smoke: expected node_gc_pressure_threshold_nodes=12288' }
 if ($diag -notmatch 'node_roots = \{') { throw 'debug memory smoke: expected node_roots table' }
 if ($diag -notmatch 'node_kind_counts = \[') { throw 'debug memory smoke: expected node_kind_counts in diagnostics' }
@@ -68,6 +70,8 @@ if ($diag -notmatch 'node_arena_pressure_count = [1-9][0-9]*') { throw 'debug me
 if ($snap -notmatch 'node_gc_attempts = [1-9][0-9]*') { throw 'debug memory smoke: expected node_gc_attempts>0 in state snapshots' }
 if ($snap -notmatch 'node_root_stack_slots') { throw 'debug memory smoke: expected node_root_stack_slots in state snapshots' }
 if ($snap -notmatch 'node_arena_pressure_count = [1-9][0-9]*') { throw 'debug memory smoke: expected node_arena_pressure_count>0 in state snapshots' }
+if ($snap -notmatch 'scratch_pair_count = 0') { throw 'debug memory smoke: expected scratch_pair_count=0 in state snapshots' }
+if ($snap -notmatch 'scratch_pair_capacity') { throw 'debug memory smoke: expected scratch_pair_capacity in state snapshots' }
 
 $tmpOkDir = Join-Path $RepoRoot '.tmp/ctest-debug-ok-win'
 $tmpOkOut = Join-Path $RepoRoot '.tmp/ctest-debug-ok-out-win'
@@ -91,7 +95,9 @@ $okSnap = Get-Content -Raw (Join-Path $tmpOkOut 'state_snapshots.toml')
 if ($okConfig -notmatch 'status = "ok"') { throw 'debug memory smoke: expected status=ok in config.toml' }
 if ($okDiag -notmatch 'vm_code=AIVM000') { throw 'debug memory smoke: expected vm_code=AIVM000' }
 if ($okDiag -notmatch 'node_gc_attempts = [0-9]+') { throw 'debug memory smoke: expected node_gc_attempts field in diagnostics' }
+if ($okDiag -notmatch 'scratch_pair_count = 0') { throw 'debug memory smoke: expected scratch_pair_count=0 in success diagnostics' }
 if ($okSnap -notmatch 'node_root_stack_slots') { throw 'debug memory smoke: expected node_root_stack_slots in success snapshots' }
+if ($okSnap -notmatch 'scratch_pair_count = 0') { throw 'debug memory smoke: expected scratch_pair_count=0 in success snapshots' }
 if ($okDiag -notmatch 'node_roots = \{') { throw 'debug memory smoke: expected node_roots table in success diagnostics' }
 if ($okDiag -notmatch 'node_kind_counts = \[') { throw 'debug memory smoke: expected node_kind_counts in success diagnostics' }
 if ($okDiag -notmatch 'node_arena_pressure_count = 0') { throw 'debug memory smoke: expected node_arena_pressure_count=0 in success diagnostics' }

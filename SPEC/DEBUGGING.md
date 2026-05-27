@@ -103,6 +103,7 @@ The profiler should report:
 - allocation counts by arena
 - high-water memory by arena
 - compaction counts
+- scratch-pair count and capacity
 - retained node kind counts
 - parser/compiler memory attribution when running tooling workloads
 - worker/task counts
