@@ -250,8 +250,9 @@ These are the immediate hardening tasks before beta:
   deterministic compaction for phase boundaries and tests cover reclamation
   below proactive pressure thresholds. `aivm_execute_program*` now runs the
   safe point after successful execution so CLI/tooling and embedders compact at
-  a deterministic run-complete boundary. Remaining work is wiring worker result
-  handoff boundaries.
+  a deterministic run-complete boundary. `AWAIT` and `PAR_JOIN` run a
+  deterministic handoff safe point and release consumed completed-task records
+  when no visible task handle still pins them.
 - Worker-local heaps and messaging: document and implement worker-local
   mechanical storage plus immutable deterministic queue messages.
 - Shared immutable module cache: design read-only module/cache storage that can

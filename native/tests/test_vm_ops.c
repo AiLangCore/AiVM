@@ -3583,6 +3583,100 @@ static int test_safe_point_compaction_reclaims_below_pressure_threshold(void)
     return 0;
 }
 
+static int test_await_handoff_runs_safe_point_compaction(void)
+{
+    static AivmVm vm;
+    static AivmInstruction instructions[128U * 3U + 6U];
+    AivmValue constants[1];
+    AivmProgram program;
+    AivmValue out;
+    const AivmNodeRecord* node;
+    size_t ip = 0U;
+    size_t async_target;
+    size_t i;
+    size_t transient_nodes = 128U;
+
+    constants[0] = aivm_value_string("tmp");
+    for (i = 0U; i < transient_nodes; i += 1U) {
+        instructions[ip].opcode = AIVM_OP_CONST;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+        instructions[ip].opcode = AIVM_OP_POP;
+        instructions[ip].operand_int = 0;
+        ip += 1U;
+    }
+    async_target = ip + 3U;
+    instructions[ip].opcode = AIVM_OP_ASYNC_CALL;
+    instructions[ip].operand_int = (int64_t)async_target;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_AWAIT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_HALT;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_CONST;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+    instructions[ip].opcode = AIVM_OP_RET;
+    instructions[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program, 0, sizeof(program));
+    program.instructions = instructions;
+    program.instruction_count = ip;
+    program.constants = constants;
+    program.constant_count = 1U;
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_task_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.task_reclaim_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == transient_nodes) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_NODE && out.node_handle == 2) != 0) {
+        return 1;
+    }
+    node = &vm.nodes[(size_t)(out.node_handle - 1)];
+    if (expect(strcmp(node->kind, "Block") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(node->id, "tmp") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_node_compaction_runs_on_child_pressure_before_node_threshold(void)
 {
     static AivmVm vm;
@@ -4430,6 +4524,9 @@ int main(void)
         return 1;
     }
     if (test_safe_point_compaction_reclaims_below_pressure_threshold() != 0) {
+        return 1;
+    }
+    if (test_await_handoff_runs_safe_point_compaction() != 0) {
         return 1;
     }
     if (test_node_compaction_runs_on_child_pressure_before_node_threshold() != 0) {

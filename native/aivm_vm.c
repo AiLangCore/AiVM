@@ -2563,6 +2563,49 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
     return 1;
 }
 
+static int remove_completed_task_slot(AivmVm* vm, int64_t handle)
+{
+    size_t index;
+    size_t next_index = 0U;
+    size_t move_count = 0U;
+    if (vm == NULL) {
+        return 0;
+    }
+    for (index = 0U; index < vm->completed_task_count; index += 1U) {
+        if (vm->completed_tasks[index].handle == handle) {
+            break;
+        }
+    }
+    if (index >= vm->completed_task_count) {
+        return 0;
+    }
+    if (size_add_checked(index, 1U, &next_index) &&
+        next_index < vm->completed_task_count &&
+        size_sub_checked(vm->completed_task_count, next_index, &move_count) &&
+        move_count > 0U) {
+        memmove(
+            &vm->completed_tasks[index],
+            &vm->completed_tasks[next_index],
+            move_count * sizeof(AivmCompletedTask));
+    }
+    vm->completed_task_count -= 1U;
+    increment_counter_saturating(&vm->task_reclaim_count);
+    return 1;
+}
+
+static int release_consumed_task_result(AivmVm* vm, int64_t handle)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    if (is_task_handle_pinned(vm, handle)) {
+        increment_counter_saturating(&vm->task_reclaim_skip_pinned_count);
+        return aivm_collect_safe_point(vm);
+    }
+    (void)remove_completed_task_slot(vm, handle);
+    return aivm_collect_safe_point(vm);
+}
+
 static int push_completed_task(AivmVm* vm, AivmValue result)
 {
     AivmCompletedTask* task;
@@ -5214,6 +5257,10 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            if (!release_consumed_task_result(vm, handle_value.int_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
             vm->instruction_pointer += 1U;
             break;
         }
@@ -5266,6 +5313,8 @@ void aivm_step(AivmVm* vm)
             AivmParContext context;
             size_t join_count;
             int64_t child_handles[AIVM_VM_NODE_CHILD_CAPACITY];
+            int64_t consumed_task_handles[AIVM_VM_NODE_CHILD_CAPACITY];
+            size_t consumed_task_count = 0U;
             char id_buffer[32];
             size_t id_length;
             size_t i;
@@ -5306,6 +5355,8 @@ void aivm_step(AivmVm* vm)
                 value = vm->par_values[par_index];
                 if (value.type == AIVM_VAL_INT &&
                     find_terminal_task_result(vm, value.int_value, &task_result)) {
+                    consumed_task_handles[consumed_task_count] = value.int_value;
+                    consumed_task_count += 1U;
                     value = task_result;
                 }
                 if (!create_runtime_node_from_value(vm, value, &child_handle)) {
@@ -5336,6 +5387,16 @@ void aivm_step(AivmVm* vm)
             vm->par_context_count -= 1U;
             vm->par_value_count = context.start_index;
             if (!aivm_stack_push(vm, aivm_value_node(block_handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            for (i = 0U; i < consumed_task_count; i += 1U) {
+                if (!release_consumed_task_result(vm, consumed_task_handles[i])) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            }
+            if (vm->status == AIVM_VM_STATUS_ERROR) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
