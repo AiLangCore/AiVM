@@ -170,6 +170,8 @@ requirement.
 - [x] Add parser/compiler memory attribution before increasing node limits
   again.
 - [x] Add live node-kind attribution to debug diagnostics.
+- [x] Gate debug memory telemetry fields for pressure counters, root
+  attribution, and node-kind attribution in `test-aivm-c.sh`.
 - [x] Add regression coverage for string arena compaction preserving live node
   strings.
 - [ ] Beta: add parser/compiler scratch arenas for tokenization, parse

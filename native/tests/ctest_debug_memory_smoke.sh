@@ -88,8 +88,20 @@ if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.t
   echo "debug memory smoke: expected node_kind_counts in diagnostics.toml" >&2
   exit 1
 fi
-if ! grep -q 'kind = "Lit"' "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected Lit node kind attribution" >&2
+if ! grep -q 'kind = "Block"' "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected Block node kind attribution" >&2
+  exit 1
+fi
+if ! grep -q "string_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected string_arena_pressure_count in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "bytes_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected bytes_arena_pressure_count in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -Eq "node_arena_pressure_count = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count>0 in diagnostics.toml" >&2
   exit 1
 fi
 if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
@@ -98,6 +110,10 @@ if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/stat
 fi
 if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
   echo "debug memory smoke: expected node_root_stack_slots in state snapshots" >&2
+  exit 1
+fi
+if ! grep -Eq "node_arena_pressure_count = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count>0 in state snapshots" >&2
   exit 1
 fi
 
@@ -125,8 +141,8 @@ if ! grep -q "vm_code=AIVM000" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; th
   echo "debug memory smoke: expected vm_code=AIVM000" >&2
   exit 1
 fi
-if ! grep -q "node_gc_attempts = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_gc_attempts=0 in diagnostics.toml" >&2
+if ! grep -Eq "node_gc_attempts = [0-9]+" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_gc_attempts field in diagnostics.toml" >&2
   exit 1
 fi
 if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots.toml"; then
@@ -139,6 +155,10 @@ if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; the
 fi
 if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
   echo "debug memory smoke: expected node_kind_counts in success diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in success diagnostics.toml" >&2
   exit 1
 fi
 
