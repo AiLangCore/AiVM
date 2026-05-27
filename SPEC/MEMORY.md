@@ -124,6 +124,12 @@ workloads may create large volumes of temporary parser nodes and parse results.
 Those temporaries should be placed in scratch regions or shortened lifetimes
 before raising semantic node limits again.
 
+Scratch result pairs or tuples are required before parser result wrapper nodes
+can be removed entirely. The runtime representation must be deterministic,
+bounded, and able to root/remap contained node references during safe-point
+compaction. It must remain a VM/compiler implementation mechanism, not a
+syscall surface or duplicated AiLang concurrency/semantic contract.
+
 ## Retained Intermediate Node Reduction
 
 Compiler and parser workloads must minimize retained intermediate nodes.

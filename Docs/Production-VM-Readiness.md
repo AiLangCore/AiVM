@@ -247,7 +247,10 @@ These are the immediate hardening tasks before beta:
   after host dispatch returns, and `aivm-debug` enforces artifact byte budgets
   before publishing artifact files.
 - Parser retained nodes: use parser memory attribution to reduce temporary
-  token/result nodes retained during compiler source parsing.
+  token/result nodes retained during compiler source parsing. Token nodes are
+  now scratch strings in AiLang; remaining parse result wrappers need a real
+  VM scratch pair/tuple value that can safely root/remap contained node
+  references during compaction.
 - Parser/compiler scratch arenas: route parser/compiler internals through
   scratch storage where possible while keeping final AST nodes in semantic node
   storage.
