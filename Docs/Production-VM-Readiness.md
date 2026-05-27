@@ -179,7 +179,8 @@ requirement.
 - [x] Beta: reduce retained parser intermediate nodes enough that compiler
   source parsing no longer depends on raising arena ceilings.
 - [ ] Beta: continue compiler-analysis scratch storage for later analysis
-  passes that still retain temporary structures.
+  passes that still retain temporary structures. Initial validation state now
+  uses scratch-pair storage for transient `(errors, ids)` state.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -255,8 +256,10 @@ These are the immediate hardening tasks before beta:
   compaction.
 - Parser/compiler scratch storage: parser tokenization and parse-result
   construction are routed through scratch storage while final AST nodes remain
-  in semantic node storage. Remaining work is compiler-analysis scratch storage
-  for later passes that still retain temporary structures.
+  in semantic node storage. Validation state now uses scratch pairs for the
+  transient `(errors, ids)` analysis state while diagnostics and ID records
+  remain semantic nodes. Remaining work is additional compiler-analysis scratch
+  storage for later passes that still retain temporary structures.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
   deterministic compaction for phase boundaries and tests cover reclamation
   below proactive pressure thresholds. `aivm_execute_program*` now runs the
