@@ -174,10 +174,12 @@ requirement.
   attribution, and node-kind attribution in `test-aivm-c.sh`.
 - [x] Add regression coverage for string arena compaction preserving live node
   strings.
-- [ ] Beta: add parser/compiler scratch arenas for tokenization, parse
-  construction, and compiler analysis passes.
-- [ ] Beta: reduce retained parser intermediate nodes so compiler source
-  parsing does not depend on repeatedly raising arena ceilings.
+- [x] Beta: add parser scratch storage for tokenization and parse-result
+  construction.
+- [x] Beta: reduce retained parser intermediate nodes enough that compiler
+  source parsing no longer depends on raising arena ceilings.
+- [ ] Beta: continue compiler-analysis scratch storage for later analysis
+  passes that still retain temporary structures.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -246,15 +248,15 @@ These are the immediate hardening tasks before beta:
   before host window creation, VM syscall dispatch enforces elapsed-time limits
   after host dispatch returns, and `aivm-debug` enforces artifact byte budgets
   before publishing artifact files.
-- Parser retained nodes: use parser memory attribution to reduce temporary
-  token/result nodes retained during compiler source parsing. Token nodes are
-  now scratch strings in AiLang; AiVM now has bounded scratch-pair values and
+- Parser retained nodes: parser memory attribution now gates final node count,
+  node high-water, and scratch-pair use. Token nodes are scratch strings in
+  AiLang. Parser result helpers lower to bounded AiVM scratch-pair values and
   pair access opcodes that safely root/remap contained node references during
-  compaction. The remaining work is lowering parser result helpers onto those
-  pair values.
-- Parser/compiler scratch arenas: route parser/compiler internals through
-  scratch storage where possible while keeping final AST nodes in semantic node
-  storage.
+  compaction.
+- Parser/compiler scratch storage: parser tokenization and parse-result
+  construction are routed through scratch storage while final AST nodes remain
+  in semantic node storage. Remaining work is compiler-analysis scratch storage
+  for later passes that still retain temporary structures.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
   deterministic compaction for phase boundaries and tests cover reclamation
   below proactive pressure thresholds. `aivm_execute_program*` now runs the
