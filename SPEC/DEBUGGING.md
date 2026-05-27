@@ -164,6 +164,9 @@ Artifacts should follow these rules:
 - every truncation must be visible to the agent
 - include enough context for an agent to propose the next command
 
+The field-level debug artifact contract is defined in
+`SPEC/DEBUG_ARTIFACTS.md`.
+
 ## Agent Debug Commands
 
 The agent-facing command surface should support:

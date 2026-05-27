@@ -34,6 +34,7 @@ profile limit record.
 | `node_capacity` | 16384 | Maximum semantic node records. |
 | `node_attr_capacity` | 65536 | Maximum semantic node attributes. |
 | `node_child_capacity` | 131072 | Maximum semantic node child handles. |
+| `scratch_pair_capacity` | 32768 | Maximum scratch-pair records for VM-internal temporary pairs. |
 | `task_capacity` | 256 | Maximum completed async task records. |
 | `par_value_capacity` | 1024 | Maximum retained parallel branch values. |
 
@@ -63,6 +64,9 @@ bundle. The core files are:
 - `memory.toml`: arena usage, high-water marks, pressure counters, and limit
   records.
 - `profile.toml`: execution/profiling counters.
+
+The field-level machine-readable artifact contract is defined in
+`SPEC/DEBUG_ARTIFACTS.md`.
 
 Production `aivm` keeps output concise. Full memory/profile detail belongs to
 `aivm-debug`.
