@@ -3317,6 +3317,14 @@ static int should_attempt_proactive_node_gc(
     return 0;
 }
 
+static int should_attempt_return_safe_point(const AivmVm* vm)
+{
+    if (vm == NULL) {
+        return 0;
+    }
+    return vm->node_allocations_since_gc >= AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS;
+}
+
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -4421,6 +4429,10 @@ void aivm_step(AivmVm* vm)
                 pre_restore_stack_count,
                 frame.frame_base,
                 has_return_value);
+            if (should_attempt_return_safe_point(vm) && !aivm_collect_safe_point(vm)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
             vm->instruction_pointer = frame.return_instruction_pointer;
             break;
         }

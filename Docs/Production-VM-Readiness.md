@@ -178,6 +178,9 @@ requirement.
   parsing does not depend on repeatedly raising arena ceilings.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
+- [x] Beta: run deterministic return-boundary safe points after accumulated
+  node allocation pressure so recursive parser/compiler temporaries are
+  reclaimed before run completion.
 - [ ] Beta: add worker-local heap strategy for mechanical background work.
 - [ ] Beta: add immutable message passing through deterministic queue dispatch.
 - [ ] Beta: document immutable shared module cache direction.
@@ -252,7 +255,10 @@ These are the immediate hardening tasks before beta:
   safe point after successful execution so CLI/tooling and embedders compact at
   a deterministic run-complete boundary. `AWAIT` and `PAR_JOIN` run a
   deterministic handoff safe point and release consumed completed-task records
-  when no visible task handle still pins them.
+  when no visible task handle still pins them. Function returns also run a
+  deterministic safe point after `AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS`
+  node allocations, which reduces recursive parser/compiler high-water usage
+  without making collection depend on wall-clock timing.
 - Worker-local heaps and messaging: document and implement worker-local
   mechanical storage plus immutable deterministic queue messages.
 - Shared immutable module cache: design read-only module/cache storage that can

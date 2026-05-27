@@ -222,6 +222,8 @@ Required safe points include:
 - at allocation paths that can prove all temporary handles are protected
 - at deterministic compiler/tooling phase boundaries
 - at deterministic worker result handoff boundaries
+- at function return boundaries after enough node allocation pressure has
+  accumulated
 
 Compaction must not depend on wall-clock timing, host thread scheduling, or
 non-deterministic host state.
