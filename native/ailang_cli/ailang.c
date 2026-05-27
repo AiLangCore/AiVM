@@ -6749,6 +6749,34 @@ static int simple_compile_expr_ext(
         }
         return 1;
     }
+    if (starts_with(node->kind, "MakePair")) {
+        SimpleNodeView first_node;
+        SimpleNodeView second_node;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &first_node) ||
+            !simple_parse_next_node(first_node.next, node->body_end, &second_node)) {
+            return simple_fail("MakePair requires (first,second)");
+        }
+        if (!simple_compile_expr_ext(&first_node, program, locals, ctx) ||
+            !simple_compile_expr_ext(&second_node, program, locals, ctx) ||
+            !simple_emit_instruction(program, AIVM_OP_MAKE_PAIR, 0)) {
+            return 0;
+        }
+        return 1;
+    }
+    if (starts_with(node->kind, "PairFirst") || starts_with(node->kind, "PairSecond")) {
+        SimpleNodeView pair_node;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &pair_node)) {
+            return simple_failf("%s requires pair operand", node->kind);
+        }
+        if (!simple_compile_expr_ext(&pair_node, program, locals, ctx) ||
+            !simple_emit_instruction(
+                program,
+                starts_with(node->kind, "PairFirst") ? AIVM_OP_PAIR_FIRST : AIVM_OP_PAIR_SECOND,
+                0)) {
+            return 0;
+        }
+        return 1;
+    }
     if (starts_with(node->kind, "MakeLitString") || starts_with(node->kind, "MakeLitInt") ||
         starts_with(node->kind, "MakeLitBool") ||
         starts_with(node->kind, "MakeFieldString")) {
