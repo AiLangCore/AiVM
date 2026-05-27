@@ -3550,6 +3550,7 @@ static uint8_t g_native_bytes_scratch[NATIVE_BYTES_SCRATCH_CAPACITY];
 static char* g_native_string_scratch = NULL;
 static size_t g_native_string_scratch_capacity = 0U;
 
+#if defined(_WIN32) || defined(__APPLE__)
 static int native_string_scratch_ensure_capacity(size_t required_capacity)
 {
     char* grown;
@@ -3576,6 +3577,7 @@ static int native_string_scratch_ensure_capacity(size_t required_capacity)
     g_native_string_scratch_capacity = new_capacity;
     return 1;
 }
+#endif
 
 static int native_bytes_from_base64(
     const char* input,
