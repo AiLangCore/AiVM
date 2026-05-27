@@ -1,0 +1,10 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=ASYNC_CALL a=4)
+    Inst#i2(op=AWAIT)
+    Inst#i3(op=HALT)
+    Inst#i4(op=NOP)
+    Inst#i5(op=PUSH_INT a=0)
+    Inst#i6(op=RET)
+  }
+}
