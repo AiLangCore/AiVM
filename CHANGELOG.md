@@ -2,6 +2,33 @@
 
 All notable changes to AiVM are documented in this file.
 
+## [0.0.1-beta.2] - 2026-05-27
+
+### Added
+
+- Added VM scratch-pair values and pair access opcodes for bounded temporary
+  compiler/parser state.
+- Added scratch-pair debug telemetry in `diagnostics.toml`,
+  `state_snapshots.toml`, and `memory.toml`.
+- Added the machine-readable debug artifact field contract in
+  `SPEC/DEBUG_ARTIFACTS.md`.
+- Added broader memory audit workloads for process, async, and parallel
+  cleanup paths.
+
+### Changed
+
+- Moved deterministic text, byte, and crypto utility behavior out of host
+  syscall contracts and into deterministic VM/library surfaces.
+- Hardened resource-limit enforcement for filesystem, network, process,
+  worker, UI, syscall elapsed-time, and debug artifact budgets.
+- Added deterministic safe-point compaction at runtime phase boundaries,
+  task handoff points, and allocation-pressure return boundaries.
+
+### Notes
+
+- This is a beta runtime release. Pre-1.0 contracts may still change, but the
+  current runtime/debug artifact surface is documented and regression-gated.
+
 ## [0.0.1-beta.1] - 2026-05-19
 
 ### Changed
