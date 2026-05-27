@@ -180,7 +180,9 @@ requirement.
   source parsing no longer depends on raising arena ceilings.
 - [ ] Beta: continue compiler-analysis scratch storage for later analysis
   passes that still retain temporary structures. Initial validation state now
-  uses scratch-pair storage for transient `(errors, ids)` state.
+  uses scratch-pair storage for transient `(errors, ids)` state, and AiLang
+  tooling evaluator state now uses scratch-pair storage for transient
+  `(value, env)` state.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -258,6 +260,8 @@ These are the immediate hardening tasks before beta:
   construction are routed through scratch storage while final AST nodes remain
   in semantic node storage. Validation state now uses scratch pairs for the
   transient `(errors, ids)` analysis state while diagnostics and ID records
+  remain semantic nodes. AiLang tooling evaluator state now uses scratch pairs
+  for transient `(value, env)` state while values, closures, and environments
   remain semantic nodes. Remaining work is additional compiler-analysis scratch
   storage for later passes that still retain temporary structures.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
