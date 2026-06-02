@@ -152,9 +152,8 @@ static int host_adapter_enqueue(void* context, const char* event_name, AivmValue
     if (state->enqueue_fail != 0) {
         return 1;
     }
-    if (payload.type == AIVM_VAL_INT && payload.int_value >= 0) {
-        state->enqueued_count += 1U;
-    }
+    (void)payload;
+    state->enqueued_count += 1U;
     return 0;
 }
 
@@ -534,11 +533,42 @@ int main(void)
                AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
         return 1;
     }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_node(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_pair(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_unknown()) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_string(NULL)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_bytes(NULL, 1U)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.enqueued_count == 0U) != 0) {
+        return 1;
+    }
     if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_int(1)) ==
                AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
         return 1;
     }
-    if (expect(adapter_state.enqueued_count == 1U) != 0) {
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_string("frozen")) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_bytes(NULL, 0U)) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.enqueued_count == 3U) != 0) {
         return 1;
     }
 

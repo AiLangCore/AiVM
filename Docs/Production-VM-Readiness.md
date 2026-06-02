@@ -196,7 +196,7 @@ requirement.
 - [x] Beta: document large-object/blob storage direction.
 - [ ] Beta: implement worker-local heap execution paths for mechanical
   background work.
-- [ ] Beta: implement immutable message payload validation at deterministic
+- [x] Beta: implement immutable message payload validation at deterministic
   queue boundaries.
 - [x] Document named runtime profiles for production, debug, and
   compiler/tooling workloads.
@@ -281,8 +281,10 @@ These are the immediate hardening tasks before beta:
   deterministic safe point after `AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS`
   node allocations, which reduces recursive parser/compiler high-water usage
   without making collection depend on wall-clock timing.
-- Worker-local heaps and messaging: document and implement worker-local
-  mechanical storage plus immutable deterministic queue messages.
+- Worker-local heaps and messaging: immutable deterministic queue messages now
+  reject live VM node handles, scratch-pair handles, unknown values, null
+  strings, and non-empty null byte views before the host adapter sees them.
+  Remaining work is worker-local mechanical storage.
 - Shared immutable module cache: design read-only module/cache storage that can
   be shared across workers without exposing mutable semantic state.
 - Large-object/blob storage: design handle-based storage for large byte buffers,

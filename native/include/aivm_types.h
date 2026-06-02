@@ -45,5 +45,6 @@ AivmValue aivm_value_bytes(const uint8_t* data, size_t length);
 AivmValue aivm_value_node(int64_t handle);
 AivmValue aivm_value_pair(int64_t handle);
 int aivm_value_equals(AivmValue left, AivmValue right);
+int aivm_value_is_immutable_message_payload(AivmValue value);
 
 #endif

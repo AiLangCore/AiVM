@@ -8,6 +8,9 @@ AivmRuntimeHostEventStatus aivm_runtime_host_enqueue_event(
     if (adapter == NULL || adapter->enqueue == NULL || event_name == NULL || event_name[0] == '\0') {
         return AIVM_RUNTIME_HOST_EVENT_INVALID;
     }
+    if (!aivm_value_is_immutable_message_payload(payload)) {
+        return AIVM_RUNTIME_HOST_EVENT_INVALID;
+    }
 
     if (adapter->enqueue(adapter->context, event_name, payload) != 0) {
         return AIVM_RUNTIME_HOST_EVENT_REJECTED;

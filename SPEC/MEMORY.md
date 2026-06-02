@@ -191,6 +191,8 @@ into observable execution.
 Queue requirements:
 
 - messages are immutable when enqueued
+- enqueue validation rejects live VM node handles, scratch-pair handles,
+  unknown values, null strings, and non-empty null byte views
 - messages have deterministic ordering metadata
 - dequeue/application order is deterministic
 - batching is allowed when it preserves deterministic ordering

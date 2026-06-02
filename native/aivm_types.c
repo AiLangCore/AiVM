@@ -155,3 +155,26 @@ int aivm_value_equals(AivmValue left, AivmValue right)
             return 0;
     }
 }
+
+int aivm_value_is_immutable_message_payload(AivmValue value)
+{
+    switch (value.type) {
+        case AIVM_VAL_VOID:
+        case AIVM_VAL_INT:
+        case AIVM_VAL_BOOL:
+        case AIVM_VAL_NULL:
+            return 1;
+
+        case AIVM_VAL_STRING:
+            return value.string_value != NULL ? 1 : 0;
+
+        case AIVM_VAL_BYTES:
+            return value.bytes_value.length == 0U || value.bytes_value.data != NULL ? 1 : 0;
+
+        case AIVM_VAL_NODE:
+        case AIVM_VAL_PAIR:
+        case AIVM_VAL_UNKNOWN:
+        default:
+            return 0;
+    }
+}
