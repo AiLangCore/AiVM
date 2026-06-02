@@ -188,10 +188,16 @@ requirement.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
   node allocation pressure so recursive parser/compiler temporaries are
   reclaimed before run completion.
-- [ ] Beta: add worker-local heap strategy for mechanical background work.
-- [ ] Beta: add immutable message passing through deterministic queue dispatch.
-- [ ] Beta: document immutable shared module cache direction.
-- [ ] Beta: document large-object/blob storage direction.
+- [x] Beta: document worker-local heap strategy for mechanical background
+  work.
+- [x] Beta: document immutable message passing through deterministic queue
+  dispatch.
+- [x] Beta: document immutable shared module cache direction.
+- [x] Beta: document large-object/blob storage direction.
+- [ ] Beta: implement worker-local heap execution paths for mechanical
+  background work.
+- [ ] Beta: implement immutable message payload validation at deterministic
+  queue boundaries.
 - [x] Document named runtime profiles for production, debug, and
   compiler/tooling workloads.
 - [x] Emit the active runtime profile and VM limit records in debug artifact
