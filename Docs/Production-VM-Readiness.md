@@ -182,7 +182,8 @@ requirement.
   passes that still retain temporary structures. Initial validation state now
   uses scratch-pair storage for transient `(errors, ids)` state, and AiLang
   tooling evaluator state now uses scratch-pair storage for transient
-  `(value, env)` state.
+  `(value, env)` state. Validation's temporary seen-id set is now string-backed
+  instead of a semantic block of `Lit` nodes.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -269,10 +270,12 @@ These are the immediate hardening tasks before beta:
   construction are routed through scratch storage while final AST nodes remain
   in semantic node storage. Validation state now uses scratch pairs for the
   transient `(errors, ids)` analysis state while diagnostics and ID records
-  remain semantic nodes. AiLang tooling evaluator state now uses scratch pairs
-  for transient `(value, env)` state while values, closures, and environments
-  remain semantic nodes. Remaining work is additional compiler-analysis scratch
-  storage for later passes that still retain temporary structures.
+  remain semantic nodes. Validation's seen-id set is string-backed instead of
+  retaining semantic `Lit` nodes. AiLang tooling evaluator state now uses
+  scratch pairs for transient `(value, env)` state while values, closures, and
+  environments remain semantic nodes. Remaining work is additional
+  compiler-analysis scratch storage for later passes that still retain
+  temporary structures.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
   deterministic compaction for phase boundaries and tests cover reclamation
   below proactive pressure thresholds. `aivm_execute_program*` now runs the
