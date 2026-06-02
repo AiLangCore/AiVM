@@ -4313,6 +4313,7 @@ static int run_native_compiled_program(
     native_host_ui_reset();
     native_net_reset();
     native_fs_file_handles_reset();
+    native_worker_reset_all();
 
     bindings[0].target = "sys.stdout.writeLine";
     bindings[0].handler = native_syscall_stdout_write_line;
@@ -4530,6 +4531,7 @@ static int run_native_compiled_program(
         (void)write_native_debug_bundle(debug_options, program, &vm, 0, 0, diagnostics_line);
         native_net_reset();
         native_fs_file_handles_reset();
+        native_worker_reset_all();
         native_host_ui_shutdown();
         native_scene_capture_reset();
         airun_log_capture_close();
@@ -4557,6 +4559,7 @@ static int run_native_compiled_program(
     (void)write_native_debug_bundle(debug_options, program, &vm, exit_code, has_exit_code, diagnostics_line);
     native_net_reset();
     native_fs_file_handles_reset();
+    native_worker_reset_all();
     native_host_ui_shutdown();
     native_scene_capture_reset();
     airun_log_capture_close();

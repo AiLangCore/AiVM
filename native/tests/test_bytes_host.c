@@ -22,6 +22,8 @@ int main(void)
     int64_t worker_fail = -1;
     int64_t worker_sleep = -1;
 
+    native_worker_reset_all();
+
     {
         size_t png_len = 0U;
         size_t rgba_len = 0U;
@@ -73,6 +75,8 @@ int main(void)
     status = native_syscall_worker_result("sys.worker.result", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-ok") == 0);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].result != NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].error == NULL);
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "") == 0);
@@ -90,6 +94,8 @@ int main(void)
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-fail") == 0);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].error != NULL);
 
     one_arg[0] = aivm_value_int(worker_sleep);
     status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
@@ -104,6 +110,8 @@ int main(void)
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "canceled") == 0);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].error != NULL);
     status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
@@ -121,6 +129,15 @@ int main(void)
     status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
+
+    native_worker_reset_all();
+    CHECK(native_worker_active_count() == 0U);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].error == NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].error == NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].error == NULL);
 
     return 0;
 }

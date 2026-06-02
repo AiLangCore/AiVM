@@ -195,7 +195,9 @@ requirement.
 - [x] Beta: document immutable shared module cache direction.
 - [x] Beta: document large-object/blob storage direction.
 - [ ] Beta: implement worker-local heap execution paths for mechanical
-  background work.
+  background work. Initial host worker result/error payloads now use
+  worker-owned heap storage with deterministic release at slot reuse,
+  cancellation, and runtime reset.
 - [x] Beta: implement immutable message payload validation at deterministic
   queue boundaries.
 - [x] Document named runtime profiles for production, debug, and
@@ -284,7 +286,9 @@ These are the immediate hardening tasks before beta:
 - Worker-local heaps and messaging: immutable deterministic queue messages now
   reject live VM node handles, scratch-pair handles, unknown values, null
   strings, and non-empty null byte views before the host adapter sees them.
-  Remaining work is worker-local mechanical storage.
+  Host worker result/error payloads now use worker-owned heap storage and are
+  cleared deterministically. Remaining work is full worker-local mechanical
+  execution storage.
 - Shared immutable module cache: design read-only module/cache storage that can
   be shared across workers without exposing mutable semantic state.
 - Large-object/blob storage: design handle-based storage for large byte buffers,
