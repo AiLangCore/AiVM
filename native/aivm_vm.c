@@ -3,9 +3,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 #include "sys/aivm_syscall_contracts.h"
 
 #define AIVM_VM_STORAGE_MAGIC 0xA117A11DU
+
+typedef struct AivmBytecodeWorkerContext AivmBytecodeWorkerContext;
+static void free_bytecode_worker_context(AivmBytecodeWorkerContext* context);
 
 static void set_vm_error(AivmVm* vm, AivmVmError error, const char* detail)
 {
@@ -603,6 +611,8 @@ static const char* syscall_not_found_detail_with_recovery(
     size_t arg_count);
 static const char* syscall_contract_failure_detail(AivmContractStatus status);
 static int lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
+static int lookup_scratch_pair(const AivmVm* vm, int64_t handle, const AivmScratchPair** out_pair);
+static int create_scratch_pair(AivmVm* vm, AivmValue first, AivmValue second, int64_t* out_handle);
 static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result);
 static size_t write_u64_decimal(char* output, size_t capacity, uint64_t value);
 static int is_syscall_target_string(const char* text);
@@ -623,6 +633,7 @@ static int create_node_record(
     const int64_t* children,
     size_t child_count,
     int64_t* out_handle);
+static int is_terminal_task_state(AivmTaskState state);
 
 static void increment_counter_saturating(size_t* counter)
 {
@@ -2576,6 +2587,10 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
         return 1;
     }
     for (index = 0U; index < vm->completed_task_count; index += 1U) {
+        if (!is_terminal_task_state(vm->completed_tasks[index].state)) {
+            increment_counter_saturating(&vm->task_reclaim_skip_pinned_count);
+            continue;
+        }
         if (!is_task_handle_pinned(vm, vm->completed_tasks[index].handle)) {
             break;
         }
@@ -2589,10 +2604,17 @@ static int reclaim_oldest_completed_task_slot(AivmVm* vm)
         next_index < vm->completed_task_count &&
         size_sub_checked(vm->completed_task_count, next_index, &move_count) &&
         move_count > 0U) {
+        if (vm->completed_tasks[index].worker_context != NULL) {
+            free_bytecode_worker_context((AivmBytecodeWorkerContext*)vm->completed_tasks[index].worker_context);
+            vm->completed_tasks[index].worker_context = NULL;
+        }
         memmove(
             &vm->completed_tasks[index],
             &vm->completed_tasks[next_index],
             move_count * sizeof(AivmCompletedTask));
+    } else if (index < vm->completed_task_count && vm->completed_tasks[index].worker_context != NULL) {
+        free_bytecode_worker_context((AivmBytecodeWorkerContext*)vm->completed_tasks[index].worker_context);
+        vm->completed_tasks[index].worker_context = NULL;
     }
     vm->completed_task_count -= 1U;
     increment_counter_saturating(&vm->task_reclaim_count);
@@ -2614,6 +2636,10 @@ static int remove_completed_task_slot(AivmVm* vm, int64_t handle)
     }
     if (index >= vm->completed_task_count) {
         return 0;
+    }
+    if (vm->completed_tasks[index].worker_context != NULL) {
+        free_bytecode_worker_context((AivmBytecodeWorkerContext*)vm->completed_tasks[index].worker_context);
+        vm->completed_tasks[index].worker_context = NULL;
     }
     if (size_add_checked(index, 1U, &next_index) &&
         next_index < vm->completed_task_count &&
@@ -2672,6 +2698,7 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
     task->state = AIVM_TASK_STATE_PENDING;
     task->handle = handle;
     task->result = result;
+    task->worker_context = NULL;
     if (!transition_task_state(vm, task, AIVM_TASK_STATE_COMPLETED)) {
         return 0;
     }
@@ -2679,18 +2706,430 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
     return aivm_stack_push(vm, aivm_value_int(handle));
 }
 
-static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* out_result)
+#if defined(_WIN32)
+typedef HANDLE AivmNativeThread;
+#else
+typedef pthread_t AivmNativeThread;
+#endif
+
+struct AivmBytecodeWorkerContext {
+    AivmVm worker;
+    size_t target;
+    AivmValue result;
+    int joined;
+    int started;
+    AivmNativeThread thread;
+};
+
+static int run_prepared_worker_vm(AivmVm* worker, size_t target, AivmValue* out_result)
 {
-    size_t baseline_frame_count;
+    AivmValue result = aivm_value_void();
+    if (worker == NULL || out_result == NULL) {
+        return 0;
+    }
+    worker->instruction_pointer = target;
+    while (worker->status != AIVM_VM_STATUS_ERROR) {
+        if (worker->call_frame_count == 0U &&
+            worker->instruction_pointer == worker->program->instruction_count) {
+            break;
+        }
+
+        if (worker->instruction_pointer >= worker->program->instruction_count) {
+            set_vm_error(worker, AIVM_VM_ERR_INVALID_PROGRAM, "Subroutine terminated without RET.");
+            return 0;
+        }
+
+        aivm_step(worker);
+        if (worker->status == AIVM_VM_STATUS_HALTED) {
+            if (worker->call_frame_count == 0U &&
+                worker->instruction_pointer == worker->program->instruction_count) {
+                break;
+            }
+            set_vm_error(worker, AIVM_VM_ERR_INVALID_PROGRAM, "HALT is invalid inside ASYNC_CALL.");
+            return 0;
+        }
+    }
+
+    if (worker->status == AIVM_VM_STATUS_ERROR) {
+        return 0;
+    }
+
+    if (worker->stack_count > 1U) {
+        set_vm_error(worker, AIVM_VM_ERR_INVALID_PROGRAM, "Return restore invalid.");
+        return 0;
+    }
+    if (worker->stack_count == 1U) {
+        result = worker->stack[0];
+    }
+    *out_result = result;
+    return 1;
+}
+
+#if defined(_WIN32)
+static DWORD WINAPI aivm_bytecode_worker_thread_main(LPVOID raw_context)
+#else
+static void* aivm_bytecode_worker_thread_main(void* raw_context)
+#endif
+{
+    AivmBytecodeWorkerContext* context = (AivmBytecodeWorkerContext*)raw_context;
+    if (context != NULL) {
+        (void)run_prepared_worker_vm(&context->worker, context->target, &context->result);
+    }
+#if defined(_WIN32)
+    return 0;
+#else
+    return NULL;
+#endif
+}
+
+static int start_bytecode_worker_thread(AivmBytecodeWorkerContext* context)
+{
+    if (context == NULL) {
+        return 0;
+    }
+#if defined(_WIN32)
+    context->thread = CreateThread(NULL, 16U * 1024U * 1024U, aivm_bytecode_worker_thread_main, context, 0, NULL);
+    context->started = context->thread != NULL ? 1 : 0;
+    return context->started;
+#else
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr) != 0) {
+        context->started = 0;
+        return 0;
+    }
+    if (pthread_attr_setstacksize(&attr, 16U * 1024U * 1024U) != 0) {
+        (void)pthread_attr_destroy(&attr);
+        context->started = 0;
+        return 0;
+    }
+    if (pthread_create(&context->thread, &attr, aivm_bytecode_worker_thread_main, context) != 0) {
+        (void)pthread_attr_destroy(&attr);
+        context->started = 0;
+        return 0;
+    }
+    (void)pthread_attr_destroy(&attr);
+    context->started = 1;
+    return 1;
+#endif
+}
+
+static int join_bytecode_worker_thread(AivmBytecodeWorkerContext* context)
+{
+    if (context == NULL || context->joined != 0) {
+        return 1;
+    }
+    if (context->started != 0) {
+#if defined(_WIN32)
+        (void)WaitForSingleObject(context->thread, INFINITE);
+        (void)CloseHandle(context->thread);
+        context->thread = NULL;
+#else
+        (void)pthread_join(context->thread, NULL);
+#endif
+    }
+    context->joined = 1;
+    return 1;
+}
+
+static void free_bytecode_worker_context(AivmBytecodeWorkerContext* context)
+{
+    if (context == NULL) {
+        return;
+    }
+    (void)join_bytecode_worker_thread(context);
+    aivm_dispose(&context->worker);
+    free(context);
+}
+
+static void cleanup_bytecode_worker_tasks(AivmVm* vm)
+{
+    size_t i;
+    if (vm == NULL) {
+        return;
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].worker_context != NULL) {
+            free_bytecode_worker_context((AivmBytecodeWorkerContext*)vm->completed_tasks[i].worker_context);
+            vm->completed_tasks[i].worker_context = NULL;
+        }
+    }
+}
+
+typedef struct {
+    const AivmVm* src;
+    AivmVm* dst;
+    int64_t* node_map;
+    size_t node_map_count;
+    int64_t* pair_map;
+    size_t pair_map_count;
+} AivmWorkerBoundaryCopy;
+
+static int copy_worker_boundary_value_with_context(
+    AivmWorkerBoundaryCopy* context,
+    AivmValue source,
+    AivmValue* out_value,
+    const char* direction);
+
+static int copy_worker_boundary_node(
+    AivmWorkerBoundaryCopy* context,
+    int64_t source_handle,
+    int64_t* out_handle)
+{
+    const AivmNodeRecord* source_node;
+    AivmNodeAttr* attrs = NULL;
+    int64_t* children = NULL;
+    int64_t copied_child;
+    int64_t copied_handle;
+    size_t source_index;
+    size_t i;
+    if (context == NULL || context->src == NULL || context->dst == NULL || out_handle == NULL) {
+        return 0;
+    }
+    if (source_handle <= 0 || (size_t)source_handle >= context->node_map_count) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker node handle was invalid.");
+        return 0;
+    }
+    if (context->node_map[source_handle] > 0) {
+        *out_handle = context->node_map[source_handle];
+        return 1;
+    }
+    if (context->node_map[source_handle] < 0) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker node graph cycle was invalid.");
+        return 0;
+    }
+    if (!lookup_node(context->src, source_handle, &source_node)) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker node handle was invalid.");
+        return 0;
+    }
+    context->node_map[source_handle] = -1;
+    attrs = (AivmNodeAttr*)calloc(source_node->attr_count == 0U ? 1U : source_node->attr_count, sizeof(attrs[0]));
+    children = (int64_t*)calloc(source_node->child_count == 0U ? 1U : source_node->child_count, sizeof(children[0]));
+    if (attrs == NULL || children == NULL) {
+        free(attrs);
+        free(children);
+        set_vm_error(context->dst, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: worker node copy scratch allocation failed.");
+        return 0;
+    }
+    for (i = 0U; i < source_node->attr_count; i += 1U) {
+        if (!size_add_checked(source_node->attr_start, i, &source_index) ||
+            source_index >= context->src->node_attr_count) {
+            free(attrs);
+            free(children);
+            set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker node attr slot was invalid.");
+            return 0;
+        }
+        attrs[i] = context->src->node_attrs[source_index];
+    }
+    for (i = 0U; i < source_node->child_count; i += 1U) {
+        if (!size_add_checked(source_node->child_start, i, &source_index) ||
+            source_index >= context->src->node_child_count) {
+            free(attrs);
+            free(children);
+            set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker node child slot was invalid.");
+            return 0;
+        }
+        if (!copy_worker_boundary_node(context, context->src->node_children[source_index], &copied_child)) {
+            free(attrs);
+            free(children);
+            return 0;
+        }
+        children[i] = copied_child;
+    }
+    if (!create_node_record(
+            context->dst,
+            source_node->kind,
+            source_node->id,
+            attrs,
+            source_node->attr_count,
+            children,
+            source_node->child_count,
+            &copied_handle)) {
+        free(attrs);
+        free(children);
+        return 0;
+    }
+    free(attrs);
+    free(children);
+    context->node_map[source_handle] = copied_handle;
+    *out_handle = copied_handle;
+    return 1;
+}
+
+static int copy_worker_boundary_pair(
+    AivmWorkerBoundaryCopy* context,
+    int64_t source_handle,
+    int64_t* out_handle)
+{
+    const AivmScratchPair* source_pair;
+    AivmValue copied_first;
+    AivmValue copied_second;
+    int64_t copied_handle;
+    if (context == NULL || context->src == NULL || context->dst == NULL || out_handle == NULL) {
+        return 0;
+    }
+    if (source_handle <= 0 || (size_t)source_handle >= context->pair_map_count) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker pair handle was invalid.");
+        return 0;
+    }
+    if (context->pair_map[source_handle] > 0) {
+        *out_handle = context->pair_map[source_handle];
+        return 1;
+    }
+    if (context->pair_map[source_handle] < 0) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker pair graph cycle was invalid.");
+        return 0;
+    }
+    if (!lookup_scratch_pair(context->src, source_handle, &source_pair)) {
+        set_vm_error(context->dst, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker pair handle was invalid.");
+        return 0;
+    }
+    context->pair_map[source_handle] = -1;
+    if (!copy_worker_boundary_value_with_context(context, source_pair->first, &copied_first, "pair value") ||
+        !copy_worker_boundary_value_with_context(context, source_pair->second, &copied_second, "pair value")) {
+        return 0;
+    }
+    if (!create_scratch_pair(context->dst, copied_first, copied_second, &copied_handle)) {
+        return 0;
+    }
+    context->pair_map[source_handle] = copied_handle;
+    *out_handle = copied_handle;
+    return 1;
+}
+
+static int copy_worker_boundary_value_with_context(
+    AivmWorkerBoundaryCopy* context,
+    AivmValue source,
+    AivmValue* out_value,
+    const char* direction)
+{
+    char* copied_string;
+    uint8_t* copied_bytes;
+    int64_t copied_handle;
+    AivmVm* dst;
+    if (context == NULL || context->dst == NULL || out_value == NULL) {
+        return 0;
+    }
+    dst = context->dst;
+    switch (source.type) {
+        case AIVM_VAL_VOID:
+        case AIVM_VAL_INT:
+        case AIVM_VAL_BOOL:
+        case AIVM_VAL_NULL:
+            *out_value = source;
+            return 1;
+
+        case AIVM_VAL_STRING:
+            if (source.string_value == NULL) {
+                set_vm_error(dst, AIVM_VM_ERR_TYPE_MISMATCH, "Worker boundary string value must be non-null.");
+                return 0;
+            }
+            copied_string = copy_string_to_arena(dst, source.string_value);
+            if (copied_string == NULL) {
+                set_vm_error(dst, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: worker string copy exceeded arena capacity.");
+                return 0;
+            }
+            *out_value = aivm_value_string(copied_string);
+            return 1;
+
+        case AIVM_VAL_BYTES:
+            if (source.bytes_value.length > 0U && source.bytes_value.data == NULL) {
+                set_vm_error(dst, AIVM_VM_ERR_TYPE_MISMATCH, "Worker boundary bytes value must provide data.");
+                return 0;
+            }
+            copied_bytes = copy_bytes_to_arena(dst, source.bytes_value.data, source.bytes_value.length);
+            if (copied_bytes == NULL && source.bytes_value.length > 0U) {
+                set_vm_error(dst, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: worker bytes copy exceeded arena capacity.");
+                return 0;
+            }
+            *out_value = aivm_value_bytes(copied_bytes, source.bytes_value.length);
+            return 1;
+
+        case AIVM_VAL_NODE:
+            if (!copy_worker_boundary_node(context, source.node_handle, &copied_handle)) {
+                return 0;
+            }
+            *out_value = aivm_value_node(copied_handle);
+            return 1;
+
+        case AIVM_VAL_PAIR:
+            if (!copy_worker_boundary_pair(context, source.pair_handle, &copied_handle)) {
+                return 0;
+            }
+            *out_value = aivm_value_pair(copied_handle);
+            return 1;
+
+        case AIVM_VAL_UNKNOWN:
+        default:
+            (void)snprintf(
+                dst->error_detail_storage,
+                sizeof(dst->error_detail_storage),
+                "ASYNC_CALL worker %s must be immutable scalar, string, or bytes. type=%s",
+                direction == NULL ? "value" : direction,
+                vm_value_type_name(source.type));
+            set_vm_error(dst, AIVM_VM_ERR_INVALID_PROGRAM, dst->error_detail_storage);
+            return 0;
+    }
+}
+
+static int copy_worker_boundary_value(
+    const AivmVm* src,
+    AivmVm* dst,
+    AivmValue source,
+    AivmValue* out_value,
+    const char* direction)
+{
+    AivmWorkerBoundaryCopy context;
+    int result;
+    if (src == NULL || dst == NULL || out_value == NULL) {
+        return 0;
+    }
+    memset(&context, 0, sizeof(context));
+    context.src = src;
+    context.dst = dst;
+    context.node_map_count = src->node_count + 1U;
+    context.pair_map_count = src->scratch_pair_count + 1U;
+    context.node_map = (int64_t*)calloc(context.node_map_count == 0U ? 1U : context.node_map_count, sizeof(context.node_map[0]));
+    context.pair_map = (int64_t*)calloc(context.pair_map_count == 0U ? 1U : context.pair_map_count, sizeof(context.pair_map[0]));
+    if (context.node_map == NULL || context.pair_map == NULL) {
+        free(context.node_map);
+        free(context.pair_map);
+        set_vm_error(dst, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: worker boundary copy map allocation failed.");
+        return 0;
+    }
+    result = copy_worker_boundary_value_with_context(&context, source, out_value, direction);
+    free(context.node_map);
+    free(context.pair_map);
+    return result;
+}
+
+static int propagate_worker_error(AivmVm* parent, const AivmVm* worker)
+{
+    const char* detail;
+    if (parent == NULL || worker == NULL) {
+        return 0;
+    }
+    detail = aivm_vm_error_detail(worker);
+    (void)snprintf(
+        parent->error_detail_storage,
+        sizeof(parent->error_detail_storage),
+        "ASYNC_CALL worker failed: %s",
+        detail == NULL ? "" : detail);
+    set_vm_error(parent, worker->error, parent->error_detail_storage);
+    return 0;
+}
+
+static int start_call_subroutine_worker(AivmVm* vm, size_t target, int64_t* out_handle)
+{
     size_t arg_count;
     size_t frame_base;
-    size_t return_ip;
-    size_t pre_restore_stack_count = 0U;
-    size_t max_stack_count = 0U;
-    size_t extra_stack_values = 0U;
-    AivmValue result = aivm_value_void();
+    size_t i;
+    size_t needed = 0U;
+    int64_t handle;
+    AivmCompletedTask* task;
+    AivmBytecodeWorkerContext* context;
+    AivmValue copied_value;
 
-    if (vm == NULL || out_result == NULL) {
+    if (vm == NULL || out_handle == NULL) {
         return 0;
     }
     if (target >= vm->program->instruction_count) {
@@ -2706,67 +3145,65 @@ static int execute_call_subroutine_sync(AivmVm* vm, size_t target, AivmValue* ou
         return 0;
     }
 
-    baseline_frame_count = vm->call_frame_count;
     frame_base = vm->stack_count - arg_count;
-    if (!size_add_checked(vm->instruction_pointer, 1U, &return_ip)) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Return instruction pointer overflowed.");
-        return 0;
-    }
 
-    if (!aivm_frame_push(vm, return_ip, frame_base)) {
-        return 0;
-    }
-    vm->instruction_pointer = target;
-
-    while (vm->status != AIVM_VM_STATUS_ERROR) {
-        if (vm->call_frame_count == baseline_frame_count &&
-            vm->instruction_pointer == return_ip) {
-            break;
-        }
-
-        if (vm->instruction_pointer >= vm->program->instruction_count) {
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Subroutine terminated without RET.");
-            return 0;
-        }
-
-        aivm_step(vm);
-        if (vm->status == AIVM_VM_STATUS_HALTED) {
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "HALT is invalid inside ASYNC_CALL.");
+    if (vm->completed_task_count >= AIVM_VM_TASK_CAPACITY) {
+        if (!reclaim_oldest_completed_task_slot(vm)) {
+            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
             return 0;
         }
     }
-
-    if (vm->status == AIVM_VM_STATUS_ERROR) {
+    if (vm->next_task_handle == INT64_MAX) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task handle overflow.");
+        return 0;
+    }
+    if (!size_add_checked(vm->completed_task_count, 1U, &needed) ||
+        needed > AIVM_VM_TASK_CAPACITY) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task table capacity exceeded.");
         return 0;
     }
 
-    pre_restore_stack_count = vm->stack_count;
-    if (vm->stack_count > frame_base) {
-        result = vm->stack[vm->stack_count - 1U];
-    }
-    if (!size_add_checked(frame_base, 1U, &max_stack_count)) {
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Async return restore size arithmetic overflow.");
+    context = (AivmBytecodeWorkerContext*)calloc(1U, sizeof(context[0]));
+    if (context == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: bytecode worker context allocation failed.");
         return 0;
     }
-    if (pre_restore_stack_count > max_stack_count) {
-        if (!size_sub_checked(pre_restore_stack_count, max_stack_count, &extra_stack_values)) {
-            set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Async return restore size arithmetic overflow.");
+    aivm_init(&context->worker, vm->program);
+    aivm_set_runtime_profile(&context->worker, vm->runtime_profile);
+    aivm_syscall_policy_allow_none(&context->worker.syscall_policy);
+    context->target = target;
+    context->result = aivm_value_void();
+
+    for (i = 0U; i < arg_count; i += 1U) {
+        if (!copy_worker_boundary_value(vm, &context->worker, vm->stack[frame_base + i], &copied_value, "argument") ||
+            !aivm_stack_push(&context->worker, copied_value)) {
+            (void)propagate_worker_error(vm, &context->worker);
+            free_bytecode_worker_context(context);
             return 0;
         }
-        (void)snprintf(
-            vm->error_detail_storage,
-            sizeof(vm->error_detail_storage),
-            "Async return restore invalid. extraStackValues=%llu frameBase=%llu stackCount=%llu frameCount=%llu pc=%llu",
-            (unsigned long long)extra_stack_values,
-            (unsigned long long)frame_base,
-            (unsigned long long)pre_restore_stack_count,
-            (unsigned long long)vm->call_frame_count,
-            (unsigned long long)vm->instruction_pointer);
-        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+    }
+
+    if (!aivm_frame_push(&context->worker, context->worker.program->instruction_count, 0U)) {
+        (void)propagate_worker_error(vm, &context->worker);
+        free_bytecode_worker_context(context);
         return 0;
     }
+    if (!start_bytecode_worker_thread(context)) {
+        free_bytecode_worker_context(context);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker thread start failed.");
+        return 0;
+    }
+
+    handle = vm->next_task_handle;
+    vm->next_task_handle += 1;
+    task = &vm->completed_tasks[vm->completed_task_count];
+    task->state = AIVM_TASK_STATE_PENDING;
+    task->handle = handle;
+    task->result = aivm_value_void();
+    task->worker_context = context;
+    vm->completed_task_count = needed;
     vm->stack_count = frame_base;
-    *out_result = result;
+    *out_handle = handle;
     return 1;
 }
 
@@ -2833,6 +3270,35 @@ static int call_debug_task_reclaim_stats(AivmVm* vm, AivmValue* out_result)
     return 1;
 }
 
+static int complete_pending_bytecode_task(AivmVm* vm, AivmCompletedTask* task)
+{
+    AivmBytecodeWorkerContext* context;
+    AivmValue copied_result;
+    if (vm == NULL || task == NULL) {
+        return 0;
+    }
+    if (task->state != AIVM_TASK_STATE_PENDING || task->worker_context == NULL) {
+        return 1;
+    }
+    context = (AivmBytecodeWorkerContext*)task->worker_context;
+    if (!join_bytecode_worker_thread(context)) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "ASYNC_CALL worker join failed.");
+        return 0;
+    }
+    if (context->worker.status == AIVM_VM_STATUS_ERROR) {
+        (void)propagate_worker_error(vm, &context->worker);
+        return 0;
+    }
+    if (!copy_worker_boundary_value(&context->worker, vm, context->result, &copied_result, "result")) {
+        return 0;
+    }
+    task->result = copied_result;
+    task->state = AIVM_TASK_STATE_COMPLETED;
+    task->worker_context = NULL;
+    free_bytecode_worker_context(context);
+    return 1;
+}
+
 static int find_terminal_task_result(AivmVm* vm, int64_t handle, AivmValue* out_result)
 {
     size_t i;
@@ -2840,6 +3306,11 @@ static int find_terminal_task_result(AivmVm* vm, int64_t handle, AivmValue* out_
         return 0;
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (vm->completed_tasks[i].handle == handle &&
+            vm->completed_tasks[i].state == AIVM_TASK_STATE_PENDING &&
+            !complete_pending_bytecode_task(vm, &vm->completed_tasks[i])) {
+            return 0;
+        }
         if (is_terminal_task_state(vm->completed_tasks[i].state) &&
             vm->completed_tasks[i].handle == handle) {
             if (!task_terminal_payload_is_valid(vm, &vm->completed_tasks[i])) {
@@ -3907,6 +4378,7 @@ void aivm_reset_state(AivmVm* vm)
     if (!ensure_vm_storage(vm)) {
         return;
     }
+    cleanup_bytecode_worker_tasks(vm);
 
     vm->instruction_pointer = 0U;
     vm->status = AIVM_VM_STATUS_READY;
@@ -3975,6 +4447,7 @@ void aivm_dispose(AivmVm* vm)
     if (vm == NULL) {
         return;
     }
+    cleanup_bytecode_worker_tasks(vm);
     free(vm->stack);
     free(vm->locals);
     free(vm->string_arena);
@@ -5458,19 +5931,20 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_ASYNC_CALL: {
             size_t target;
-            AivmValue result;
+            int64_t handle;
             if (!operand_to_index(vm, instruction->operand_int, &target)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!execute_call_subroutine_sync(vm, target, &result)) {
+            if (!start_call_subroutine_worker(vm, target, &handle)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!push_completed_task(vm, result)) {
+            if (!aivm_stack_push(vm, aivm_value_int(handle))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            vm->instruction_pointer += 1U;
             break;
         }
 

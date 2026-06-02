@@ -7,6 +7,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(AIVM_BUILD_SHARED "Build shared AiVM.C library for host bridge experiments" OFF)
 option(AIVM_BUILD_HOST_TESTS "Build AiLang host integration tests" OFF)
 
+find_package(Threads REQUIRED)
+
 if (MSVC)
     # AivmVm currently owns fixed-size execution arenas. Keep Windows test and
     # CLI stacks large enough until the VM arenas move behind heap-backed storage.
@@ -29,6 +31,7 @@ set(AIVM_CORE_SOURCES
 )
 
 add_library(aivm_core STATIC ${AIVM_CORE_SOURCES})
+target_link_libraries(aivm_core PUBLIC Threads::Threads)
 
 target_include_directories(aivm_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -72,6 +75,7 @@ endif()
 
 if (AIVM_BUILD_SHARED)
     add_library(aivm_core_shared SHARED ${AIVM_CORE_SOURCES})
+    target_link_libraries(aivm_core_shared PUBLIC Threads::Threads)
     target_include_directories(aivm_core_shared PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
@@ -84,6 +88,7 @@ if (AIVM_BUILD_SHARED)
 endif()
 
 add_library(aivm_core_debug STATIC ${AIVM_CORE_SOURCES})
+target_link_libraries(aivm_core_debug PUBLIC Threads::Threads)
 
 target_include_directories(aivm_core_debug PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include

@@ -135,6 +135,7 @@ typedef struct {
     AivmTaskState state;
     int64_t handle;
     AivmValue result;
+    void* worker_context;
 } AivmCompletedTask;
 
 typedef struct {

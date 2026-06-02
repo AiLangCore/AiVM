@@ -172,9 +172,22 @@ Worker-local heaps must:
 - avoid exposing worker-local pointers to the UI/Semantic thread
 
 Current host worker tasks use a worker-owned heap context for task name,
-payload, result, and error strings. Full background bytecode worker execution
-must extend the same ownership rule to its mechanical execution state before it
-can expose results through deterministic queues or completed task records.
+payload, result, and error strings.
+
+`AIVM_OP_ASYNC_CALL` bytecode execution runs through an isolated worker VM
+state. The worker VM owns its stack, locals, arenas, node records, scratch
+pairs, and temporary execution state. Arguments and results cross the boundary
+only by copy. The current beta handoff supports void, null, bool, int, string,
+bytes, node graphs, and scratch pairs. Node graphs are copied into the
+destination VM with child handles remapped to copied destination handles.
+Scratch pairs are copied recursively so pair contents never expose worker-local
+handles. Unknown values are rejected at the boundary.
+
+The isolated worker VM runs on a native worker thread. `AIVM_OP_ASYNC_CALL`
+creates a pending task record and returns its task handle to the parent VM.
+`AIVM_OP_AWAIT` joins the pending worker, copies the frozen result into the
+parent VM, marks the task completed, and then consumes the task result. VM reset
+and disposal join and release any unconsumed pending bytecode workers.
 
 ## Immutable Shared Memory
 

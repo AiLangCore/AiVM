@@ -205,8 +205,12 @@ requirement.
   worker tasks. Host worker task name, payload, result, and error storage now
   live in a worker-owned heap context with deterministic release at slot reuse,
   cancellation, and runtime reset.
-- [ ] Beta: extend worker-local execution storage when full mechanical
-  bytecode/background worker execution is introduced.
+- [x] Beta: run `AIVM_OP_ASYNC_CALL` bytecode through an isolated worker VM
+  state with copied void/null/bool/int/string/bytes arguments and results.
+- [x] Beta: add frozen complex-value handoff for worker node graphs and
+  scratch-pair results.
+- [x] Beta: add OS-thread scheduling for isolated bytecode worker execution
+  without shared mutable semantic heaps.
 - [x] Beta: implement immutable message payload validation at deterministic
   queue boundaries.
 - [x] Document named runtime profiles for production, debug, and
@@ -301,9 +305,12 @@ These are the immediate hardening tasks before beta:
   reject live VM node handles, scratch-pair handles, unknown values, null
   strings, and non-empty null byte views before the host adapter sees them.
   Host worker task name, payload, result, and error values now use
-  worker-owned heap storage and are cleared deterministically. Full
-  worker-local mechanical bytecode execution storage is future work for the
-  point where that worker model is added.
+  worker-owned heap storage and are cleared deterministically. `ASYNC_CALL`
+  bytecode now executes on a native worker thread in an isolated worker VM
+  state and copies
+  void/null/bool/int/string/bytes values, node graphs, and scratch pairs across
+  the boundary. `AWAIT` joins pending bytecode workers deterministically before
+  consuming the task result.
 - Shared immutable module cache: design read-only module/cache storage that can
   be shared across workers without exposing mutable semantic state.
 - Large-object/blob storage: design handle-based storage for large byte buffers,

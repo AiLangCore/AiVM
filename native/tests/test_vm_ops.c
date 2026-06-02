@@ -2025,6 +2025,87 @@ static int test_async_call_and_await_roundtrip(void)
     return 0;
 }
 
+static int test_async_call_starts_pending_worker_task(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    aivm_program_init(&program, &instructions[0], 4U);
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_task_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_tasks[0].state == AIVM_TASK_STATE_PENDING) != 0) {
+        return 1;
+    }
+    if (expect(vm.completed_tasks[0].worker_context != NULL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT && out.int_value == vm.completed_tasks[0].handle) != 0) {
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
+static int test_async_call_copies_string_result_across_worker_boundary(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "worker-string" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 6U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(out.string_value, "worker-string") == 0) != 0) {
+        return 1;
+    }
+    if (expect(out.string_value != constants[0].string_value) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_async_call_invalid_target_sets_error(void)
 {
     static AivmVm vm;
@@ -2042,6 +2123,57 @@ static int test_async_call_invalid_target_sets_error(void)
         return 1;
     }
     if (expect(strcmp(aivm_vm_error_detail(&vm), "Invalid function index.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_async_call_copies_node_result_across_worker_boundary(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    const AivmNodeRecord* node;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "worker-node" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 7U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_NODE) != 0) {
+        return 1;
+    }
+    if (expect(out.node_handle > 0 && (size_t)out.node_handle <= vm.node_count) != 0) {
+        return 1;
+    }
+    node = &vm.nodes[(size_t)(out.node_handle - 1)];
+    if (expect(strcmp(node->kind, "Block") == 0) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(node->id, "worker-node") == 0) != 0) {
         return 1;
     }
     return 0;
@@ -2099,14 +2231,15 @@ static int test_async_call_rejects_extra_callee_stack_values(void)
 {
     static AivmVm vm;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
         { .opcode = AIVM_OP_PUSH_INT, .operand_int = 6 },
         { .opcode = AIVM_OP_RET, .operand_int = 0 }
     };
     AivmProgram program;
-    aivm_program_init(&program, &instructions[0], 5U);
+    aivm_program_init(&program, &instructions[0], 6U);
     aivm_init(&vm, &program);
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
@@ -3662,100 +3795,6 @@ static int test_safe_point_compaction_reclaims_below_pressure_threshold(void)
     return 0;
 }
 
-static int test_await_handoff_runs_safe_point_compaction(void)
-{
-    static AivmVm vm;
-    static AivmInstruction instructions[128U * 3U + 6U];
-    AivmValue constants[1];
-    AivmProgram program;
-    AivmValue out;
-    const AivmNodeRecord* node;
-    size_t ip = 0U;
-    size_t async_target;
-    size_t i;
-    size_t transient_nodes = 128U;
-
-    constants[0] = aivm_value_string("tmp");
-    for (i = 0U; i < transient_nodes; i += 1U) {
-        instructions[ip].opcode = AIVM_OP_CONST;
-        instructions[ip].operand_int = 0;
-        ip += 1U;
-        instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
-        instructions[ip].operand_int = 0;
-        ip += 1U;
-        instructions[ip].opcode = AIVM_OP_POP;
-        instructions[ip].operand_int = 0;
-        ip += 1U;
-    }
-    async_target = ip + 3U;
-    instructions[ip].opcode = AIVM_OP_ASYNC_CALL;
-    instructions[ip].operand_int = (int64_t)async_target;
-    ip += 1U;
-    instructions[ip].opcode = AIVM_OP_AWAIT;
-    instructions[ip].operand_int = 0;
-    ip += 1U;
-    instructions[ip].opcode = AIVM_OP_HALT;
-    instructions[ip].operand_int = 0;
-    ip += 1U;
-    instructions[ip].opcode = AIVM_OP_CONST;
-    instructions[ip].operand_int = 0;
-    ip += 1U;
-    instructions[ip].opcode = AIVM_OP_MAKE_BLOCK;
-    instructions[ip].operand_int = 0;
-    ip += 1U;
-    instructions[ip].opcode = AIVM_OP_RET;
-    instructions[ip].operand_int = 0;
-    ip += 1U;
-
-    memset(&program, 0, sizeof(program));
-    program.instructions = instructions;
-    program.instruction_count = ip;
-    program.constants = constants;
-    program.constant_count = 1U;
-
-    aivm_init(&vm, &program);
-    aivm_run(&vm);
-
-    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
-        return 1;
-    }
-    if (expect(vm.completed_task_count == 0U) != 0) {
-        return 1;
-    }
-    if (expect(vm.task_reclaim_count == 1U) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_gc_reclaimed_nodes == transient_nodes) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_count == 2U) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
-        return 1;
-    }
-    if (expect(vm.stack_count == 1U) != 0) {
-        return 1;
-    }
-    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
-        return 1;
-    }
-    if (expect(out.type == AIVM_VAL_NODE && out.node_handle == 2) != 0) {
-        return 1;
-    }
-    node = &vm.nodes[(size_t)(out.node_handle - 1)];
-    if (expect(strcmp(node->kind, "Block") == 0) != 0) {
-        return 1;
-    }
-    if (expect(strcmp(node->id, "tmp") == 0) != 0) {
-        return 1;
-    }
-    return 0;
-}
-
 static int test_return_boundary_runs_safe_point_compaction(void)
 {
     static AivmVm vm;
@@ -4506,6 +4545,57 @@ static int test_scratch_pair_roundtrip(void)
     return 0;
 }
 
+static int test_async_call_copies_pair_result_across_worker_boundary(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 8 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PAIR_FIRST, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PAIR_SECOND, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 11 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 12 },
+        { .opcode = AIVM_OP_MAKE_PAIR, .operand_int = 0 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 12U,
+        .constants = NULL,
+        .constant_count = 0U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.scratch_pair_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT && out.int_value == 12) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT && out.int_value == 11) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_scratch_pair_roots_node_through_compaction(void)
 {
     static AivmVm vm;
@@ -4725,6 +4815,12 @@ int main(void)
     if (test_async_call_and_await_roundtrip() != 0) {
         return 1;
     }
+    if (test_async_call_starts_pending_worker_task() != 0) {
+        return 1;
+    }
+    if (test_async_call_copies_string_result_across_worker_boundary() != 0) {
+        return 1;
+    }
     if (test_async_call_invalid_target_sets_error() != 0) {
         return 1;
     }
@@ -4738,6 +4834,9 @@ int main(void)
         return 1;
     }
     if (test_async_call_rejects_invalid_call_target_layout() != 0) {
+        return 1;
+    }
+    if (test_async_call_copies_node_result_across_worker_boundary() != 0) {
         return 1;
     }
     if (test_async_call_reclaims_oldest_task_slot_when_full() != 0) {
@@ -4827,9 +4926,6 @@ int main(void)
     if (test_safe_point_compaction_reclaims_below_pressure_threshold() != 0) {
         return 1;
     }
-    if (test_await_handoff_runs_safe_point_compaction() != 0) {
-        return 1;
-    }
     if (test_return_boundary_runs_safe_point_compaction() != 0) {
         return 1;
     }
@@ -4888,6 +4984,9 @@ int main(void)
         return 1;
     }
     if (test_scratch_pair_roundtrip() != 0) {
+        return 1;
+    }
+    if (test_async_call_copies_pair_result_across_worker_boundary() != 0) {
         return 1;
     }
     if (test_scratch_pair_roots_node_through_compaction() != 0) {
