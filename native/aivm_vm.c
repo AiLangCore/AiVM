@@ -235,16 +235,32 @@ static int validate_vm_call_local_state(AivmVm* vm, const char* op_name)
     if (vm->call_frame_count > 0U) {
         const AivmCallFrame* frame = &vm->call_frames[vm->call_frame_count - 1U];
         if (frame->frame_base > vm->stack_count || frame->locals_base > vm->locals_count) {
+            const AivmCallHistoryEntry* call0 = vm->recent_call_count > 0U ? &vm->recent_calls[0] : NULL;
+            const AivmReturnHistoryEntry* return0 = vm->recent_return_count > 0U ? &vm->recent_returns[0] : NULL;
+            const AivmOpcodeHistoryEntry* op0 = vm->recent_opcode_count > 0U ? &vm->recent_opcodes[0] : NULL;
             (void)snprintf(
                 vm->error_detail_storage,
                 sizeof(vm->error_detail_storage),
-                "VM frame invariant failed. op=%s frameBase=%llu localsBase=%llu stackCount=%llu localsCount=%llu frameCount=%llu",
+                "VM frame invariant failed. op=%s frameBase=%llu localsBase=%llu returnIp=%llu stackCount=%llu localsCount=%llu frameCount=%llu pc=%llu call0Ip=%llu call0Target=%llu call0ArgCount=%llu call0Stack=%llu return0Ip=%llu return0Stack=%llu return0PreRestore=%llu return0FrameBase=%llu op0Ip=%llu op0Opcode=%d op0Stack=%llu",
                 (op_name == NULL || op_name[0] == '\0') ? "state" : op_name,
                 (unsigned long long)frame->frame_base,
                 (unsigned long long)frame->locals_base,
+                (unsigned long long)frame->return_instruction_pointer,
                 (unsigned long long)vm->stack_count,
                 (unsigned long long)vm->locals_count,
-                (unsigned long long)vm->call_frame_count);
+                (unsigned long long)vm->call_frame_count,
+                (unsigned long long)vm->instruction_pointer,
+                (unsigned long long)(call0 != NULL ? call0->instruction_pointer : 0U),
+                (unsigned long long)(call0 != NULL ? call0->target : 0U),
+                (unsigned long long)(call0 != NULL ? call0->arg_count : 0U),
+                (unsigned long long)(call0 != NULL ? call0->stack_count : 0U),
+                (unsigned long long)(return0 != NULL ? return0->instruction_pointer : 0U),
+                (unsigned long long)(return0 != NULL ? return0->stack_count : 0U),
+                (unsigned long long)(return0 != NULL ? return0->pre_restore_stack_count : 0U),
+                (unsigned long long)(return0 != NULL ? return0->frame_base : 0U),
+                (unsigned long long)(op0 != NULL ? op0->instruction_pointer : 0U),
+                op0 != NULL ? op0->opcode : 0,
+                (unsigned long long)(op0 != NULL ? op0->stack_count : 0U));
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
             return 0;
         }
@@ -300,6 +316,22 @@ static int validate_vm_return_restore(
     if (vm == NULL || frame == NULL) {
         return 0;
     }
+    if (vm->stack_count > vm->stack_limit ||
+        vm->call_frame_count > vm->call_frame_limit ||
+        vm->locals_count > vm->locals_limit) {
+        (void)snprintf(
+            vm->error_detail_storage,
+            sizeof(vm->error_detail_storage),
+            "VM state invariant failed. op=return-restore stackCount=%llu stackLimit=%llu frameCount=%llu frameLimit=%llu localsCount=%llu localsLimit=%llu",
+            (unsigned long long)vm->stack_count,
+            (unsigned long long)vm->stack_limit,
+            (unsigned long long)vm->call_frame_count,
+            (unsigned long long)vm->call_frame_limit,
+            (unsigned long long)vm->locals_count,
+            (unsigned long long)vm->locals_limit);
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+        return 0;
+    }
     if (!size_add_checked(frame->frame_base, 1U, &max_stack_count)) {
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Return restore size arithmetic overflow.");
         return 0;
@@ -320,9 +352,6 @@ static int validate_vm_return_restore(
             (unsigned long long)vm->call_frame_count,
             (unsigned long long)vm->instruction_pointer);
         set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
-        return 0;
-    }
-    if (!validate_vm_call_local_state(vm, "return-restore")) {
         return 0;
     }
     return 1;
@@ -583,6 +612,7 @@ static int mark_live_node_handles(
     uint8_t* live,
     const int64_t* extra_handles,
     size_t extra_handle_count);
+static int mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs);
 static int compact_string_arena(AivmVm* vm);
 static int create_node_record(
     AivmVm* vm,
@@ -2895,6 +2925,61 @@ static int remap_value_node_handle(AivmVm* vm, AivmValue* value, const int64_t* 
     return 1;
 }
 
+static int mark_live_scratch_pair_value(AivmVm* vm, const AivmValue* value, uint8_t* live_pairs)
+{
+    size_t index;
+    if (vm == NULL || value == NULL || live_pairs == NULL) {
+        return 0;
+    }
+    if (value->type != AIVM_VAL_PAIR) {
+        return 1;
+    }
+    if (value->pair_handle <= 0 || value->pair_handle > (int64_t)vm->scratch_pair_count) {
+        set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid scratch-pair handle during pair mark.");
+        return 0;
+    }
+    index = (size_t)(value->pair_handle - 1);
+    if (live_pairs[index] != 0U) {
+        return 1;
+    }
+    live_pairs[index] = 1U;
+    if (!mark_live_scratch_pair_value(vm, &vm->scratch_pairs[index].first, live_pairs) ||
+        !mark_live_scratch_pair_value(vm, &vm->scratch_pairs[index].second, live_pairs)) {
+        return 0;
+    }
+    return 1;
+}
+
+static int mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs)
+{
+    size_t i;
+    if (vm == NULL || live_pairs == NULL) {
+        return 0;
+    }
+    memset(live_pairs, 0, AIVM_VM_SCRATCH_PAIR_CAPACITY * sizeof(live_pairs[0]));
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (!mark_live_scratch_pair_value(vm, &vm->stack[i], live_pairs)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (!mark_live_scratch_pair_value(vm, &vm->locals[i], live_pairs)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (!mark_live_scratch_pair_value(vm, &vm->completed_tasks[i].result, live_pairs)) {
+            return 0;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (!mark_live_scratch_pair_value(vm, &vm->par_values[i], live_pairs)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static int mark_live_node_handles(
     AivmVm* vm,
     uint8_t* live,
@@ -2902,11 +2987,15 @@ static int mark_live_node_handles(
     size_t extra_handle_count)
 {
     int64_t queue[AIVM_VM_NODE_CAPACITY];
+    uint8_t live_pairs[AIVM_VM_SCRATCH_PAIR_CAPACITY];
     size_t queue_read = 0U;
     size_t queue_write = 0U;
     size_t i;
 
     if (vm == NULL || live == NULL) {
+        return 0;
+    }
+    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
         return 0;
     }
 
@@ -2956,6 +3045,9 @@ static int mark_live_node_handles(
         }
     }
     for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (live_pairs[i] == 0U) {
+            continue;
+        }
         if (vm->scratch_pairs[i].first.type == AIVM_VAL_NODE) {
             ENQUEUE_HANDLE(vm->scratch_pairs[i].first.node_handle);
         }
@@ -3007,6 +3099,7 @@ static int mark_live_node_handles(
 static int compact_string_arena(AivmVm* vm)
 {
     uint8_t live[AIVM_VM_NODE_CAPACITY];
+    uint8_t live_pairs[AIVM_VM_SCRATCH_PAIR_CAPACITY];
     char* old_arena;
     char* new_arena = NULL;
     size_t new_used = 0U;
@@ -3026,6 +3119,10 @@ static int compact_string_arena(AivmVm* vm)
         return 0;
     }
     if (!mark_live_node_handles(vm, live, NULL, 0U)) {
+        free(new_arena);
+        return 0;
+    }
+    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
         free(new_arena);
         return 0;
     }
@@ -3055,6 +3152,9 @@ static int compact_string_arena(AivmVm* vm)
         }
     }
     for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (live_pairs[i] == 0U) {
+            continue;
+        }
         if (!compact_relocate_value_string(vm, &vm->scratch_pairs[i].first, new_arena, &new_used) ||
             !compact_relocate_value_string(vm, &vm->scratch_pairs[i].second, new_arena, &new_used)) {
             free(new_arena);
@@ -3110,6 +3210,7 @@ static int compact_node_arenas_with_map(
 {
     uint8_t* live = NULL;
     int64_t* handle_map = NULL;
+    uint8_t* live_pairs = NULL;
     AivmNodeRecord* new_nodes = NULL;
     AivmNodeAttr* new_attrs = NULL;
     int64_t* new_children = NULL;
@@ -3130,12 +3231,14 @@ static int compact_node_arenas_with_map(
     }
     live = (uint8_t*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(uint8_t));
     handle_map = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY + 1U, sizeof(int64_t));
+    live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(uint8_t));
     new_nodes = (AivmNodeRecord*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(AivmNodeRecord));
     new_attrs = (AivmNodeAttr*)calloc(AIVM_VM_NODE_ATTR_CAPACITY, sizeof(AivmNodeAttr));
     new_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(int64_t));
-    if (live == NULL || handle_map == NULL || new_nodes == NULL || new_attrs == NULL || new_children == NULL) {
+    if (live == NULL || handle_map == NULL || live_pairs == NULL || new_nodes == NULL || new_attrs == NULL || new_children == NULL) {
         free(live);
         free(handle_map);
+        free(live_pairs);
         free(new_nodes);
         free(new_attrs);
         free(new_children);
@@ -3147,6 +3250,9 @@ static int compact_node_arenas_with_map(
     old_child_count = vm->node_child_count;
 
     if (!mark_live_node_handles(vm, live, extra_handles, extra_handle_count)) {
+        goto fail;
+    }
+    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
         goto fail;
     }
 
@@ -3277,6 +3383,9 @@ static int compact_node_arenas_with_map(
         }
     }
     for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (live_pairs[i] == 0U) {
+            continue;
+        }
         if (!remap_value_node_handle(vm, &vm->scratch_pairs[i].first, handle_map) ||
             !remap_value_node_handle(vm, &vm->scratch_pairs[i].second, handle_map)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid scratch-pair node handle during node GC.");
@@ -3312,6 +3421,7 @@ static int compact_node_arenas_with_map(
     }
     free(live);
     free(handle_map);
+    free(live_pairs);
     free(new_nodes);
     free(new_attrs);
     free(new_children);
@@ -3320,6 +3430,7 @@ static int compact_node_arenas_with_map(
 fail:
     free(live);
     free(handle_map);
+    free(live_pairs);
     free(new_nodes);
     free(new_attrs);
     free(new_children);
@@ -4414,6 +4525,24 @@ void aivm_step(AivmVm* vm)
             }
             record_recent_call(vm, vm->instruction_pointer, target, arg_count, vm->stack_count);
             frame_base = vm->stack_count - arg_count;
+            if (vm->call_frame_count > 0U) {
+                const AivmCallFrame* current_frame = &vm->call_frames[vm->call_frame_count - 1U];
+                if (frame_base < current_frame->frame_base) {
+                    (void)snprintf(
+                        vm->error_detail_storage,
+                        sizeof(vm->error_detail_storage),
+                        "Call argument frame crosses caller frame base. target=%llu argCount=%llu argBase=%llu callerFrameBase=%llu stackCount=%llu pc=%llu",
+                        (unsigned long long)target,
+                        (unsigned long long)arg_count,
+                        (unsigned long long)frame_base,
+                        (unsigned long long)current_frame->frame_base,
+                        (unsigned long long)vm->stack_count,
+                        (unsigned long long)vm->instruction_pointer);
+                    set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, vm->error_detail_storage);
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            }
             if (vm->call_frame_count > 0U &&
                 vm->instruction_pointer + 1U < vm->program->instruction_count &&
                 (vm->program->instructions[vm->instruction_pointer + 1U].opcode == AIVM_OP_RETURN ||
@@ -4477,12 +4606,12 @@ void aivm_step(AivmVm* vm)
                 return_value = vm->stack[vm->stack_count - 1U];
                 has_return_value = 1;
             }
-            vm->stack_count = frame.frame_base;
-            vm->locals_count = frame.locals_base;
             if (!validate_vm_return_restore(vm, &frame, pre_restore_stack_count)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            vm->stack_count = frame.frame_base;
+            vm->locals_count = frame.locals_base;
             if (has_return_value != 0) {
                 if (!aivm_stack_push(vm, return_value)) {
                     vm->instruction_pointer = vm->program->instruction_count;

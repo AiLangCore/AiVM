@@ -5629,6 +5629,40 @@ static int simple_emit_empty_string_const(AivmProgram* program)
     }
     return simple_emit_instruction(program, AIVM_OP_CONST, (int64_t)empty_const_idx);
 }
+
+static int simple_add_void_const(AivmProgram* program, size_t* out_idx)
+{
+    size_t i;
+    if (program == NULL || out_idx == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < program->constant_count; i += 1U) {
+        if (program->constant_storage[i].type == AIVM_VAL_VOID) {
+            *out_idx = i;
+            return 1;
+        }
+    }
+    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+        return simple_fail("add void const: constant capacity exceeded");
+    }
+    *out_idx = program->constant_count;
+    program->constant_storage[program->constant_count] = aivm_value_void();
+    program->constant_count += 1U;
+    return 1;
+}
+
+static int simple_emit_void_const(AivmProgram* program)
+{
+    size_t void_const_idx = 0U;
+    if (program == NULL) {
+        return 0;
+    }
+    if (!simple_add_void_const(program, &void_const_idx)) {
+        return simple_fail("failed adding void const");
+    }
+    return simple_emit_instruction(program, AIVM_OP_CONST, (int64_t)void_const_idx);
+}
+
 static int simple_compile_fn_by_index(SimpleCompileContext* ctx, size_t fn_index);
 
 static int simple_add_source(SimpleCompileContext* ctx, const char* path, const char* text, int* out_index)
@@ -7357,6 +7391,9 @@ static int simple_compile_fn_by_index(SimpleCompileContext* ctx, size_t fn_index
         return 0;
     }
     if (!did_return) {
+        if (!simple_emit_void_const(ctx->program)) {
+            return simple_failf("failed implicit void for %s", fn->name);
+        }
         if (!simple_emit_instruction(ctx->program, AIVM_OP_RETURN, 0)) {
             return simple_failf("failed implicit return for %s", fn->name);
         }
