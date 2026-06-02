@@ -178,12 +178,17 @@ requirement.
   construction.
 - [x] Beta: reduce retained parser intermediate nodes enough that compiler
   source parsing no longer depends on raising arena ceilings.
-- [ ] Beta: continue compiler-analysis scratch storage for later analysis
-  passes that still retain temporary structures. Initial validation state now
-  uses scratch-pair storage for transient `(errors, ids)` state, and AiLang
-  tooling evaluator state now uses scratch-pair storage for transient
-  `(value, env)` state. Validation's temporary seen-id set is now string-backed
-  instead of a semantic block of `Lit` nodes.
+- [x] Beta: add validation-analysis memory coverage and reduce retained
+  compiler-analysis temporaries enough that validating `validate.aos` completes
+  under deterministic memory gates. Initial validation state now uses
+  scratch-pair storage for transient `(errors, ids)` state, and AiLang tooling
+  evaluator state now uses scratch-pair storage for transient `(value, env)`
+  state. Validation's temporary seen-id set is now string-backed instead of a
+  semantic block of `Lit` nodes. Scratch-pair node and string roots now include
+  only pair handles reachable from VM roots, so dead intermediate pairs no
+  longer retain compiler-analysis strings or nodes.
+- [ ] Beta: continue compiler-analysis scratch storage only for later analysis
+  passes that are not yet covered by the validation-analysis memory gate.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -273,9 +278,12 @@ These are the immediate hardening tasks before beta:
   remain semantic nodes. Validation's seen-id set is string-backed instead of
   retaining semantic `Lit` nodes. AiLang tooling evaluator state now uses
   scratch pairs for transient `(value, env)` state while values, closures, and
-  environments remain semantic nodes. Remaining work is additional
-  compiler-analysis scratch storage for later passes that still retain
-  temporary structures.
+  environments remain semantic nodes. Scratch-pair compaction now roots only
+  reachable scratch pairs, which prevents dead compiler-analysis intermediates
+  from retaining strings and nodes. AiLang gates validation-analysis memory in
+  `scripts/profile-compiler-analysis-memory.sh`. Remaining work is additional
+  compiler-analysis scratch storage only for later passes that prove they still
+  retain temporary structures.
 - Safe-point compaction: `aivm_collect_safe_point` exposes explicit
   deterministic compaction for phase boundaries and tests cover reclamation
   below proactive pressure thresholds. `aivm_execute_program*` now runs the

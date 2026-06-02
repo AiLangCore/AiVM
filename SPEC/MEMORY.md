@@ -127,9 +127,14 @@ before raising semantic node limits again.
 Scratch result pairs are the first runtime mechanism for removing parser result
 wrapper nodes. AiVM owns a bounded scratch-pair arena and `MAKE_PAIR`,
 `PAIR_FIRST`, and `PAIR_SECOND` opcodes. Pair values are VM/compiler
-implementation values, not syscalls or public semantic objects. Contained node
-references are roots during safe-point compaction and are remapped with other
-live node values.
+implementation values, not syscalls or public semantic objects.
+
+Scratch-pair roots are derived from live VM roots. Only scratch pairs reachable
+from stack values, locals, completed task results, or parallel branch values
+may retain contained strings or node handles during compaction. Dead scratch
+pairs must not keep compiler/parser strings or nodes alive. Contained node
+references in reachable scratch pairs are roots during safe-point compaction
+and are remapped with other live node values.
 
 ## Retained Intermediate Node Reduction
 
