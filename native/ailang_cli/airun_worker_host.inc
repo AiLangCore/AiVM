@@ -1,24 +1,42 @@
+typedef struct NativeWorkerLocalHeap
+{
+    char* task_name;
+    char* payload;
+    char* result;
+    char* error;
+    size_t allocated_bytes;
+} NativeWorkerLocalHeap;
+
 typedef struct NativeWorkerState
 {
     int used;
     int status; /* 0 pending, 1 success, -1 failure, -2 canceled */
     int completion_status;
     int64_t polls_remaining;
-    char* result;
-    char* error;
+    NativeWorkerLocalHeap* heap;
 } NativeWorkerState;
 
 static NativeWorkerState g_native_workers[NATIVE_WORKER_CAPACITY];
+
+static void native_worker_local_heap_free(NativeWorkerLocalHeap* heap)
+{
+    if (heap == NULL) {
+        return;
+    }
+    free(heap->task_name);
+    free(heap->payload);
+    free(heap->result);
+    free(heap->error);
+    free(heap);
+}
 
 static void native_worker_clear_local_heap(NativeWorkerState* worker)
 {
     if (worker == NULL) {
         return;
     }
-    free(worker->result);
-    free(worker->error);
-    worker->result = NULL;
-    worker->error = NULL;
+    native_worker_local_heap_free(worker->heap);
+    worker->heap = NULL;
 }
 
 static void native_worker_init_slot(NativeWorkerState* worker)
@@ -40,12 +58,16 @@ static void native_worker_reset_all(void)
     }
 }
 
-static int native_worker_set_text(char** slot, const char* text)
+static int native_worker_heap_set_text(NativeWorkerLocalHeap* heap, char** slot, const char* text)
 {
+    size_t old_length = 0U;
     size_t length;
     char* copy;
-    if (slot == NULL || text == NULL) {
+    if (heap == NULL || slot == NULL || text == NULL) {
         return 0;
+    }
+    if (*slot != NULL) {
+        old_length = strlen(*slot) + 1U;
     }
     length = strlen(text);
     if (length >= NATIVE_WORKER_TEXT_CAPACITY) {
@@ -59,9 +81,33 @@ static int native_worker_set_text(char** slot, const char* text)
         memcpy(copy, text, length);
     }
     copy[length] = '\0';
+    if (heap->allocated_bytes >= old_length) {
+        heap->allocated_bytes -= old_length;
+    } else {
+        heap->allocated_bytes = 0U;
+    }
     free(*slot);
     *slot = copy;
+    heap->allocated_bytes += length + 1U;
     return 1;
+}
+
+static NativeWorkerLocalHeap* native_worker_local_heap_create(const char* task_name, const char* payload)
+{
+    NativeWorkerLocalHeap* heap;
+    if (task_name == NULL || payload == NULL) {
+        return NULL;
+    }
+    heap = (NativeWorkerLocalHeap*)calloc(1U, sizeof(*heap));
+    if (heap == NULL) {
+        return NULL;
+    }
+    if (!native_worker_heap_set_text(heap, &heap->task_name, task_name) ||
+        !native_worker_heap_set_text(heap, &heap->payload, payload)) {
+        native_worker_local_heap_free(heap);
+        return NULL;
+    }
+    return heap;
 }
 
 static NativeWorkerState* native_worker_lookup(int64_t handle_value)
@@ -129,43 +175,49 @@ static int64_t native_worker_allocate_slot(void)
 static int native_worker_start_task(NativeWorkerState* worker, const char* task_name, const char* payload)
 {
     int poll_ticks = 2;
+    NativeWorkerLocalHeap* heap;
     if (worker == NULL || task_name == NULL || payload == NULL) {
         return 0;
     }
     native_worker_clear_local_heap(worker);
+    heap = native_worker_local_heap_create(task_name, payload);
+    if (heap == NULL) {
+        return 0;
+    }
+    worker->heap = heap;
 
-    if (strcmp(task_name, "echo") == 0) {
+    if (strcmp(heap->task_name, "echo") == 0) {
         worker->completion_status = 1;
-        if (!native_worker_set_text(&worker->result, payload)) {
+        if (!native_worker_heap_set_text(heap, &heap->result, heap->payload)) {
             return 0;
         }
-    } else if (strcmp(task_name, "fail") == 0) {
+    } else if (strcmp(heap->task_name, "fail") == 0) {
         worker->completion_status = -1;
-        if (payload[0] != '\0') {
-            if (!native_worker_set_text(&worker->error, payload)) {
+        if (heap->payload[0] != '\0') {
+            if (!native_worker_heap_set_text(heap, &heap->error, heap->payload)) {
                 return 0;
             }
-        } else if (!native_worker_set_text(&worker->error, "worker_failed")) {
+        } else if (!native_worker_heap_set_text(heap, &heap->error, "worker_failed")) {
             return 0;
         }
-    } else if (strcmp(task_name, "sleep") == 0) {
+    } else if (strcmp(heap->task_name, "sleep") == 0) {
         char* end = NULL;
-        long parsed = strtol(payload, &end, 10);
-        if (end == payload || *end != '\0' || parsed < 0L || parsed > 1000000L) {
+        long parsed = strtol(heap->payload, &end, 10);
+        if (end == heap->payload || *end != '\0' || parsed < 0L || parsed > 1000000L) {
             worker->completion_status = -1;
-            if (!native_worker_set_text(&worker->error, "invalid_sleep_ticks")) {
+            if (!native_worker_heap_set_text(heap, &heap->error, "invalid_sleep_ticks")) {
                 return 0;
             }
         } else {
             worker->completion_status = 1;
             poll_ticks = (int)parsed + 1;
-            if (!native_worker_set_text(&worker->result, "slept")) {
+            if (!native_worker_heap_set_text(heap, &heap->result, "slept")) {
                 return 0;
             }
         }
     } else {
         worker->completion_status = -1;
-        if (!native_worker_set_text(&worker->error, "unknown_task")) {
+        if (!native_worker_heap_set_text(heap, &heap->error, "unknown_task")) {
             return 0;
         }
     }
@@ -267,7 +319,7 @@ static int native_syscall_worker_result(
         *result = aivm_value_string("");
         return AIVM_SYSCALL_OK;
     }
-    *result = aivm_value_string(worker->result != NULL ? worker->result : "");
+    *result = aivm_value_string(worker->heap != NULL && worker->heap->result != NULL ? worker->heap->result : "");
     return AIVM_SYSCALL_OK;
 }
 
@@ -292,7 +344,7 @@ static int native_syscall_worker_error(
         return AIVM_SYSCALL_OK;
     }
     if (worker->status == -1 || worker->status == -2) {
-        *result = aivm_value_string(worker->error != NULL ? worker->error : "");
+        *result = aivm_value_string(worker->heap != NULL && worker->heap->error != NULL ? worker->heap->error : "");
         return AIVM_SYSCALL_OK;
     }
     *result = aivm_value_string("");
@@ -320,10 +372,16 @@ static int native_syscall_worker_cancel(
         return AIVM_SYSCALL_OK;
     }
     native_worker_clear_local_heap(worker);
+    worker->heap = native_worker_local_heap_create("cancel", "");
+    if (worker->heap == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
     worker->status = -2;
     worker->polls_remaining = 0;
     worker->completion_status = -2;
-    if (!native_worker_set_text(&worker->error, "canceled")) {
+    if (!native_worker_heap_set_text(worker->heap, &worker->heap->error, "canceled")) {
+        native_worker_clear_local_heap(worker);
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
     }

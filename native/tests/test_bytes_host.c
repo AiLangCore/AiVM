@@ -75,8 +75,14 @@ int main(void)
     status = native_syscall_worker_result("sys.worker.result", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-ok") == 0);
-    CHECK(g_native_workers[(size_t)(worker_ok - 1)].result != NULL);
-    CHECK(g_native_workers[(size_t)(worker_ok - 1)].error == NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap != NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap->task_name != NULL);
+    CHECK(strcmp(g_native_workers[(size_t)(worker_ok - 1)].heap->task_name, "echo") == 0);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap->payload != NULL);
+    CHECK(strcmp(g_native_workers[(size_t)(worker_ok - 1)].heap->payload, "worker-ok") == 0);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap->result != NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap->error == NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap->allocated_bytes >= strlen("echo") + strlen("worker-ok") + strlen("worker-ok") + 3U);
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "") == 0);
@@ -94,8 +100,10 @@ int main(void)
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "worker-fail") == 0);
-    CHECK(g_native_workers[(size_t)(worker_fail - 1)].result == NULL);
-    CHECK(g_native_workers[(size_t)(worker_fail - 1)].error != NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].heap != NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].heap->result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].heap->error != NULL);
+    CHECK(strcmp(g_native_workers[(size_t)(worker_fail - 1)].heap->error, "worker-fail") == 0);
 
     one_arg[0] = aivm_value_int(worker_sleep);
     status = native_syscall_worker_poll("sys.worker.poll", one_arg, 1U, &result);
@@ -110,8 +118,11 @@ int main(void)
     status = native_syscall_worker_error("sys.worker.error", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_STRING && strcmp(result.string_value, "canceled") == 0);
-    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].result == NULL);
-    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].error != NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].heap != NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].heap->result == NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].heap->error != NULL);
+    CHECK(strcmp(g_native_workers[(size_t)(worker_sleep - 1)].heap->task_name, "cancel") == 0);
+    CHECK(strcmp(g_native_workers[(size_t)(worker_sleep - 1)].heap->error, "canceled") == 0);
     status = native_syscall_worker_cancel("sys.worker.cancel", one_arg, 1U, &result);
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BOOL && result.bool_value == 0);
@@ -132,12 +143,9 @@ int main(void)
 
     native_worker_reset_all();
     CHECK(native_worker_active_count() == 0U);
-    CHECK(g_native_workers[(size_t)(worker_ok - 1)].result == NULL);
-    CHECK(g_native_workers[(size_t)(worker_ok - 1)].error == NULL);
-    CHECK(g_native_workers[(size_t)(worker_fail - 1)].result == NULL);
-    CHECK(g_native_workers[(size_t)(worker_fail - 1)].error == NULL);
-    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].result == NULL);
-    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].error == NULL);
+    CHECK(g_native_workers[(size_t)(worker_ok - 1)].heap == NULL);
+    CHECK(g_native_workers[(size_t)(worker_fail - 1)].heap == NULL);
+    CHECK(g_native_workers[(size_t)(worker_sleep - 1)].heap == NULL);
 
     return 0;
 }

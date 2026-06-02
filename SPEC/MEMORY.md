@@ -166,9 +166,15 @@ mechanical tasks. They are not shared semantic heaps.
 Worker-local heaps must:
 
 - be owned by one worker
+- own worker task inputs and temporary execution payloads before work starts
 - be released when the worker task completes or is canceled
 - produce immutable message payloads or copied semantic values at the boundary
 - avoid exposing worker-local pointers to the UI/Semantic thread
+
+Current host worker tasks use a worker-owned heap context for task name,
+payload, result, and error strings. Full background bytecode worker execution
+must extend the same ownership rule to its mechanical execution state before it
+can expose results through deterministic queues or completed task records.
 
 ## Immutable Shared Memory
 
