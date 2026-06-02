@@ -187,8 +187,9 @@ requirement.
   semantic block of `Lit` nodes. Scratch-pair node and string roots now include
   only pair handles reachable from VM roots, so dead intermediate pairs no
   longer retain compiler-analysis strings or nodes.
-- [ ] Beta: continue compiler-analysis scratch storage only for later analysis
-  passes that are not yet covered by the validation-analysis memory gate.
+- [x] Beta: broaden compiler-analysis memory gates beyond validation. AiLang
+  now gates validation and parser analysis paths by default, and exposes a
+  slower explicit `full` stress profile that includes `aic.aos`.
 - [x] Beta: formalize deterministic safe-point compaction beyond allocation
   paths.
 - [x] Beta: run deterministic return-boundary safe points after accumulated
@@ -300,9 +301,9 @@ These are the immediate hardening tasks before beta:
   reject live VM node handles, scratch-pair handles, unknown values, null
   strings, and non-empty null byte views before the host adapter sees them.
   Host worker task name, payload, result, and error values now use
-  worker-owned heap storage and are cleared deterministically. Remaining work
-  is full worker-local mechanical bytecode execution storage when that worker
-  model is added.
+  worker-owned heap storage and are cleared deterministically. Full
+  worker-local mechanical bytecode execution storage is future work for the
+  point where that worker model is added.
 - Shared immutable module cache: design read-only module/cache storage that can
   be shared across workers without exposing mutable semantic state.
 - Large-object/blob storage: design handle-based storage for large byte buffers,
