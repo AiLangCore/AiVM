@@ -811,7 +811,18 @@ static int pm_resolve_registry(const AilangPackageManagerOptions* options, char*
         return 0;
     }
     if (pm_directory_exists(out)) {
-        return 1;
+        if (!pm_shell_quote(out, quoted_out, sizeof(quoted_out))) {
+            return 0;
+        }
+        if (snprintf(
+                command,
+                sizeof(command),
+                "git -C %s fetch --depth 1 --quiet origin main && git -C %s reset --hard --quiet origin/main",
+                quoted_out,
+                quoted_out) >= (int)sizeof(command)) {
+            return 0;
+        }
+        return pm_run(command);
     }
     if (!pm_shell_quote(out, quoted_out, sizeof(quoted_out))) {
         return 0;

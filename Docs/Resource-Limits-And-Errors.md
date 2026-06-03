@@ -29,7 +29,7 @@ profile limit record.
 | `stack_capacity` | 20000 | Maximum VM stack values. |
 | `call_frame_capacity` | 2048 | Maximum active call frames. |
 | `locals_capacity` | 16384 | Maximum VM local slots. |
-| `string_arena_capacity` | 524288 | Maximum VM-owned string arena bytes. |
+| `string_arena_capacity` | 2097152 | Maximum VM-owned string arena bytes. |
 | `bytes_arena_capacity` | 131072 | Maximum VM-owned byte arena bytes. |
 | `node_capacity` | 16384 | Maximum semantic node records. |
 | `node_attr_capacity` | 65536 | Maximum semantic node attributes. |

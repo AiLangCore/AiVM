@@ -4611,25 +4611,72 @@ static int run_native_aibc1(
         debug_options);
 }
 
+static int parse_attr_value_start(const char* attrs, const char* key, const char** out_value_start)
+{
+    const char* p;
+    size_t key_len;
+    if (attrs == NULL || key == NULL || out_value_start == NULL) {
+        return 0;
+    }
+    key_len = strlen(key);
+    if (key_len == 0U) {
+        return 0;
+    }
+    p = attrs;
+    while (*p != '\0') {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n' || *p == ',') {
+            p += 1;
+        }
+        if (strncmp(p, key, key_len) == 0 &&
+            (p[key_len] == '=' || p[key_len] == ' ' || p[key_len] == '\t' || p[key_len] == '\r' ||
+             p[key_len] == '\n')) {
+            const char* q = p + key_len;
+            while (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') {
+                q += 1;
+            }
+            if (*q == '=') {
+                q += 1;
+                while (*q == ' ' || *q == '\t' || *q == '\r' || *q == '\n') {
+                    q += 1;
+                }
+                *out_value_start = q;
+                return 1;
+            }
+        }
+        while (*p != '\0' && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n' && *p != ',') {
+            if (*p == '"') {
+                int escaped = 0;
+                p += 1;
+                while (*p != '\0') {
+                    if (!escaped && *p == '"') {
+                        p += 1;
+                        break;
+                    }
+                    if (!escaped && *p == '\\') {
+                        escaped = 1;
+                    } else {
+                        escaped = 0;
+                    }
+                    p += 1;
+                }
+            } else {
+                p += 1;
+            }
+        }
+    }
+    return 0;
+}
+
 static int parse_attr_span(const char* attrs, const char* key, char* out, size_t out_len)
 {
-    char needle[64];
-    const char* pos;
     const char* vstart;
     const char* vend;
     size_t n;
 
-    if (attrs == NULL || key == NULL || out == NULL || out_len == 0U) {
+    if (attrs == NULL || key == NULL || out == NULL || out_len == 0U ||
+        !parse_attr_value_start(attrs, key, &vstart)) {
         return 0;
     }
-    if (snprintf(needle, sizeof(needle), "%s=", key) >= (int)sizeof(needle)) {
-        return 0;
-    }
-    pos = strstr(attrs, needle);
-    if (pos == NULL) {
-        return 0;
-    }
-    vstart = pos + strlen(needle);
     if (*vstart == '"') {
         int escaped = 0;
         vstart += 1;
@@ -4665,33 +4712,17 @@ static int parse_attr_span(const char* attrs, const char* key, char* out, size_t
 
 static int parse_attr_value_is_quoted(const char* attrs, const char* key)
 {
-    char needle[64];
-    const char* pos;
     const char* vstart;
-    if (attrs == NULL || key == NULL) {
+    if (!parse_attr_value_start(attrs, key, &vstart)) {
         return 0;
     }
-    if (snprintf(needle, sizeof(needle), "%s=", key) >= (int)sizeof(needle)) {
-        return 0;
-    }
-    pos = strstr(attrs, needle);
-    if (pos == NULL) {
-        return 0;
-    }
-    vstart = pos + strlen(needle);
     return *vstart == '"';
 }
 
 static int has_attr_key(const char* attrs, const char* key)
 {
-    char needle[64];
-    if (attrs == NULL || key == NULL) {
-        return 0;
-    }
-    if (snprintf(needle, sizeof(needle), "%s=", key) >= (int)sizeof(needle)) {
-        return 0;
-    }
-    return strstr(attrs, needle) != NULL;
+    const char* vstart;
+    return parse_attr_value_start(attrs, key, &vstart);
 }
 
 static int parse_attr_int64(const char* attrs, const char* key, int64_t* out_value)

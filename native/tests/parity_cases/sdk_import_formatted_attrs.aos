@@ -1,0 +1,20 @@
+Program {
+  Import(sdk = "ailang" path = "std/math.aos")
+  Import(sdk = "ailang" path = "std/io.aos")
+
+  Let(name=start) {
+    Fn(params=args) {
+      Block {
+        Call(target=print) {
+          ToString {
+            Call(target=add) {
+              Lit(value=2)
+              Lit(value=3)
+            }
+          }
+        }
+        Return { Lit(value=0) }
+      }
+    }
+  }
+}
