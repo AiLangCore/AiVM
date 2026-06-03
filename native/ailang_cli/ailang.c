@@ -6656,6 +6656,8 @@ static int simple_compile_call_ext(
     return 1;
 }
 
+static int simple_dynamic_candidate_allowed(const char* candidates, const char* name);
+
 static int simple_compile_dynamic_call_ext(
     const SimpleNodeView* node,
     AivmProgram* program,
@@ -6673,9 +6675,12 @@ static int simple_compile_dynamic_call_ext(
     size_t end_jump_count = 0U;
     size_t i;
     int matched_candidate = 0;
+    char candidates[512];
+    int has_candidates = 0;
     if (node == NULL || program == NULL || locals == NULL || ctx == NULL) {
         return 0;
     }
+    has_candidates = parse_attr_span(node->attrs, "candidates", candidates, sizeof(candidates));
     if (!simple_parse_next_node(node->body_start, node->body_end, &target_expr)) {
         return simple_fail("dynamic call missing target expression");
     }
@@ -6706,6 +6711,9 @@ static int simple_compile_dynamic_call_ext(
             return simple_failf("failed parsing params for dynamic target: %s", ctx->funcs[i].name);
         }
         if (param_count != arg_count) {
+            continue;
+        }
+        if (has_candidates && !simple_dynamic_candidate_allowed(candidates, ctx->funcs[i].name)) {
             continue;
         }
         if (!simple_add_string_const(program, ctx->funcs[i].name, &name_const_idx) ||
@@ -6757,9 +6765,48 @@ static int simple_compile_dynamic_call_ext(
         program->instruction_storage[end_jumps[i]].operand_int = (int64_t)program->instruction_count;
     }
     if (!matched_candidate) {
+        if (has_candidates) {
+            return simple_failf("dynamic call has no matching candidate with %llu args", (unsigned long long)arg_count);
+        }
         return simple_failf("dynamic call has no functions with %llu args", (unsigned long long)arg_count);
     }
     return 1;
+}
+
+static int simple_dynamic_candidate_allowed(const char* candidates, const char* name)
+{
+    const char* p;
+    if (candidates == NULL || candidates[0] == '\0') {
+        return 1;
+    }
+    if (name == NULL || name[0] == '\0') {
+        return 0;
+    }
+    p = candidates;
+    while (*p != '\0') {
+        const char* start;
+        const char* end;
+        size_t n;
+        while (*p == ' ' || *p == '\t' || *p == ',' || *p == '\r' || *p == '\n') {
+            p += 1;
+        }
+        start = p;
+        while (*p != '\0' && *p != ',') {
+            p += 1;
+        }
+        end = p;
+        while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) {
+            end -= 1;
+        }
+        n = (size_t)(end - start);
+        if (n == strlen(name) && strncmp(start, name, n) == 0) {
+            return 1;
+        }
+        if (*p == ',') {
+            p += 1;
+        }
+    }
+    return 0;
 }
 
 static int simple_compile_if_expr_ext(
