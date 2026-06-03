@@ -103,12 +103,28 @@ int main(void)
         !mkdir_ok(".tmp/pkg-manager-test/registry/packages") ||
         !mkdir_ok(".tmp/pkg-manager-test/project") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src/base") ||
+        !mkdir_ok(".tmp/pkg-manager-test/package-src/base/src") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg/tools") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src/pkg/src")) {
         return 1;
     }
     if (!write_file(
+            ".tmp/pkg-manager-test/package-src/base/src/base.aos",
+            "Program#base1 {}\n") ||
+        !write_file(
+            ".tmp/pkg-manager-test/package-src/base/package.toml",
+            "schema = \"ailang.package-source.v1\"\n"
+            "name = \"base\"\n"
+            "version = \"0.1.0\"\n"
+            "types = [\"library\"]\n"
+            "\n"
+            "[libraries.base]\n"
+            "namespace = \"base.lib\"\n"
+            "entry = \"src/base.aos\"\n"
+            "exports = []\n") ||
+        !write_file(
             ".tmp/pkg-manager-test/package-src/pkg/src/lib.aos",
             "Program#pkg1 {}\n") ||
         !write_file(
@@ -117,6 +133,9 @@ int main(void)
             "name = \"demo\"\n"
             "version = \"0.1.0\"\n"
             "types = [\"library\", \"tool\"]\n"
+            "\n"
+            "[dependencies]\n"
+            "base = \"0.1.0\"\n"
             "\n"
             "[libraries.demo]\n"
             "namespace = \"demo.tool\"\n"
@@ -172,6 +191,23 @@ int main(void)
             registry_record,
             sizeof(registry_record),
             "schema = \"ailang.package.v1\"\n"
+            "name = \"base\"\n"
+            "repo = \".tmp/pkg-manager-test/package-src\"\n"
+            "packageRoot = \"base\"\n"
+            "types = [\"library\"]\n"
+            "defaultVersion = \"0.1.0\"\n"
+            "\n"
+            "[versions.\"0.1.0\"]\n"
+            "ref = \"v0.1.0\"\n"
+            "commit = \"%s\"\n",
+            commit) >= (int)sizeof(registry_record) ||
+        !write_file(".tmp/pkg-manager-test/registry/packages/base.toml", registry_record)) {
+        return 21;
+    }
+    if (snprintf(
+            registry_record,
+            sizeof(registry_record),
+            "schema = \"ailang.package.v1\"\n"
             "name = \"build\"\n"
             "repo = \".tmp/pkg-manager-test/package-src\"\n"
             "packageRoot = \"pkg\"\n"
@@ -219,11 +255,13 @@ int main(void)
         return 12;
     }
     if (!ailang_package_manager_list(&options, output, sizeof(output), error, sizeof(error)) ||
-        strstr(output, "demo 0.1.0 namespaces=demo.tool") == NULL) {
+        strstr(output, "demo 0.1.0 namespaces=demo.tool") == NULL ||
+        strstr(output, "base 0.1.0 namespaces=base.lib") == NULL) {
         return 13;
     }
     if (!read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||
-        strstr(output, "namespaces = [\"demo.tool\"]") == NULL) {
+        strstr(output, "namespaces = [\"demo.tool\"]") == NULL ||
+        strstr(output, "namespaces = [\"base.lib\"]") == NULL) {
         return 14;
     }
 #ifndef _WIN32

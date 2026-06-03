@@ -38,6 +38,7 @@
 #define AILANG_PM_LOCK_LIMIT 131072U
 #define AILANG_PM_TOOL_TIMEOUT_SECONDS 30
 #define AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS 3600
+#define AILANG_PM_MAX_DEPENDENCIES 64
 
 typedef struct AilangPackageRecord {
     char name[128];
@@ -49,9 +50,21 @@ typedef struct AilangPackageRecord {
     char types[256];
 } AilangPackageRecord;
 
+typedef struct AilangPackageDependency {
+    char name[128];
+    char version[64];
+} AilangPackageDependency;
+
 typedef struct AilangPackageSourceMetadata {
     char namespaces[512];
+    AilangPackageDependency dependencies[AILANG_PM_MAX_DEPENDENCIES];
+    size_t dependency_count;
 } AilangPackageSourceMetadata;
+
+typedef struct AilangPackageRestoreQueue {
+    AilangPackageDependency entries[AILANG_PM_MAX_DEPENDENCIES];
+    size_t count;
+} AilangPackageRestoreQueue;
 
 static int pm_set_error(char* error, size_t error_len, const char* fmt, ...)
 {
@@ -443,6 +456,127 @@ static int pm_is_dotted_namespace(const char* text)
     return saw_dot && !expect_segment_start;
 }
 
+static int pm_is_package_name(const char* text)
+{
+    int expect_segment_start = 1;
+    size_t i;
+    if (text == NULL || text[0] == '\0') {
+        return 0;
+    }
+    for (i = 0U; text[i] != '\0'; i += 1U) {
+        unsigned char c = (unsigned char)text[i];
+        if (expect_segment_start) {
+            if (!islower(c)) {
+                return 0;
+            }
+            expect_segment_start = 0;
+        } else if (c == '-') {
+            expect_segment_start = 1;
+        } else if (!islower(c) && !isdigit(c)) {
+            return 0;
+        }
+    }
+    return !expect_segment_start;
+}
+
+static int pm_collect_source_dependencies(
+    const char* descriptor,
+    AilangPackageSourceMetadata* metadata,
+    char* error,
+    size_t error_len)
+{
+    const char* section;
+    const char* cursor;
+    if (descriptor == NULL || metadata == NULL) {
+        return pm_set_error(error, error_len, "invalid package dependency metadata request");
+    }
+    section = strstr(descriptor, "[dependencies]");
+    if (section == NULL) {
+        return 1;
+    }
+    cursor = strchr(section, '\n');
+    if (cursor == NULL) {
+        return 1;
+    }
+    cursor += 1;
+    while (*cursor != '\0') {
+        const char* line_start = cursor;
+        const char* line_end = strchr(line_start, '\n');
+        const char* eq;
+        const char* key_start;
+        const char* key_end;
+        const char* value_start;
+        const char* value_end;
+        char name[128];
+        char version[64];
+        size_t n;
+        if (line_end == NULL) {
+            line_end = line_start + strlen(line_start);
+        }
+        cursor = *line_end == '\n' ? line_end + 1 : line_end;
+        key_start = line_start;
+        while (key_start < line_end && isspace((unsigned char)*key_start)) {
+            key_start += 1;
+        }
+        if (key_start == line_end || *key_start == '#') {
+            continue;
+        }
+        if (*key_start == '[') {
+            break;
+        }
+        eq = memchr(key_start, '=', (size_t)(line_end - key_start));
+        if (eq == NULL) {
+            return pm_set_error(error, error_len, "invalid package dependency declaration");
+        }
+        key_end = eq;
+        while (key_end > key_start && isspace((unsigned char)key_end[-1])) {
+            key_end -= 1;
+        }
+        n = (size_t)(key_end - key_start);
+        if (n == 0U || n + 1U > sizeof(name)) {
+            return pm_set_error(error, error_len, "package dependency name is too long");
+        }
+        memcpy(name, key_start, n);
+        name[n] = '\0';
+        if (!pm_is_package_name(name) || strcmp(name, "ailang") == 0) {
+            return pm_set_error(error, error_len, "invalid package dependency name: %s", name);
+        }
+        value_start = eq + 1;
+        while (value_start < line_end && isspace((unsigned char)*value_start)) {
+            value_start += 1;
+        }
+        if (value_start >= line_end || *value_start != '"') {
+            return pm_set_error(error, error_len, "package dependency must use an exact quoted version: %s", name);
+        }
+        value_start += 1;
+        value_end = memchr(value_start, '"', (size_t)(line_end - value_start));
+        if (value_end == NULL) {
+            return pm_set_error(error, error_len, "invalid package dependency version: %s", name);
+        }
+        n = (size_t)(value_end - value_start);
+        if (n == 0U || n + 1U > sizeof(version)) {
+            return pm_set_error(error, error_len, "package dependency version is too long: %s", name);
+        }
+        memcpy(version, value_start, n);
+        version[n] = '\0';
+        if (metadata->dependency_count >= AILANG_PM_MAX_DEPENDENCIES) {
+            return pm_set_error(error, error_len, "too many package dependencies");
+        }
+        (void)snprintf(
+            metadata->dependencies[metadata->dependency_count].name,
+            sizeof(metadata->dependencies[metadata->dependency_count].name),
+            "%s",
+            name);
+        (void)snprintf(
+            metadata->dependencies[metadata->dependency_count].version,
+            sizeof(metadata->dependencies[metadata->dependency_count].version),
+            "%s",
+            version);
+        metadata->dependency_count += 1U;
+    }
+    return 1;
+}
+
 static int pm_collect_source_namespaces(
     const char* descriptor,
     AilangPackageSourceMetadata* metadata,
@@ -457,6 +591,7 @@ static int pm_collect_source_namespaces(
         return pm_set_error(error, error_len, "invalid package source metadata request");
     }
     metadata->namespaces[0] = '\0';
+    metadata->dependency_count = 0U;
     cursor = descriptor;
     while ((cursor = strstr(cursor, "entry = \"")) != NULL) {
         entry_count += 1U;
@@ -498,7 +633,7 @@ static int pm_collect_source_namespaces(
     if (entry_count > 0U && namespace_count != entry_count) {
         return pm_set_error(error, error_len, "package library entries must declare namespaces");
     }
-    return 1;
+    return pm_collect_source_dependencies(descriptor, metadata, error, error_len);
 }
 
 static int pm_load_package_source_metadata(
@@ -537,6 +672,59 @@ static int pm_namespace_seen(const char* registry, const char* namespace_value)
         return 0;
     }
     return strstr(registry, needle) != NULL;
+}
+
+static int pm_restore_queue_index(const AilangPackageRestoreQueue* queue, const char* name)
+{
+    size_t i;
+    if (queue == NULL || name == NULL) {
+        return -1;
+    }
+    for (i = 0U; i < queue->count; i += 1U) {
+        if (strcmp(queue->entries[i].name, name) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int pm_restore_queue_add(
+    AilangPackageRestoreQueue* queue,
+    const char* name,
+    const char* version,
+    char* error,
+    size_t error_len)
+{
+    int existing;
+    const char* requested_version = version == NULL ? "" : version;
+    if (queue == NULL || name == NULL || name[0] == '\0') {
+        return pm_set_error(error, error_len, "invalid package dependency request");
+    }
+    existing = pm_restore_queue_index(queue, name);
+    if (existing >= 0) {
+        const char* existing_version = queue->entries[existing].version;
+        if (existing_version[0] != '\0' && requested_version[0] != '\0' &&
+            strcmp(existing_version, requested_version) != 0) {
+            return pm_set_error(
+                error,
+                error_len,
+                "package dependency version conflict: %s %s vs %s",
+                name,
+                existing_version,
+                requested_version);
+        }
+        if (existing_version[0] == '\0' && requested_version[0] != '\0') {
+            (void)snprintf(queue->entries[existing].version, sizeof(queue->entries[existing].version), "%s", requested_version);
+        }
+        return 1;
+    }
+    if (queue->count >= AILANG_PM_MAX_DEPENDENCIES) {
+        return pm_set_error(error, error_len, "too many package dependencies");
+    }
+    (void)snprintf(queue->entries[queue->count].name, sizeof(queue->entries[queue->count].name), "%s", name);
+    (void)snprintf(queue->entries[queue->count].version, sizeof(queue->entries[queue->count].version), "%s", requested_version);
+    queue->count += 1U;
+    return 1;
 }
 
 static int pm_first_version(const char* text, char* out, size_t out_len)
@@ -1341,6 +1529,8 @@ int ailang_package_manager_restore(
     size_t lock_used = 0U;
     char* manifest = NULL;
     const char* p;
+    AilangPackageRestoreQueue queue;
+    size_t queue_index;
     char restored_namespaces[1024];
     size_t restored_namespaces_used = 0U;
     int restored = 0;
@@ -1372,14 +1562,11 @@ int ailang_package_manager_restore(
         free(manifest);
         return pm_set_error(error, error_len, "lockfile output overflow");
     }
+    memset(&queue, 0, sizeof(queue));
     p = manifest;
     while ((p = strstr(p, "Include")) != NULL) {
         char include_name[128];
         char include_version[64];
-        char package_dir[PATH_MAX];
-        char conflict[256];
-        AilangPackageRecord record;
-        AilangPackageSourceMetadata source_metadata;
         if (!pm_parse_include(p, include_name, sizeof(include_name), include_version, sizeof(include_version))) {
             free(manifest);
             return pm_set_error(error, error_len, "invalid Include package declaration");
@@ -1388,9 +1575,34 @@ int ailang_package_manager_restore(
             free(manifest);
             return pm_set_error(error, error_len, "ailang is provided by the selected SDK, not package restore");
         }
+        if (!pm_restore_queue_add(&queue, include_name, include_version, error, error_len)) {
+            free(manifest);
+            return 0;
+        }
+        p += strlen("Include");
+    }
+    for (queue_index = 0U; queue_index < queue.count; queue_index += 1U) {
+        const char* include_name = queue.entries[queue_index].name;
+        const char* include_version = queue.entries[queue_index].version;
+        char package_dir[PATH_MAX];
+        char conflict[256];
+        AilangPackageRecord record;
+        AilangPackageSourceMetadata source_metadata;
         if (!pm_load_record(registry, include_name, include_version, &record, error, error_len)) {
             free(manifest);
             return 0;
+        }
+        if (queue.entries[queue_index].version[0] == '\0') {
+            (void)snprintf(queue.entries[queue_index].version, sizeof(queue.entries[queue_index].version), "%s", record.version);
+        } else if (strcmp(queue.entries[queue_index].version, record.version) != 0) {
+            free(manifest);
+            return pm_set_error(
+                error,
+                error_len,
+                "package dependency version conflict: %s %s vs %s",
+                record.name,
+                queue.entries[queue_index].version,
+                record.version);
         }
         if (pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
             free(manifest);
@@ -1404,6 +1616,20 @@ int ailang_package_manager_restore(
         if (!pm_load_package_source_metadata(package_dir, &record, &source_metadata, error, error_len)) {
             free(manifest);
             return 0;
+        }
+        {
+            size_t dep_index;
+            for (dep_index = 0U; dep_index < source_metadata.dependency_count; dep_index += 1U) {
+                if (!pm_restore_queue_add(
+                        &queue,
+                        source_metadata.dependencies[dep_index].name,
+                        source_metadata.dependencies[dep_index].version,
+                        error,
+                        error_len)) {
+                    free(manifest);
+                    return 0;
+                }
+            }
         }
         if (source_metadata.namespaces[0] != '\0') {
             const char* ns_cursor = source_metadata.namespaces;
@@ -1448,7 +1674,6 @@ int ailang_package_manager_restore(
             return pm_set_error(error, error_len, "lockfile output overflow");
         }
         restored += 1;
-        p += strlen("Include");
     }
     free(manifest);
     if (restored == 0 && !pm_append(&lock_text[0], sizeof(lock_text), &lock_used, "# no packages\n")) {
