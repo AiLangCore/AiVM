@@ -5922,11 +5922,10 @@ static int simple_resolve_sdk_import_path(const char* sdk_name, const char* impo
     return 0;
 }
 
-static int simple_find_project_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len)
+static int simple_find_lock_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len)
 {
     char source_dir[PATH_MAX];
     char current[PATH_MAX];
-    char manifest_path[PATH_MAX];
     char lock_path[PATH_MAX];
     if (source_file == NULL || out_project_dir == NULL || out_len == 0U) {
         return 0;
@@ -5939,8 +5938,7 @@ static int simple_find_project_dir_for_source(const char* source_file, char* out
     }
     for (;;) {
         char parent_dir[PATH_MAX];
-        if ((join_path(current, "project.aiproj", manifest_path, sizeof(manifest_path)) && file_exists(manifest_path)) ||
-            (join_path(current, "ailang.lock.toml", lock_path, sizeof(lock_path)) && file_exists(lock_path))) {
+        if (join_path(current, "ailang.lock.toml", lock_path, sizeof(lock_path)) && file_exists(lock_path)) {
             return snprintf(out_project_dir, out_len, "%s", current) >= 0 &&
                    strlen(current) < out_len;
         }
@@ -5951,8 +5949,7 @@ static int simple_find_project_dir_for_source(const char* source_file, char* out
             return 0;
         }
     }
-    return snprintf(out_project_dir, out_len, "%s", source_dir) >= 0 &&
-           strlen(source_dir) < out_len;
+    return 0;
 }
 
 static int simple_toml_get_from_section(const char* section, const char* key, char* out, size_t out_len)
@@ -6059,7 +6056,7 @@ static int simple_resolve_import_path(const char* base_file, const char* attrs, 
     {
         char project_dir[PATH_MAX];
         char package_root[PATH_MAX];
-        if (!simple_find_project_dir_for_source(base_file, project_dir, sizeof(project_dir)) ||
+        if (!simple_find_lock_dir_for_source(base_file, project_dir, sizeof(project_dir)) ||
             !simple_lock_resolve_package(project_dir, package_name, package_root, sizeof(package_root))) {
             return 0;
         }
