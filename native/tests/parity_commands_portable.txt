@@ -5,6 +5,7 @@ parity_trailing_newline|printf $'alpha\nbeta\n'|printf $'alpha\nbeta'
 parity_nonzero_exit|printf 'fail-path\n'; exit 7|printf 'fail-path\n'; exit 7|7
 parity_asymmetric_status|printf 'same-status-text\n'; exit 1|printf 'same-status-text\n'; exit 2||1|2
 parity_sdk_import_formatted_attrs|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/sdk_import_formatted_attrs.aos|cat src/AiVM.Core/native/tests/parity_cases/sdk_import_formatted_attrs.out
+parity_dynamic_call|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/dynamic_call.aos|cat src/AiVM.Core/native/tests/parity_cases/dynamic_call.out
 parity_repl_process_syscalls|./tools/ailang repl < src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.in|cat src/AiVM.Core/native/tests/parity_cases/repl_process_syscalls.out
 parity_vm_c_unlinked_gate_bundle|./tools/ailang run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|printf ''
 parity_vm_c_execute_bundle_main_params|AIVM_C_BRIDGE_EXECUTE=1 AIVM_C_BRIDGE_LIB=does-not-matter ./tools/ailang run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|cat src/AiVM.Core/native/tests/parity_cases/vm_c_execute_bundle_main_params.out; exit 0|0

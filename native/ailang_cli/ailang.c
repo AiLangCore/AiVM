@@ -6656,6 +6656,112 @@ static int simple_compile_call_ext(
     return 1;
 }
 
+static int simple_compile_dynamic_call_ext(
+    const SimpleNodeView* node,
+    AivmProgram* program,
+    SimpleLocals* locals,
+    SimpleCompileContext* ctx)
+{
+    SimpleNodeView target_expr;
+    const char* args_start;
+    const char* c;
+    SimpleNodeView arg;
+    size_t arg_count = 0U;
+    size_t target_slot = 0U;
+    char target_local_name[64];
+    size_t end_jumps[128];
+    size_t end_jump_count = 0U;
+    size_t i;
+    int matched_candidate = 0;
+    if (node == NULL || program == NULL || locals == NULL || ctx == NULL) {
+        return 0;
+    }
+    if (!simple_parse_next_node(node->body_start, node->body_end, &target_expr)) {
+        return simple_fail("dynamic call missing target expression");
+    }
+    args_start = target_expr.next;
+    c = args_start;
+    while (simple_parse_next_node(c, node->body_end, &arg)) {
+        if (arg_count >= 32U) {
+            return simple_fail("dynamic call arg count exceeds native compiler limit");
+        }
+        arg_count += 1U;
+        c = arg.next;
+    }
+    if (snprintf(target_local_name, sizeof(target_local_name), "__dynamic_target_%llu", (unsigned long long)locals->count) >=
+        (int)sizeof(target_local_name)) {
+        return simple_fail("dynamic call target local name overflow");
+    }
+    if (!simple_compile_expr_ext(&target_expr, program, locals, ctx) ||
+        !simple_locals_lookup(locals, target_local_name, &target_slot, 1) ||
+        !simple_emit_instruction(program, AIVM_OP_STORE_LOCAL, (int64_t)target_slot)) {
+        return simple_fail("dynamic call target compile failed");
+    }
+    for (i = 0U; i < ctx->func_count; i += 1U) {
+        size_t param_count = 0U;
+        size_t name_const_idx = 0U;
+        size_t jump_false_ip;
+        size_t call_inst_index;
+        if (!simple_param_count(ctx->funcs[i].params_raw, &param_count)) {
+            return simple_failf("failed parsing params for dynamic target: %s", ctx->funcs[i].name);
+        }
+        if (param_count != arg_count) {
+            continue;
+        }
+        if (!simple_add_string_const(program, ctx->funcs[i].name, &name_const_idx) ||
+            !simple_emit_instruction(program, AIVM_OP_LOAD_LOCAL, (int64_t)target_slot) ||
+            !simple_emit_instruction(program, AIVM_OP_CONST, (int64_t)name_const_idx) ||
+            !simple_emit_instruction(program, AIVM_OP_EQ, 0)) {
+            return simple_fail("dynamic call target compare emit failed");
+        }
+        jump_false_ip = program->instruction_count;
+        if (!simple_emit_instruction(program, AIVM_OP_JUMP_IF_FALSE, 0)) {
+            return simple_fail("dynamic call branch emit failed");
+        }
+        c = args_start;
+        while (simple_parse_next_node(c, node->body_end, &arg)) {
+            if (!simple_compile_expr_ext(&arg, program, locals, ctx)) {
+                return simple_fail("dynamic call argument compile failed");
+            }
+            c = arg.next;
+        }
+        call_inst_index = program->instruction_count;
+        if (!simple_emit_instruction(program, AIVM_OP_CALL, 0)) {
+            return simple_fail("dynamic call CALL emit failed");
+        }
+        if (ctx->funcs[i].compiled) {
+            program->instruction_storage[call_inst_index].operand_int = (int64_t)ctx->funcs[i].entry_ip;
+        } else if (!simple_add_fixup(ctx, call_inst_index, ctx->funcs[i].name)) {
+            return simple_fail("dynamic call fixup failed");
+        }
+        if (end_jump_count >= (sizeof(end_jumps) / sizeof(end_jumps[0]))) {
+            return simple_fail("dynamic call branch capacity exceeded");
+        }
+        end_jumps[end_jump_count++] = program->instruction_count;
+        if (!simple_emit_instruction(program, AIVM_OP_JUMP, 0)) {
+            return simple_fail("dynamic call end jump emit failed");
+        }
+        program->instruction_storage[jump_false_ip].operand_int = (int64_t)program->instruction_count;
+        matched_candidate = 1;
+    }
+    {
+        size_t missing_target_idx = 0U;
+        if (!simple_add_string_const(program, "sys.dynamic.missingFunction", &missing_target_idx) ||
+            !simple_emit_instruction(program, AIVM_OP_CONST, (int64_t)missing_target_idx) ||
+            !simple_emit_instruction(program, AIVM_OP_LOAD_LOCAL, (int64_t)target_slot) ||
+            !simple_emit_instruction(program, AIVM_OP_CALL_SYS, 1)) {
+            return simple_fail("dynamic call fallback emit failed");
+        }
+    }
+    for (i = 0U; i < end_jump_count; i += 1U) {
+        program->instruction_storage[end_jumps[i]].operand_int = (int64_t)program->instruction_count;
+    }
+    if (!matched_candidate) {
+        return simple_failf("dynamic call has no functions with %llu args", (unsigned long long)arg_count);
+    }
+    return 1;
+}
+
 static int simple_compile_if_expr_ext(
     const SimpleNodeView* node,
     AivmProgram* program,
@@ -6705,6 +6811,9 @@ static int simple_compile_expr_ext(
     }
     if (strcmp(node->kind, "Call") == 0) {
         return simple_compile_call_ext(node, program, locals, ctx, 0);
+    }
+    if (strcmp(node->kind, "CallDynamic") == 0) {
+        return simple_compile_dynamic_call_ext(node, program, locals, ctx);
     }
     if (strcmp(node->kind, "Var") == 0) {
         return simple_compile_var_expr(node, program, locals);

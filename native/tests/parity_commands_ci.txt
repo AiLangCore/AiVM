@@ -10,6 +10,7 @@ parity_sys_remove_bad_type|./tools/ailang run src/AiVM.Core/native/tests/parity_
 parity_loop_stmt_break_exit|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/loop_stmt_break_exit.aos|cat src/AiVM.Core/native/tests/parity_cases/loop_stmt_break_exit.out
 parity_loop_break_continue|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/loop_break_continue.aos|cat src/AiVM.Core/native/tests/parity_cases/loop_break_continue.out
 parity_sdk_import_formatted_attrs|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/sdk_import_formatted_attrs.aos|cat src/AiVM.Core/native/tests/parity_cases/sdk_import_formatted_attrs.out
+parity_dynamic_call|./tools/ailang run src/AiVM.Core/native/tests/parity_cases/dynamic_call.aos|cat src/AiVM.Core/native/tests/parity_cases/dynamic_call.out
 parity_repl_sys_success|./tools/ailang repl < src/AiVM.Core/native/tests/parity_cases/repl_sys_success.in|cat src/AiVM.Core/native/tests/parity_cases/repl_sys_success.out
 parity_repl_sys_error|./tools/ailang repl < src/AiVM.Core/native/tests/parity_cases/repl_sys_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_sys_error.out
 parity_repl_ui_drawline_error|./tools/ailang repl < src/AiVM.Core/native/tests/parity_cases/repl_ui_drawline_error.in|cat src/AiVM.Core/native/tests/parity_cases/repl_ui_drawline_error.out
