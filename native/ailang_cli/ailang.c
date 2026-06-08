@@ -96,6 +96,18 @@ extern int kill(pid_t pid, int sig);
 #include "ailang_package_manager.h"
 #include "airun_ui_host.h"
 
+#ifndef AILANG_BUILD_VERSION
+#define AILANG_BUILD_VERSION "local"
+#endif
+
+#ifndef AILANG_BUILD_CHANNEL
+#define AILANG_BUILD_CHANNEL "local"
+#endif
+
+#ifndef AILANG_BUILD_COMMIT
+#define AILANG_BUILD_COMMIT "unknown"
+#endif
+
 #ifndef AIRUN_UI_HOST_EXTERNAL
 #ifndef AIRUN_ALLOW_INTERNAL_UI_FALLBACK
 #error "Internal UI fallback backend is disabled by default. Define AIRUN_UI_HOST_EXTERNAL for production builds or AIRUN_ALLOW_INTERNAL_UI_FALLBACK for embedded tests."
@@ -5427,8 +5439,20 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
         }
         return !first;
     }
+    if (strcmp(node->kind, "StrEscape") == 0) {
+        SimpleNodeView child;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &child)) {
+            return simple_fail("StrEscape missing arg");
+        }
+        if (!simple_compile_expr_node(&child, program, locals, local_count)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_ESCAPE, 0);
+    }
     return simple_failf("unsupported expr kind: %s", node->kind);
 }
+
+static int simple_emit_void_const(AivmProgram* program);
 
 static int parse_simple_program_aos_to_program_text(const char* source, AivmProgram* out_program)
 {
@@ -5512,6 +5536,14 @@ static int parse_simple_program_aos_to_program_text(const char* source, AivmProg
             }
             if (strcmp(target, "io.print") == 0 || strcmp(target, "io.write") == 0 || strcmp(target, "sys.stdout.writeLine") == 0) {
                 mapped = "sys.stdout.writeLine";
+            } else if (strcmp(target, "io.fileExists") == 0) {
+                mapped = "sys.fs.file.exists";
+            } else if (strcmp(target, "io.readFile") == 0) {
+                mapped = "sys.fs.file.read";
+            } else if (strcmp(target, "io.writeFile") == 0) {
+                mapped = "sys.fs.file.write";
+            } else if (strcmp(target, "io.makeDir") == 0) {
+                mapped = "sys.fs.dir.create";
             } else if (starts_with(target, "sys.")) {
                 mapped = target;
             } else {
@@ -5544,10 +5576,12 @@ static int parse_simple_program_aos_to_program_text(const char* source, AivmProg
         if (strcmp(node.kind, "Return") == 0) {
             SimpleNodeView expr;
             if (!simple_parse_next_node(node.body_start, node.body_end, &expr)) {
-                return simple_fail("return missing expression");
-            }
-            if (!simple_compile_expr_node(&expr, out_program, locals, &local_count) ||
-                !simple_emit_instruction(out_program, AIVM_OP_RETURN, 0)) {
+                if (!simple_emit_void_const(out_program) ||
+                    !simple_emit_instruction(out_program, AIVM_OP_RETURN, 0)) {
+                    return simple_fail("empty return emit failed");
+                }
+            } else if (!simple_compile_expr_node(&expr, out_program, locals, &local_count) ||
+                       !simple_emit_instruction(out_program, AIVM_OP_RETURN, 0)) {
                 return simple_fail("return emit failed");
             }
             saw_return = 1;
@@ -5648,7 +5682,6 @@ static int simple_compile_block_ext(
     SimpleLocals* locals,
     SimpleCompileContext* ctx,
     int* out_did_return);
-
 static int simple_emit_empty_string_const(AivmProgram* program)
 {
     size_t empty_const_idx = 0U;
@@ -6577,6 +6610,10 @@ static int simple_compile_call_ext(
         starts_with(target, "sys.") ||
         strcmp(target, "io.print") == 0 ||
         strcmp(target, "io.write") == 0 ||
+        strcmp(target, "io.fileExists") == 0 ||
+        strcmp(target, "io.readFile") == 0 ||
+        strcmp(target, "io.writeFile") == 0 ||
+        strcmp(target, "io.makeDir") == 0 ||
         strcmp(target, "sys.stdout.writeLine") == 0;
 
     if (is_syscall_target) {
@@ -6584,6 +6621,14 @@ static int simple_compile_call_ext(
         const char* mapped = target;
         if (strcmp(target, "io.print") == 0 || strcmp(target, "io.write") == 0) {
             mapped = "sys.stdout.writeLine";
+        } else if (strcmp(target, "io.fileExists") == 0) {
+            mapped = "sys.fs.file.exists";
+        } else if (strcmp(target, "io.readFile") == 0) {
+            mapped = "sys.fs.file.read";
+        } else if (strcmp(target, "io.writeFile") == 0) {
+            mapped = "sys.fs.file.write";
+        } else if (strcmp(target, "io.makeDir") == 0) {
+            mapped = "sys.fs.dir.create";
         }
         if (!simple_add_string_const(program, mapped, &target_idx)) {
             return simple_fail("failed adding syscall target const");
@@ -6880,6 +6925,16 @@ static int simple_compile_expr_ext(
             c = child.next;
         }
         return !first;
+    }
+    if (strcmp(node->kind, "StrEscape") == 0) {
+        SimpleNodeView child;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &child)) {
+            return simple_fail("StrEscape missing arg");
+        }
+        if (!simple_compile_expr_ext(&child, program, locals, ctx)) {
+            return 0;
+        }
+        return simple_emit_instruction(program, AIVM_OP_STR_ESCAPE, 0);
     }
     if (starts_with(node->kind, "Field")) {
         char key[256];
@@ -7448,9 +7503,10 @@ static int simple_compile_stmt_ext(
     if (strcmp(node->kind, "Return") == 0) {
         SimpleNodeView expr;
         if (!simple_parse_next_node(node->body_start, node->body_end, &expr)) {
-            return simple_fail("return missing expression");
-        }
-        if (!simple_compile_expr_ext(&expr, program, locals, ctx)) {
+            if (!simple_emit_void_const(program)) {
+                return simple_fail("empty return emit failed");
+            }
+        } else if (!simple_compile_expr_ext(&expr, program, locals, ctx)) {
             return 0;
         }
         if (!simple_emit_instruction(program, AIVM_OP_RETURN, 0)) {
@@ -8751,7 +8807,11 @@ static AIRUN_MAYBE_UNUSED int handle_repl(void)
             return 0;
         }
         if (strcmp(line, "version") == 0) {
-            printf("ailang-native-c abi=%u\n", aivm_c_abi_version());
+            printf("ailang-native-c version=%s channel=%s commit=%s abi=%u\n",
+                AILANG_BUILD_VERSION,
+                AILANG_BUILD_CHANNEL,
+                AILANG_BUILD_COMMIT,
+                aivm_c_abi_version());
             continue;
         }
         if (starts_with(line, "run ")) {
@@ -10048,9 +10108,17 @@ int main(int argc, char** argv)
 
     if (strcmp(argv[1], "version") == 0 || strcmp(argv[1], "--version") == 0) {
 #ifdef AIRUN_MINIMAL_RUNTIME
-        printf("aivm-runtime-native-c abi=%u\n", aivm_c_abi_version());
+        printf("aivm-runtime-native-c version=%s channel=%s commit=%s abi=%u\n",
+            AILANG_BUILD_VERSION,
+            AILANG_BUILD_CHANNEL,
+            AILANG_BUILD_COMMIT,
+            aivm_c_abi_version());
 #else
-        printf("ailang-native-c abi=%u\n", aivm_c_abi_version());
+        printf("ailang-native-c version=%s channel=%s commit=%s abi=%u\n",
+            AILANG_BUILD_VERSION,
+            AILANG_BUILD_CHANNEL,
+            AILANG_BUILD_COMMIT,
+            aivm_c_abi_version());
 #endif
         return 0;
     }

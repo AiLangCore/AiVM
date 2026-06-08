@@ -4,8 +4,48 @@ project(aivm_c_core VERSION 0.0.1 LANGUAGES C)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+execute_process(
+    COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}/.." describe --tags --abbrev=0 --match "v[0-9]*"
+    OUTPUT_VARIABLE AIVM_DETECTED_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if (AIVM_DETECTED_TAG)
+    string(REGEX REPLACE "^v" "" AIVM_DETECTED_VERSION "${AIVM_DETECTED_TAG}")
+else()
+    set(AIVM_DETECTED_VERSION "${PROJECT_VERSION}")
+endif()
+
+set(AIVM_BUILD_VERSION_OVERRIDE "" CACHE STRING "Explicit AiVM CLI version string override")
+if (AIVM_BUILD_VERSION_OVERRIDE)
+    set(AIVM_EFFECTIVE_BUILD_VERSION "${AIVM_BUILD_VERSION_OVERRIDE}")
+else()
+    set(AIVM_EFFECTIVE_BUILD_VERSION "${AIVM_DETECTED_VERSION}")
+endif()
+set(AIVM_BUILD_CHANNEL "local" CACHE STRING "AiVM CLI release channel")
+set(AIVM_BUILD_COMMIT "unknown" CACHE STRING "AiVM CLI source commit")
 option(AIVM_BUILD_SHARED "Build shared AiVM.C library for host bridge experiments" OFF)
 option(AIVM_BUILD_HOST_TESTS "Build AiLang host integration tests" OFF)
+
+if (AIVM_BUILD_COMMIT STREQUAL "unknown")
+    execute_process(
+        COMMAND git -C "${CMAKE_CURRENT_SOURCE_DIR}/.." rev-parse --short=12 HEAD
+        OUTPUT_VARIABLE AIVM_DETECTED_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if (AIVM_DETECTED_COMMIT)
+        set(AIVM_BUILD_COMMIT "${AIVM_DETECTED_COMMIT}" CACHE STRING "AiVM CLI source commit" FORCE)
+    endif()
+endif()
+
+function(aivm_apply_build_metadata target_name)
+    target_compile_definitions(${target_name} PRIVATE
+        AIVM_BUILD_VERSION="${AIVM_EFFECTIVE_BUILD_VERSION}"
+        AIVM_BUILD_CHANNEL="${AIVM_BUILD_CHANNEL}"
+        AIVM_BUILD_COMMIT="${AIVM_BUILD_COMMIT}"
+    )
+endfunction()
 
 find_package(Threads REQUIRED)
 
@@ -119,6 +159,7 @@ add_executable(aivm
 )
 
 target_link_libraries(aivm PRIVATE aivm_core)
+aivm_apply_build_metadata(aivm)
 
 if (MSVC)
     target_compile_options(aivm PRIVATE /W4)
@@ -134,6 +175,7 @@ set_target_properties(aivm_debug PROPERTIES OUTPUT_NAME "aivm-debug")
 
 target_link_libraries(aivm_debug PRIVATE aivm_core_debug)
 target_compile_definitions(aivm_debug PRIVATE AIVM_DEBUG_RUNTIME=1)
+aivm_apply_build_metadata(aivm_debug)
 
 if (MSVC)
     target_compile_options(aivm_debug PRIVATE /W4 /Zi /Od)

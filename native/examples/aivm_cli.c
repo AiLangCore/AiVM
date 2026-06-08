@@ -45,6 +45,18 @@
 #include "aivm_runtime.h"
 #include "sys/aivm_syscall.h"
 
+#ifndef AIVM_BUILD_VERSION
+#define AIVM_BUILD_VERSION "local"
+#endif
+
+#ifndef AIVM_BUILD_CHANNEL
+#define AIVM_BUILD_CHANNEL "local"
+#endif
+
+#ifndef AIVM_BUILD_COMMIT
+#define AIVM_BUILD_COMMIT "unknown"
+#endif
+
 #if defined(AIVM_DEBUG_RUNTIME)
 #define AIVM_CLI_NAME "aivm-debug"
 #else
@@ -2171,9 +2183,17 @@ int main(int argc, char** argv)
 {
     if (argc == 2 && strcmp(argv[1], "--version") == 0) {
 #if defined(AIVM_DEBUG_RUNTIME)
-        printf("aivm-debug abi=%u diagnostics=enabled\n", (unsigned int)aivm_c_abi_version());
+        printf("aivm-debug version=%s channel=%s commit=%s abi=%u diagnostics=enabled\n",
+            AIVM_BUILD_VERSION,
+            AIVM_BUILD_CHANNEL,
+            AIVM_BUILD_COMMIT,
+            (unsigned int)aivm_c_abi_version());
 #else
-        printf("aivm abi=%u diagnostics=stripped\n", (unsigned int)aivm_c_abi_version());
+        printf("aivm version=%s channel=%s commit=%s abi=%u diagnostics=stripped\n",
+            AIVM_BUILD_VERSION,
+            AIVM_BUILD_CHANNEL,
+            AIVM_BUILD_COMMIT,
+            (unsigned int)aivm_c_abi_version());
 #endif
         return 0;
     }
