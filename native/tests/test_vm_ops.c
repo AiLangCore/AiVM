@@ -1968,6 +1968,7 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
     if (expect(strcmp(attr2->key, "exhausted") == 0 && attr2->kind == AIVM_NODE_ATTR_INT && attr2->int_value == 0) != 0) {
         return 1;
     }
+    aivm_dispose(&vm);
     return 0;
 }
 
@@ -2344,6 +2345,7 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
     if (expect(out.type == AIVM_VAL_INT && out.int_value == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
         return 1;
     }
+    aivm_dispose(&vm);
     return 0;
 }
 
@@ -2453,6 +2455,7 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
     if (expect(vm.task_reclaim_exhausted_count == 0U) != 0) {
         return 1;
     }
+    aivm_dispose(&vm);
     return 0;
 }
 
