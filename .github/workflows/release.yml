@@ -25,7 +25,7 @@ jobs:
           - os: macos-latest
             id: macos
             archive: tar.gz
-          - os: windows-latest
+          - os: windows-2022
             id: windows
             archive: zip
 
