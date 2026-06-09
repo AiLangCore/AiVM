@@ -1933,6 +1933,7 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
+        vm.completed_tasks[i].worker_context = NULL;
     }
 
     aivm_run(&vm);
@@ -2312,6 +2313,7 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
+        vm.completed_tasks[i].worker_context = NULL;
     }
 
     aivm_run(&vm);
@@ -2377,6 +2379,7 @@ static int test_await_evicted_task_handle_sets_error(void)
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
+        vm.completed_tasks[i].worker_context = NULL;
     }
 
     aivm_run(&vm);
@@ -2411,6 +2414,7 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
+        vm.completed_tasks[i].worker_context = NULL;
     }
     vm.stack_count = 1U;
     vm.stack[0] = aivm_value_int(1);
@@ -2463,6 +2467,7 @@ static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
         vm.completed_tasks[i].state = AIVM_TASK_STATE_COMPLETED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
+        vm.completed_tasks[i].worker_context = NULL;
         vm.stack[i] = aivm_value_int((int64_t)i + 1);
     }
 
@@ -2596,6 +2601,7 @@ static int test_await_pending_task_handle_sets_error(void)
     vm.completed_tasks[0].state = AIVM_TASK_STATE_PENDING;
     vm.completed_tasks[0].handle = 1;
     vm.completed_tasks[0].result = aivm_value_int(42);
+    vm.completed_tasks[0].worker_context = NULL;
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
@@ -2644,6 +2650,7 @@ static int test_await_failed_task_handle_returns_terminal_result(void)
     vm.nodes[0].child_start = 0U;
     vm.nodes[0].child_count = 0U;
     vm.completed_tasks[0].result = aivm_value_node(1);
+    vm.completed_tasks[0].worker_context = NULL;
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
@@ -2683,6 +2690,7 @@ static int test_await_failed_task_non_err_result_sets_error(void)
     vm.completed_tasks[0].state = AIVM_TASK_STATE_FAILED;
     vm.completed_tasks[0].handle = 1;
     vm.completed_tasks[0].result = aivm_value_int(-11);
+    vm.completed_tasks[0].worker_context = NULL;
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
@@ -2737,6 +2745,7 @@ static int test_terminal_task_cleanup_stress(void)
         vm.completed_tasks[i].state = (i % 2U == 0U) ? AIVM_TASK_STATE_FAILED : AIVM_TASK_STATE_CANCELED;
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_node((int64_t)i + 2);
+        vm.completed_tasks[i].worker_context = NULL;
         vm.nodes[i + 1U].kind = "Err";
         vm.nodes[i + 1U].id = "terminal_task_err";
         vm.nodes[i + 1U].attr_start = 0U;
@@ -2814,6 +2823,7 @@ static int test_parallel_join_resolves_canceled_task_handles(void)
     vm.nodes[0].child_start = 0U;
     vm.nodes[0].child_count = 0U;
     vm.completed_tasks[0].result = aivm_value_node(1);
+    vm.completed_tasks[0].worker_context = NULL;
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
@@ -2863,6 +2873,7 @@ static int test_parallel_join_failed_task_non_err_result_sets_error(void)
     vm.completed_tasks[0].state = AIVM_TASK_STATE_FAILED;
     vm.completed_tasks[0].handle = 1;
     vm.completed_tasks[0].result = aivm_value_int(-99);
+    vm.completed_tasks[0].worker_context = NULL;
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
