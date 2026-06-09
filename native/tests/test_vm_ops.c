@@ -16,6 +16,15 @@ static int expect_line(int condition, int line)
 
 #define expect(condition) expect_line((condition), __LINE__)
 
+typedef int (*AivmTestFn)(void);
+
+static int run_test(const char* name, AivmTestFn fn)
+{
+    (void)fprintf(stderr, "aivm_test_vm_ops: %s\n", name);
+    (void)fflush(stderr);
+    return fn();
+}
+
 static int host_ui_get_window_size(
     const char* target,
     const AivmValue* args,
@@ -4686,313 +4695,313 @@ static int test_pair_first_requires_pair(void)
 
 int main(void)
 {
-    if (test_push_store_load_pop() != 0) {
+    if (run_test("test_push_store_load_pop", test_push_store_load_pop) != 0) {
         return 1;
     }
-    if (test_add_int() != 0) {
+    if (run_test("test_add_int", test_add_int) != 0) {
         return 1;
     }
-    if (test_load_local_missing_sets_error() != 0) {
+    if (run_test("test_load_local_missing_sets_error", test_load_local_missing_sets_error) != 0) {
         return 1;
     }
-    if (test_add_int_type_mismatch_sets_error() != 0) {
+    if (run_test("test_add_int_type_mismatch_sets_error", test_add_int_type_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_jump_skips_instruction() != 0) {
+    if (run_test("test_jump_skips_instruction", test_jump_skips_instruction) != 0) {
         return 1;
     }
-    if (test_jump_if_false_takes_branch() != 0) {
+    if (run_test("test_jump_if_false_takes_branch", test_jump_if_false_takes_branch) != 0) {
         return 1;
     }
-    if (test_jump_if_false_type_mismatch_sets_error() != 0) {
+    if (run_test("test_jump_if_false_type_mismatch_sets_error", test_jump_if_false_type_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_call_ret_roundtrip() != 0) {
+    if (run_test("test_call_ret_roundtrip", test_call_ret_roundtrip) != 0) {
         return 1;
     }
-    if (test_call_ret_rejects_extra_callee_stack_values() != 0) {
+    if (run_test("test_call_ret_rejects_extra_callee_stack_values", test_call_ret_rejects_extra_callee_stack_values) != 0) {
         return 1;
     }
-    if (test_top_level_ret_halts() != 0) {
+    if (run_test("test_top_level_ret_halts", test_top_level_ret_halts) != 0) {
         return 1;
     }
-    if (test_top_level_return_alias_halts() != 0) {
+    if (run_test("test_top_level_return_alias_halts", test_top_level_return_alias_halts) != 0) {
         return 1;
     }
-    if (test_return_alias_roundtrip() != 0) {
+    if (run_test("test_return_alias_roundtrip", test_return_alias_roundtrip) != 0) {
         return 1;
     }
-    if (test_call_target_equal_instruction_count_sets_error() != 0) {
+    if (run_test("test_call_target_equal_instruction_count_sets_error", test_call_target_equal_instruction_count_sets_error) != 0) {
         return 1;
     }
-    if (test_call_ret_restores_caller_locals_scope() != 0) {
+    if (run_test("test_call_ret_restores_caller_locals_scope", test_call_ret_restores_caller_locals_scope) != 0) {
         return 1;
     }
-    if (test_recursive_tail_call_reuses_current_frame() != 0) {
+    if (run_test("test_recursive_tail_call_reuses_current_frame", test_recursive_tail_call_reuses_current_frame) != 0) {
         return 1;
     }
-    if (test_negative_jump_operand_sets_error() != 0) {
+    if (run_test("test_negative_jump_operand_sets_error", test_negative_jump_operand_sets_error) != 0) {
         return 1;
     }
-    if (test_eq_int_true_false() != 0) {
+    if (run_test("test_eq_int_true_false", test_eq_int_true_false) != 0) {
         return 1;
     }
-    if (test_eq_int_type_mismatch_sets_error() != 0) {
+    if (run_test("test_eq_int_type_mismatch_sets_error", test_eq_int_type_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_eq_value_across_types() != 0) {
+    if (run_test("test_eq_value_across_types", test_eq_value_across_types) != 0) {
         return 1;
     }
-    if (test_eq_string_content_and_null_handling() != 0) {
+    if (run_test("test_eq_string_content_and_null_handling", test_eq_string_content_and_null_handling) != 0) {
         return 1;
     }
-    if (test_eq_stack_underflow_sets_error() != 0) {
+    if (run_test("test_eq_stack_underflow_sets_error", test_eq_stack_underflow_sets_error) != 0) {
         return 1;
     }
-    if (test_const_pushes_program_constant() != 0) {
+    if (run_test("test_const_pushes_program_constant", test_const_pushes_program_constant) != 0) {
         return 1;
     }
-    if (test_str_concat_success() != 0) {
+    if (run_test("test_str_concat_success", test_str_concat_success) != 0) {
         return 1;
     }
-    if (test_str_concat_type_mismatch_sets_error() != 0) {
+    if (run_test("test_str_concat_type_mismatch_sets_error", test_str_concat_type_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_to_string_converts_scalar_values() != 0) {
+    if (run_test("test_to_string_converts_scalar_values", test_to_string_converts_scalar_values) != 0) {
         return 1;
     }
-    if (test_to_string_null_string_sets_error() != 0) {
+    if (run_test("test_to_string_null_string_sets_error", test_to_string_null_string_sets_error) != 0) {
         return 1;
     }
-    if (test_str_escape_escapes_special_chars() != 0) {
+    if (run_test("test_str_escape_escapes_special_chars", test_str_escape_escapes_special_chars) != 0) {
         return 1;
     }
-    if (test_str_escape_requires_string() != 0) {
+    if (run_test("test_str_escape_requires_string", test_str_escape_requires_string) != 0) {
         return 1;
     }
-    if (test_string_arena_overflow_sets_error() != 0) {
+    if (run_test("test_string_arena_overflow_sets_error", test_string_arena_overflow_sets_error) != 0) {
         return 1;
     }
-    if (test_bytes_arena_overflow_sets_error() != 0) {
+    if (run_test("test_bytes_arena_overflow_sets_error", test_bytes_arena_overflow_sets_error) != 0) {
         return 1;
     }
-    if (test_str_substring_and_remove_rune_clamp_semantics() != 0) {
+    if (run_test("test_str_substring_and_remove_rune_clamp_semantics", test_str_substring_and_remove_rune_clamp_semantics) != 0) {
         return 1;
     }
-    if (test_str_substring_and_remove_type_mismatch() != 0) {
+    if (run_test("test_str_substring_and_remove_type_mismatch", test_str_substring_and_remove_type_mismatch) != 0) {
         return 1;
     }
-    if (test_str_substring_reuses_interned_results() != 0) {
+    if (run_test("test_str_substring_reuses_interned_results", test_str_substring_reuses_interned_results) != 0) {
         return 1;
     }
-    if (test_call_sys_success_and_void_result() != 0) {
+    if (run_test("test_call_sys_success_and_void_result", test_call_sys_success_and_void_result) != 0) {
         return 1;
     }
-    if (test_call_sys_failure_sets_vm_error() != 0) {
+    if (run_test("test_call_sys_failure_sets_vm_error", test_call_sys_failure_sets_vm_error) != 0) {
         return 1;
     }
-    if (test_call_sys_elapsed_limit_sets_vm_error() != 0) {
+    if (run_test("test_call_sys_elapsed_limit_sets_vm_error", test_call_sys_elapsed_limit_sets_vm_error) != 0) {
         return 1;
     }
-    if (test_call_sys_contract_type_mismatch_sets_error() != 0) {
+    if (run_test("test_call_sys_contract_type_mismatch_sets_error", test_call_sys_contract_type_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_call_sys_missing_binding_sets_unbound_error() != 0) {
+    if (run_test("test_call_sys_missing_binding_sets_unbound_error", test_call_sys_missing_binding_sets_unbound_error) != 0) {
         return 1;
     }
-    if (test_call_sys_does_not_recover_non_syscall_string_target_from_args() != 0) {
+    if (run_test("test_call_sys_does_not_recover_non_syscall_string_target_from_args", test_call_sys_does_not_recover_non_syscall_string_target_from_args) != 0) {
         return 1;
     }
-    if (test_nested_call_preserves_argument_without_tail_call_reuse() != 0) {
+    if (run_test("test_nested_call_preserves_argument_without_tail_call_reuse", test_nested_call_preserves_argument_without_tail_call_reuse) != 0) {
         return 1;
     }
-    if (test_call_sys_debug_task_reclaim_stats_intrinsic() != 0) {
+    if (run_test("test_call_sys_debug_task_reclaim_stats_intrinsic", test_call_sys_debug_task_reclaim_stats_intrinsic) != 0) {
         return 1;
     }
-    if (test_call_sys_debug_task_reclaim_stats_arity_error() != 0) {
+    if (run_test("test_call_sys_debug_task_reclaim_stats_arity_error", test_call_sys_debug_task_reclaim_stats_arity_error) != 0) {
         return 1;
     }
-    if (test_async_call_and_await_roundtrip() != 0) {
+    if (run_test("test_async_call_and_await_roundtrip", test_async_call_and_await_roundtrip) != 0) {
         return 1;
     }
-    if (test_async_call_starts_pending_worker_task() != 0) {
+    if (run_test("test_async_call_starts_pending_worker_task", test_async_call_starts_pending_worker_task) != 0) {
         return 1;
     }
-    if (test_async_call_copies_string_result_across_worker_boundary() != 0) {
+    if (run_test("test_async_call_copies_string_result_across_worker_boundary", test_async_call_copies_string_result_across_worker_boundary) != 0) {
         return 1;
     }
-    if (test_async_call_invalid_target_sets_error() != 0) {
+    if (run_test("test_async_call_invalid_target_sets_error", test_async_call_invalid_target_sets_error) != 0) {
         return 1;
     }
-    if (test_async_call_target_equal_instruction_count_sets_error() != 0) {
+    if (run_test("test_async_call_target_equal_instruction_count_sets_error", test_async_call_target_equal_instruction_count_sets_error) != 0) {
         return 1;
     }
-    if (test_async_call_task_handle_overflow_sets_error() != 0) {
+    if (run_test("test_async_call_task_handle_overflow_sets_error", test_async_call_task_handle_overflow_sets_error) != 0) {
         return 1;
     }
-    if (test_async_call_rejects_extra_callee_stack_values() != 0) {
+    if (run_test("test_async_call_rejects_extra_callee_stack_values", test_async_call_rejects_extra_callee_stack_values) != 0) {
         return 1;
     }
-    if (test_async_call_rejects_invalid_call_target_layout() != 0) {
+    if (run_test("test_async_call_rejects_invalid_call_target_layout", test_async_call_rejects_invalid_call_target_layout) != 0) {
         return 1;
     }
-    if (test_async_call_copies_node_result_across_worker_boundary() != 0) {
+    if (run_test("test_async_call_copies_node_result_across_worker_boundary", test_async_call_copies_node_result_across_worker_boundary) != 0) {
         return 1;
     }
-    if (test_async_call_reclaims_oldest_task_slot_when_full() != 0) {
+    if (run_test("test_async_call_reclaims_oldest_task_slot_when_full", test_async_call_reclaims_oldest_task_slot_when_full) != 0) {
         return 1;
     }
-    if (test_await_evicted_task_handle_sets_error() != 0) {
+    if (run_test("test_await_evicted_task_handle_sets_error", test_await_evicted_task_handle_sets_error) != 0) {
         return 1;
     }
-    if (test_async_call_reclaim_skips_pinned_oldest_handle() != 0) {
+    if (run_test("test_async_call_reclaim_skips_pinned_oldest_handle", test_async_call_reclaim_skips_pinned_oldest_handle) != 0) {
         return 1;
     }
-    if (test_async_call_full_table_all_pinned_sets_capacity_error() != 0) {
+    if (run_test("test_async_call_full_table_all_pinned_sets_capacity_error", test_async_call_full_table_all_pinned_sets_capacity_error) != 0) {
         return 1;
     }
-    if (test_async_call_sys_and_await_roundtrip() != 0) {
+    if (run_test("test_async_call_sys_and_await_roundtrip", test_async_call_sys_and_await_roundtrip) != 0) {
         return 1;
     }
-    if (test_await_invalid_handle_sets_error() != 0) {
+    if (run_test("test_await_invalid_handle_sets_error", test_await_invalid_handle_sets_error) != 0) {
         return 1;
     }
-    if (test_await_pending_task_handle_sets_error() != 0) {
+    if (run_test("test_await_pending_task_handle_sets_error", test_await_pending_task_handle_sets_error) != 0) {
         return 1;
     }
-    if (test_await_failed_task_handle_returns_terminal_result() != 0) {
+    if (run_test("test_await_failed_task_handle_returns_terminal_result", test_await_failed_task_handle_returns_terminal_result) != 0) {
         return 1;
     }
-    if (test_await_failed_task_non_err_result_sets_error() != 0) {
+    if (run_test("test_await_failed_task_non_err_result_sets_error", test_await_failed_task_non_err_result_sets_error) != 0) {
         return 1;
     }
-    if (test_terminal_task_cleanup_stress() != 0) {
+    if (run_test("test_terminal_task_cleanup_stress", test_terminal_task_cleanup_stress) != 0) {
         return 1;
     }
-    if (test_parallel_begin_fork_join_and_cancel() != 0) {
+    if (run_test("test_parallel_begin_fork_join_and_cancel", test_parallel_begin_fork_join_and_cancel) != 0) {
         return 1;
     }
-    if (test_parallel_join_mismatch_sets_error() != 0) {
+    if (run_test("test_parallel_join_mismatch_sets_error", test_parallel_join_mismatch_sets_error) != 0) {
         return 1;
     }
-    if (test_parallel_join_resolves_completed_task_handles() != 0) {
+    if (run_test("test_parallel_join_resolves_completed_task_handles", test_parallel_join_resolves_completed_task_handles) != 0) {
         return 1;
     }
-    if (test_parallel_join_resolves_canceled_task_handles() != 0) {
+    if (run_test("test_parallel_join_resolves_canceled_task_handles", test_parallel_join_resolves_canceled_task_handles) != 0) {
         return 1;
     }
-    if (test_parallel_join_failed_task_non_err_result_sets_error() != 0) {
+    if (run_test("test_parallel_join_failed_task_non_err_result_sets_error", test_parallel_join_failed_task_non_err_result_sets_error) != 0) {
         return 1;
     }
-    if (test_parallel_fork_requires_context() != 0) {
+    if (run_test("test_parallel_fork_requires_context", test_parallel_fork_requires_context) != 0) {
         return 1;
     }
-    if (test_parallel_join_requires_context() != 0) {
+    if (run_test("test_parallel_join_requires_context", test_parallel_join_requires_context) != 0) {
         return 1;
     }
-    if (test_str_utf8_byte_count() != 0) {
+    if (run_test("test_str_utf8_byte_count", test_str_utf8_byte_count) != 0) {
         return 1;
     }
-    if (test_str_utf8_byte_count_requires_string() != 0) {
+    if (run_test("test_str_utf8_byte_count_requires_string", test_str_utf8_byte_count_requires_string) != 0) {
         return 1;
     }
-    if (test_node_ops_core_semantics() != 0) {
+    if (run_test("test_node_ops_core_semantics", test_node_ops_core_semantics) != 0) {
         return 1;
     }
-    if (test_make_node_from_template_and_children() != 0) {
+    if (run_test("test_make_node_from_template_and_children", test_make_node_from_template_and_children) != 0) {
         return 1;
     }
-    if (test_make_node_empty_from_kind_and_id() != 0) {
+    if (run_test("test_make_node_empty_from_kind_and_id", test_make_node_empty_from_kind_and_id) != 0) {
         return 1;
     }
-    if (test_string_compaction_preserves_live_node_strings() != 0) {
+    if (run_test("test_string_compaction_preserves_live_node_strings", test_string_compaction_preserves_live_node_strings) != 0) {
         return 1;
     }
-    if (test_append_attr_adds_lit_attr_to_node() != 0) {
+    if (run_test("test_append_attr_adds_lit_attr_to_node", test_append_attr_adds_lit_attr_to_node) != 0) {
         return 1;
     }
-    if (test_make_node_converts_scalar_children_to_runtime_nodes() != 0) {
+    if (run_test("test_make_node_converts_scalar_children_to_runtime_nodes", test_make_node_converts_scalar_children_to_runtime_nodes) != 0) {
         return 1;
     }
-    if (test_node_compaction_reclaims_unreachable_nodes() != 0) {
+    if (run_test("test_node_compaction_reclaims_unreachable_nodes", test_node_compaction_reclaims_unreachable_nodes) != 0) {
         return 1;
     }
-    if (test_node_compaction_runs_before_capacity_when_pressure_is_high() != 0) {
+    if (run_test("test_node_compaction_runs_before_capacity_when_pressure_is_high", test_node_compaction_runs_before_capacity_when_pressure_is_high) != 0) {
         return 1;
     }
-    if (test_node_compaction_does_not_run_below_pressure_threshold() != 0) {
+    if (run_test("test_node_compaction_does_not_run_below_pressure_threshold", test_node_compaction_does_not_run_below_pressure_threshold) != 0) {
         return 1;
     }
-    if (test_safe_point_compaction_reclaims_below_pressure_threshold() != 0) {
+    if (run_test("test_safe_point_compaction_reclaims_below_pressure_threshold", test_safe_point_compaction_reclaims_below_pressure_threshold) != 0) {
         return 1;
     }
-    if (test_return_boundary_runs_safe_point_compaction() != 0) {
+    if (run_test("test_return_boundary_runs_safe_point_compaction", test_return_boundary_runs_safe_point_compaction) != 0) {
         return 1;
     }
-    if (test_node_compaction_runs_on_child_pressure_before_node_threshold() != 0) {
+    if (run_test("test_node_compaction_runs_on_child_pressure_before_node_threshold", test_node_compaction_runs_on_child_pressure_before_node_threshold) != 0) {
         return 1;
     }
-    if (test_node_capacity_failure_resets_gc_allocation_counter() != 0) {
+    if (run_test("test_node_capacity_failure_resets_gc_allocation_counter", test_node_capacity_failure_resets_gc_allocation_counter) != 0) {
         return 1;
     }
-    if (test_make_node_requires_node_args() != 0) {
+    if (run_test("test_make_node_requires_node_args", test_make_node_requires_node_args) != 0) {
         return 1;
     }
-    if (test_make_node_empty_requires_string_args() != 0) {
+    if (run_test("test_make_node_empty_requires_string_args", test_make_node_empty_requires_string_args) != 0) {
         return 1;
     }
-    if (test_append_attr_requires_single_attr_node() != 0) {
+    if (run_test("test_append_attr_requires_single_attr_node", test_append_attr_requires_single_attr_node) != 0) {
         return 1;
     }
-    if (test_make_lit_string_requires_string_id() != 0) {
+    if (run_test("test_make_lit_string_requires_string_id", test_make_lit_string_requires_string_id) != 0) {
         return 1;
     }
-    if (test_make_block_requires_string_id() != 0) {
+    if (run_test("test_make_block_requires_string_id", test_make_block_requires_string_id) != 0) {
         return 1;
     }
-    if (test_child_at_out_of_range_sets_error_detail() != 0) {
+    if (run_test("test_child_at_out_of_range_sets_error_detail", test_child_at_out_of_range_sets_error_detail) != 0) {
         return 1;
     }
-    if (test_append_child_requires_node_operands() != 0) {
+    if (run_test("test_append_child_requires_node_operands", test_append_child_requires_node_operands) != 0) {
         return 1;
     }
-    if (test_node_kind_requires_node_operand() != 0) {
+    if (run_test("test_node_kind_requires_node_operand", test_node_kind_requires_node_operand) != 0) {
         return 1;
     }
-    if (test_attr_key_requires_node_and_index() != 0) {
+    if (run_test("test_attr_key_requires_node_and_index", test_attr_key_requires_node_and_index) != 0) {
         return 1;
     }
-    if (test_attr_value_kind_requires_node_and_index() != 0) {
+    if (run_test("test_attr_value_kind_requires_node_and_index", test_attr_value_kind_requires_node_and_index) != 0) {
         return 1;
     }
-    if (test_attr_value_string_requires_node_and_index() != 0) {
+    if (run_test("test_attr_value_string_requires_node_and_index", test_attr_value_string_requires_node_and_index) != 0) {
         return 1;
     }
-    if (test_attr_value_int_requires_node_and_index() != 0) {
+    if (run_test("test_attr_value_int_requires_node_and_index", test_attr_value_int_requires_node_and_index) != 0) {
         return 1;
     }
-    if (test_attr_value_bool_requires_node_and_index() != 0) {
+    if (run_test("test_attr_value_bool_requires_node_and_index", test_attr_value_bool_requires_node_and_index) != 0) {
         return 1;
     }
-    if (test_make_err_requires_string_operands() != 0) {
+    if (run_test("test_make_err_requires_string_operands", test_make_err_requires_string_operands) != 0) {
         return 1;
     }
-    if (test_make_field_string_and_map_roundtrip() != 0) {
+    if (run_test("test_make_field_string_and_map_roundtrip", test_make_field_string_and_map_roundtrip) != 0) {
         return 1;
     }
-    if (test_make_map_requires_int_count() != 0) {
+    if (run_test("test_make_map_requires_int_count", test_make_map_requires_int_count) != 0) {
         return 1;
     }
-    if (test_scratch_pair_roundtrip() != 0) {
+    if (run_test("test_scratch_pair_roundtrip", test_scratch_pair_roundtrip) != 0) {
         return 1;
     }
-    if (test_async_call_copies_pair_result_across_worker_boundary() != 0) {
+    if (run_test("test_async_call_copies_pair_result_across_worker_boundary", test_async_call_copies_pair_result_across_worker_boundary) != 0) {
         return 1;
     }
-    if (test_scratch_pair_roots_node_through_compaction() != 0) {
+    if (run_test("test_scratch_pair_roots_node_through_compaction", test_scratch_pair_roots_node_through_compaction) != 0) {
         return 1;
     }
-    if (test_pair_first_requires_pair() != 0) {
+    if (run_test("test_pair_first_requires_pair", test_pair_first_requires_pair) != 0) {
         return 1;
     }
 
