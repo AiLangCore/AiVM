@@ -76,6 +76,21 @@ static int host_slow_noop(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_noop(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    (void)args;
+    if (arg_count != 0U || result == NULL) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_int(0);
+    return AIVM_SYSCALL_OK;
+}
+
 static int host_remote_call_echo_int(
     const char* target,
     const AivmValue* args,
@@ -1905,27 +1920,30 @@ static int test_call_sys_debug_task_reclaim_stats_intrinsic(void)
     const AivmNodeAttr* attr2;
     size_t i;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
-        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.time.monotonicMs" },
         { .type = AIVM_VAL_STRING, .string_value = "sys.debug.taskReclaimStats" }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.time.monotonicMs", host_noop }
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 6U,
+        .instruction_count = 5U,
         .constants = constants,
-        .constant_count = 1U,
+        .constant_count = 2U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
     };
 
-    aivm_init(&vm, &program);
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
     aivm_set_runtime_profile(&vm, AIVM_RUNTIME_PROFILE_DEBUG);
     vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
     vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
@@ -2300,14 +2318,26 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
     AivmValue out;
     size_t i;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
-        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
-    AivmProgram program;
-    aivm_program_init(&program, &instructions[0], 4U);
-    aivm_init(&vm, &program);
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.time.monotonicMs" }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.time.monotonicMs", host_noop }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
     vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
     vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
@@ -2354,27 +2384,30 @@ static int test_await_evicted_task_handle_sets_error(void)
     static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
-        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.time.monotonicMs" },
         { .type = AIVM_VAL_INT, .int_value = 1 }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.time.monotonicMs", host_noop }
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 6U,
+        .instruction_count = 5U,
         .constants = constants,
-        .constant_count = 1U,
+        .constant_count = 2U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
     };
 
-    aivm_init(&vm, &program);
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
     vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
     vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
@@ -2384,11 +2417,7 @@ static int test_await_evicted_task_handle_sets_error(void)
         vm.completed_tasks[i].worker_context = NULL;
     }
 
-    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error run\n");
-    (void)fflush(stderr);
     aivm_run(&vm);
-    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error validate\n");
-    (void)fflush(stderr);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
@@ -2398,11 +2427,7 @@ static int test_await_evicted_task_handle_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AWAIT requires valid task handle.") == 0) != 0) {
         return 1;
     }
-    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error dispose\n");
-    (void)fflush(stderr);
     aivm_dispose(&vm);
-    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error done\n");
-    (void)fflush(stderr);
     return 0;
 }
 
@@ -2411,14 +2436,26 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
     static AivmVm vm;
     size_t i;
     static const AivmInstruction instructions[] = {
-        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 2 },
-        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
-        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
-        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_ASYNC_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
-    AivmProgram program;
-    aivm_program_init(&program, &instructions[0], 4U);
-    aivm_init(&vm, &program);
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.time.monotonicMs" }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.time.monotonicMs", host_noop }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    aivm_init_with_syscalls(&vm, &program, bindings, 1U);
     vm.completed_task_count = AIVM_VM_TASK_CAPACITY;
     vm.next_task_handle = (int64_t)AIVM_VM_TASK_CAPACITY + 1;
     for (i = 0U; i < AIVM_VM_TASK_CAPACITY; i += 1U) {
