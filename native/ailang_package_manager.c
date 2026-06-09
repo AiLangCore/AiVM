@@ -39,6 +39,7 @@
 #define AILANG_PM_TOOL_TIMEOUT_SECONDS 30
 #define AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS 3600
 #define AILANG_PM_MAX_DEPENDENCIES 64
+#define AILANG_PM_LOCAL_INCLUDE_MAX_DEPTH 8
 
 typedef struct AilangPackageRecord {
     char name[128];
@@ -65,6 +66,8 @@ typedef struct AilangPackageRestoreQueue {
     AilangPackageDependency entries[AILANG_PM_MAX_DEPENDENCIES];
     size_t count;
 } AilangPackageRestoreQueue;
+
+static int pm_is_sdk_owned_name(const char* name);
 
 static int pm_set_error(char* error, size_t error_len, const char* fmt, ...)
 {
@@ -1070,46 +1073,67 @@ static int pm_load_record(
     return 1;
 }
 
-static int pm_parse_include(const char* cursor, char* name, size_t name_len, char* version, size_t version_len)
+static int pm_parse_include_attr(const char* cursor, const char* key, char* out, size_t out_len)
 {
-    const char* name_pos;
-    const char* version_pos;
+    char needle[64];
+    const char* pos;
+    const char* close;
     const char* start;
     const char* end;
     size_t n;
-    if (cursor == NULL || name == NULL || version == NULL) {
+    if (cursor == NULL || key == NULL || out == NULL || out_len == 0U ||
+        snprintf(needle, sizeof(needle), "%s=\"", key) >= (int)sizeof(needle)) {
         return 0;
     }
-    name_pos = strstr(cursor, "name=\"");
-    if (name_pos == NULL) {
+    close = strchr(cursor, ')');
+    if (close == NULL) {
         return 0;
     }
-    start = name_pos + strlen("name=\"");
+    pos = strstr(cursor, needle);
+    if (pos == NULL || pos >= close) {
+        return 0;
+    }
+    start = pos + strlen(needle);
     end = strchr(start, '"');
-    if (end == NULL) {
+    if (end == NULL || end > close) {
         return 0;
     }
     n = (size_t)(end - start);
-    if (n + 1U > name_len) {
+    if (n + 1U > out_len) {
         return 0;
     }
-    memcpy(name, start, n);
-    name[n] = '\0';
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return 1;
+}
+
+static int pm_parse_include_ex(
+    const char* cursor,
+    char* name,
+    size_t name_len,
+    char* version,
+    size_t version_len,
+    char* path,
+    size_t path_len)
+{
+    if (cursor == NULL || name == NULL || version == NULL) {
+        return 0;
+    }
+    if (!pm_parse_include_attr(cursor, "name", name, name_len)) {
+        return 0;
+    }
     version[0] = '\0';
-    version_pos = strstr(cursor, "version=\"");
-    if (version_pos != NULL) {
-        start = version_pos + strlen("version=\"");
-        end = strchr(start, '"');
-        if (end != NULL) {
-            n = (size_t)(end - start);
-            if (n + 1U > version_len) {
-                return 0;
-            }
-            memcpy(version, start, n);
-            version[n] = '\0';
-        }
+    (void)pm_parse_include_attr(cursor, "version", version, version_len);
+    if (path != NULL && path_len > 0U) {
+        path[0] = '\0';
+        (void)pm_parse_include_attr(cursor, "path", path, path_len);
     }
     return 1;
+}
+
+static int pm_parse_include(const char* cursor, char* name, size_t name_len, char* version, size_t version_len)
+{
+    return pm_parse_include_ex(cursor, name, name_len, version, version_len, NULL, 0U);
 }
 
 static int pm_parse_package_spec(const char* spec, char* name, size_t name_len, char* version, size_t version_len)
@@ -1136,6 +1160,81 @@ static int pm_parse_package_spec(const char* spec, char* name, size_t name_len, 
         version[0] = '\0';
     }
     return name[0] != '\0';
+}
+
+static int pm_scan_manifest_includes_for_restore(
+    const char* project_dir,
+    const char* manifest,
+    AilangPackageRestoreQueue* queue,
+    unsigned int depth,
+    char* error,
+    size_t error_len)
+{
+    const char* p;
+    if (project_dir == NULL || manifest == NULL || queue == NULL) {
+        return pm_set_error(error, error_len, "invalid package restore include scan");
+    }
+    if (depth > AILANG_PM_LOCAL_INCLUDE_MAX_DEPTH) {
+        return pm_set_error(error, error_len, "local package include graph is too deep");
+    }
+    p = manifest;
+    while ((p = strstr(p, "Include")) != NULL) {
+        char include_name[128];
+        char include_version[64];
+        char include_path[PATH_MAX];
+        if (!pm_parse_include_ex(
+                p,
+                include_name,
+                sizeof(include_name),
+                include_version,
+                sizeof(include_version),
+                include_path,
+                sizeof(include_path))) {
+            return pm_set_error(error, error_len, "invalid Include package declaration");
+        }
+        if (include_path[0] != '\0') {
+            char local_project_dir[PATH_MAX];
+            char local_manifest_path[PATH_MAX];
+            char* local_manifest = NULL;
+            int ok;
+            if (include_path[0] == '/' || include_path[0] == '\\') {
+                if (snprintf(local_project_dir, sizeof(local_project_dir), "%s", include_path) >=
+                    (int)sizeof(local_project_dir)) {
+                    return pm_set_error(error, error_len, "local package include path overflow");
+                }
+            } else if (!pm_join_path(project_dir, include_path, local_project_dir, sizeof(local_project_dir))) {
+                return pm_set_error(error, error_len, "local package include path overflow");
+            }
+            if (!pm_join_path(local_project_dir, "project.aiproj", local_manifest_path, sizeof(local_manifest_path))) {
+                return pm_set_error(error, error_len, "local package manifest path overflow");
+            }
+            if (pm_file_exists(local_manifest_path)) {
+                if (!pm_read_text_limited(local_manifest_path, &local_manifest)) {
+                    return pm_set_error(error, error_len, "could not read local package manifest: %s", include_name);
+                }
+                ok = pm_scan_manifest_includes_for_restore(
+                    local_project_dir,
+                    local_manifest,
+                    queue,
+                    depth + 1U,
+                    error,
+                    error_len);
+                free(local_manifest);
+                if (!ok) {
+                    return 0;
+                }
+            }
+        } else {
+            if (pm_is_sdk_owned_name(include_name)) {
+                return pm_set_error(error, error_len, "ailang is provided by the selected SDK, not package restore");
+            }
+            if (!pm_restore_queue_add(queue, include_name, include_version, error, error_len)) {
+                return 0;
+            }
+        }
+        p += strlen("Include");
+    }
+    return 1;
 }
 
 static int pm_is_sdk_owned_name(const char* name)
@@ -1528,7 +1627,6 @@ int ailang_package_manager_restore(
     char lock_text[AILANG_PM_LOCK_LIMIT];
     size_t lock_used = 0U;
     char* manifest = NULL;
-    const char* p;
     AilangPackageRestoreQueue queue;
     size_t queue_index;
     char restored_namespaces[1024];
@@ -1563,23 +1661,9 @@ int ailang_package_manager_restore(
         return pm_set_error(error, error_len, "lockfile output overflow");
     }
     memset(&queue, 0, sizeof(queue));
-    p = manifest;
-    while ((p = strstr(p, "Include")) != NULL) {
-        char include_name[128];
-        char include_version[64];
-        if (!pm_parse_include(p, include_name, sizeof(include_name), include_version, sizeof(include_version))) {
-            free(manifest);
-            return pm_set_error(error, error_len, "invalid Include package declaration");
-        }
-        if (pm_is_sdk_owned_name(include_name)) {
-            free(manifest);
-            return pm_set_error(error, error_len, "ailang is provided by the selected SDK, not package restore");
-        }
-        if (!pm_restore_queue_add(&queue, include_name, include_version, error, error_len)) {
-            free(manifest);
-            return 0;
-        }
-        p += strlen("Include");
+    if (!pm_scan_manifest_includes_for_restore(project_dir, manifest, &queue, 0U, error, error_len)) {
+        free(manifest);
+        return 0;
     }
     for (queue_index = 0U; queue_index < queue.count; queue_index += 1U) {
         const char* include_name = queue.entries[queue_index].name;

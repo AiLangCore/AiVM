@@ -7924,6 +7924,102 @@ static int build_input_to_aibc1(
     size_t out_app_path_len,
     int use_cache);
 
+static int resolve_project_run_tool(const char* input, char* out_tool, size_t out_tool_len)
+{
+    char manifest_path[PATH_MAX];
+    char manifest_text[8192];
+    if (input == NULL || out_tool == NULL || out_tool_len == 0U) {
+        return 0;
+    }
+    out_tool[0] = '\0';
+    if (!resolve_manifest_path_for_input(input, manifest_path, sizeof(manifest_path)) ||
+        !read_text_file(manifest_path, manifest_text, sizeof(manifest_text)) ||
+        !extract_manifest_attr(manifest_text, "runTool", out_tool, out_tool_len)) {
+        return 0;
+    }
+    return out_tool[0] != '\0';
+}
+
+static int delegate_run_to_project_tool(const RunTarget* target, char** argv)
+{
+    char tool_name[128];
+    char manifest_path[PATH_MAX];
+    char project_dir[PATH_MAX];
+    char error[512];
+    char restore_output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    const char* tool_args_static[2];
+    char** tool_args = NULL;
+    int tool_arg_count;
+    int tool_exit = 0;
+    int i;
+    AilangPackageManagerOptions package_options;
+    if (target == NULL || argv == NULL || getenv("AILANG_DISABLE_RUN_TOOL_DISPATCH") != NULL) {
+        return -1;
+    }
+    if (!resolve_project_run_tool(target->program_path, tool_name, sizeof(tool_name))) {
+        return -1;
+    }
+    if (!resolve_manifest_path_for_input(target->program_path, manifest_path, sizeof(manifest_path)) ||
+        !dirname_of(manifest_path, project_dir, sizeof(project_dir))) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Could not resolve project directory for run tool.\" nodeId=runTool)\n");
+        return 2;
+    }
+    tool_arg_count = 2 + target->app_arg_count;
+    tool_args = (char**)calloc((size_t)tool_arg_count, sizeof(char*));
+    if (tool_args == NULL) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Run tool argument allocation failed.\" nodeId=runTool)\n");
+        return 2;
+    }
+    tool_args_static[0] = "run";
+    tool_args_static[1] = target->program_path;
+    tool_args[0] = (char*)tool_args_static[0];
+    tool_args[1] = (char*)tool_args_static[1];
+    for (i = 0; i < target->app_arg_count; i += 1) {
+        tool_args[2 + i] = argv[target->app_arg_start + i];
+    }
+    memset(&package_options, 0, sizeof(package_options));
+    package_options.project_dir = project_dir;
+    if (g_airun_runtime_exe_path[0] != '\0') {
+#ifdef _WIN32
+        (void)_putenv_s("AILANG_BIN", g_airun_runtime_exe_path);
+#else
+        (void)setenv("AILANG_BIN", g_airun_runtime_exe_path, 1);
+#endif
+    }
+    error[0] = '\0';
+    if (ailang_package_manager_try_run_tool(
+            &package_options,
+            tool_name,
+            tool_arg_count,
+            tool_args,
+            &tool_exit,
+            error,
+            sizeof(error))) {
+        free(tool_args);
+        return tool_exit;
+    }
+    error[0] = '\0';
+    if (ailang_package_manager_restore(&package_options, restore_output, sizeof(restore_output), error, sizeof(error)) &&
+        ailang_package_manager_try_run_tool(
+            &package_options,
+            tool_name,
+            tool_arg_count,
+            tool_args,
+            &tool_exit,
+            error,
+            sizeof(error))) {
+        free(tool_args);
+        return tool_exit;
+    }
+    free(tool_args);
+    if (error[0] != '\0') {
+        fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=runTool)\n", error);
+    } else {
+        fprintf(stderr, "Err#err1(code=PKG001 message=\"project run tool not installed: %s\" nodeId=runTool)\n", tool_name);
+    }
+    return 2;
+}
+
 static int parse_run_target(int argc, char** argv, int start_index, RunTarget* out_target)
 {
     int i;
@@ -8066,6 +8162,13 @@ static int handle_run(int argc, char** argv)
     }
     airun_configure_log_level(target.log_level);
     airun_reset_injected_events();
+
+    {
+        int delegated_rc = delegate_run_to_project_tool(&target, argv);
+        if (delegated_rc >= 0) {
+            return delegated_rc;
+        }
+    }
 
     if (target.program_path != NULL &&
         !ends_with(target.program_path, ".aibc1") &&

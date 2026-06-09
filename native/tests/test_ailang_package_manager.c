@@ -102,6 +102,7 @@ int main(void)
         !mkdir_ok(".tmp/pkg-manager-test/registry") ||
         !mkdir_ok(".tmp/pkg-manager-test/registry/packages") ||
         !mkdir_ok(".tmp/pkg-manager-test/project") ||
+        !mkdir_ok(".tmp/pkg-manager-test/local-lib") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src/base") ||
         !mkdir_ok(".tmp/pkg-manager-test/package-src/base/src") ||
@@ -153,7 +154,16 @@ int main(void)
         !write_file(
             ".tmp/pkg-manager-test/project/project.aiproj",
             "Program#p1 {\n"
-            "  Project#proj1(name=\"demo-app\" entryFile=\"src/app.aos\" entryExport=\"start\")\n"
+            "  Project#proj1(name=\"demo-app\" entryFile=\"src/app.aos\" entryExport=\"start\") {\n"
+            "    Include#dep_local(name=\"local-lib\" path=\"../local-lib\" version=\"0.1.0\")\n"
+            "  }\n"
+            "}\n") ||
+        !write_file(
+            ".tmp/pkg-manager-test/local-lib/project.aiproj",
+            "Program#local1 {\n"
+            "  Project#local_proj(name=\"local-lib\" entryFile=\"src/lib.aos\" entryExport=\"library\") {\n"
+            "    Include#dep_base(name=\"base\" version=\"0.1.0\")\n"
+            "  }\n"
             "}\n")) {
         return 2;
     }
@@ -240,6 +250,14 @@ int main(void)
     if (ailang_package_manager_add(&options, "ailang", output, sizeof(output), error, sizeof(error)) ||
         strstr(error, "provided by the selected SDK") == NULL) {
         return 20;
+    }
+    error[0] = '\0';
+    if (!ailang_package_manager_restore(&options, output, sizeof(output), error, sizeof(error)) ||
+        strstr(output, "Ok#ok1(type=int value=1)") == NULL ||
+        !read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||
+        strstr(output, "name = \"base\"") == NULL ||
+        strstr(output, "name = \"local-lib\"") != NULL) {
+        return 22;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Include#dep_build") != NULL) {
