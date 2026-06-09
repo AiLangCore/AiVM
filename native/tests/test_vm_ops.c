@@ -2392,6 +2392,7 @@ static int test_await_evicted_task_handle_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AWAIT requires valid task handle.") == 0) != 0) {
         return 1;
     }
+    aivm_dispose(&vm);
     return 0;
 }
 
