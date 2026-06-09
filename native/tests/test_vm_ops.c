@@ -2382,7 +2382,11 @@ static int test_await_evicted_task_handle_sets_error(void)
         vm.completed_tasks[i].worker_context = NULL;
     }
 
+    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error run\n");
+    (void)fflush(stderr);
     aivm_run(&vm);
+    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error validate\n");
+    (void)fflush(stderr);
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
         return 1;
     }
@@ -2392,7 +2396,11 @@ static int test_await_evicted_task_handle_sets_error(void)
     if (expect(strcmp(aivm_vm_error_detail(&vm), "AWAIT requires valid task handle.") == 0) != 0) {
         return 1;
     }
+    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error dispose\n");
+    (void)fflush(stderr);
     aivm_dispose(&vm);
+    (void)fprintf(stderr, "aivm_test_vm_ops: test_await_evicted_task_handle_sets_error done\n");
+    (void)fflush(stderr);
     return 0;
 }
 
