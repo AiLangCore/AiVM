@@ -69,6 +69,21 @@ typedef struct AilangPackageRestoreQueue {
 
 static int pm_is_sdk_owned_name(const char* name);
 
+static int pm_is_absolute_path(const char* path)
+{
+    if (path == NULL || path[0] == '\0') {
+        return 0;
+    }
+    if (path[0] == '/' || path[0] == '\\') {
+        return 1;
+    }
+#ifdef _WIN32
+    return isalpha((unsigned char)path[0]) && path[1] == ':';
+#else
+    return 0;
+#endif
+}
+
 static int pm_set_error(char* error, size_t error_len, const char* fmt, ...)
 {
     va_list ap;
@@ -432,6 +447,115 @@ static int pm_toml_get_version_string(
     }
     pos = strstr(text, section);
     return pos != NULL && pm_toml_get_string(pos, key, out, out_len);
+}
+
+static int pm_toml_get_section_string(
+    const char* text,
+    const char* section,
+    const char* key,
+    char* out,
+    size_t out_len)
+{
+    char header[192];
+    const char* pos;
+    const char* next;
+    size_t section_len;
+    char* copy;
+    int ok;
+    if (text == NULL || section == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (snprintf(header, sizeof(header), "[%s]", section) >= (int)sizeof(header)) {
+        return 0;
+    }
+    pos = strstr(text, header);
+    if (pos == NULL) {
+        return 0;
+    }
+    next = strstr(pos + strlen(header), "\n[");
+    section_len = (next == NULL) ? strlen(pos) : (size_t)(next - pos);
+    copy = (char*)malloc(section_len + 1U);
+    if (copy == NULL) {
+        return 0;
+    }
+    memcpy(copy, pos, section_len);
+    copy[section_len] = '\0';
+    ok = pm_toml_get_string(copy, key, out, out_len);
+    free(copy);
+    return ok;
+}
+
+static int pm_project_config_get_string(const char* project_dir, const char* key, char* out, size_t out_len)
+{
+    static const char* files[] = { "config.toml", "config.local.toml" };
+    size_t i;
+    int found = 0;
+    if (project_dir == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    for (i = 0U; i < sizeof(files) / sizeof(files[0]); i += 1U) {
+        char path[PATH_MAX];
+        char* text = NULL;
+        char value[PATH_MAX];
+        if (!pm_join_path(project_dir, files[i], path, sizeof(path)) ||
+            !pm_file_exists(path) ||
+            !pm_read_text_limited(path, &text)) {
+            continue;
+        }
+        if (pm_toml_get_string(text, key, value, sizeof(value))) {
+            (void)snprintf(out, out_len, "%s", value);
+            found = 1;
+        }
+        free(text);
+    }
+    return found && strlen(out) < out_len;
+}
+
+static int pm_project_config_get_package_path(
+    const char* project_dir,
+    const char* package_name,
+    char* out,
+    size_t out_len)
+{
+    static const char* files[] = { "config.toml", "config.local.toml" };
+    size_t i;
+    int found = 0;
+    if (project_dir == NULL || package_name == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    for (i = 0U; i < sizeof(files) / sizeof(files[0]); i += 1U) {
+        char path[PATH_MAX];
+        char* text = NULL;
+        char section[192];
+        char value[PATH_MAX];
+        if (snprintf(section, sizeof(section), "packages.%s", package_name) >= (int)sizeof(section) ||
+            !pm_join_path(project_dir, files[i], path, sizeof(path)) ||
+            !pm_file_exists(path) ||
+            !pm_read_text_limited(path, &text)) {
+            continue;
+        }
+        if (pm_toml_get_section_string(text, section, "path", value, sizeof(value))) {
+            (void)snprintf(out, out_len, "%s", value);
+            found = 1;
+        }
+        free(text);
+    }
+    return found && strlen(out) < out_len;
+}
+
+static int pm_resolve_project_local_path(
+    const char* project_dir,
+    const char* configured_path,
+    char* out,
+    size_t out_len)
+{
+    if (project_dir == NULL || configured_path == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (pm_is_absolute_path(configured_path)) {
+        return snprintf(out, out_len, "%s", configured_path) >= 0 && strlen(configured_path) < out_len;
+    }
+    return pm_join_path(project_dir, configured_path, out, out_len);
 }
 
 static int pm_is_dotted_namespace(const char* text)
@@ -955,6 +1079,7 @@ static int pm_resolve_install_root(const AilangPackageManagerOptions* options, c
 {
     const char* env;
     const char* home;
+    const char* project_dir;
     int n;
     if (options != NULL && options->install_root != NULL && options->install_root[0] != '\0') {
         return snprintf(out, out_len, "%s", options->install_root) >= 0 &&
@@ -963,6 +1088,12 @@ static int pm_resolve_install_root(const AilangPackageManagerOptions* options, c
     env = getenv("AILANG_INSTALL_ROOT");
     if (env != NULL && env[0] != '\0') {
         return snprintf(out, out_len, "%s", env) >= 0 && strlen(env) < out_len;
+    }
+    project_dir = (options != NULL && options->project_dir != NULL && options->project_dir[0] != '\0') ?
+        options->project_dir :
+        NULL;
+    if (project_dir != NULL && pm_project_config_get_string(project_dir, "installRoot", out, out_len)) {
+        return 1;
     }
     home = getenv("HOME");
     if (home == NULL || home[0] == '\0') {
@@ -975,6 +1106,7 @@ static int pm_resolve_install_root(const AilangPackageManagerOptions* options, c
 static int pm_resolve_registry(const AilangPackageManagerOptions* options, char* out, size_t out_len)
 {
     const char* env;
+    const char* project_dir;
     char install_root[PATH_MAX];
     char registries[PATH_MAX];
     char quoted_out[PATH_MAX * 2];
@@ -986,6 +1118,12 @@ static int pm_resolve_registry(const AilangPackageManagerOptions* options, char*
     env = getenv("AILANG_PACKAGE_REGISTRY");
     if (env != NULL && env[0] != '\0') {
         return snprintf(out, out_len, "%s", env) >= 0 && strlen(env) < out_len;
+    }
+    project_dir = (options != NULL && options->project_dir != NULL && options->project_dir[0] != '\0') ?
+        options->project_dir :
+        NULL;
+    if (project_dir != NULL && pm_project_config_get_string(project_dir, "packageRegistry", out, out_len)) {
+        return 1;
     }
     if (pm_directory_exists("../ailang-packages")) {
         return snprintf(out, out_len, "../ailang-packages") >= 0 &&
@@ -1669,9 +1807,13 @@ int ailang_package_manager_restore(
         const char* include_name = queue.entries[queue_index].name;
         const char* include_version = queue.entries[queue_index].version;
         char package_dir[PATH_MAX];
+        char lock_package_path[PATH_MAX];
+        char configured_package_path[PATH_MAX];
+        char configured_package_dir[PATH_MAX];
         char conflict[256];
         AilangPackageRecord record;
         AilangPackageSourceMetadata source_metadata;
+        int use_configured_package = 0;
         if (!pm_load_record(registry, include_name, include_version, &record, error, error_len)) {
             free(manifest);
             return 0;
@@ -1688,14 +1830,44 @@ int ailang_package_manager_restore(
                 queue.entries[queue_index].version,
                 record.version);
         }
-        if (pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
+        configured_package_path[0] = '\0';
+        configured_package_dir[0] = '\0';
+        if (pm_project_config_get_package_path(project_dir, record.name, configured_package_path, sizeof(configured_package_path))) {
+            if (!pm_resolve_project_local_path(
+                    project_dir,
+                    configured_package_path,
+                    configured_package_dir,
+                    sizeof(configured_package_dir))) {
+                free(manifest);
+                return pm_set_error(error, error_len, "local package override path overflow: %s", record.name);
+            }
+            use_configured_package = 1;
+        }
+        if (!use_configured_package && pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
             free(manifest);
             return pm_set_error(error, error_len, "package tool conflicts with %s", conflict);
         }
-        if (!pm_join_path(package_cache, record.name, package_dir, sizeof(package_dir)) ||
-            !pm_clone_checkout(&record, package_dir)) {
-            free(manifest);
-            return pm_set_error(error, error_len, "package clone/checkout failed: %s", record.name);
+        if (use_configured_package) {
+            if (!pm_directory_exists(configured_package_dir)) {
+                free(manifest);
+                return pm_set_error(error, error_len, "local package override not found: %s", record.name);
+            }
+            if (snprintf(package_dir, sizeof(package_dir), "%s", configured_package_dir) >= (int)sizeof(package_dir) ||
+                snprintf(lock_package_path, sizeof(lock_package_path), "%s", configured_package_path) >= (int)sizeof(lock_package_path)) {
+                free(manifest);
+                return pm_set_error(error, error_len, "local package override path overflow: %s", record.name);
+            }
+        } else {
+            if (!pm_join_path(package_cache, record.name, package_dir, sizeof(package_dir)) ||
+                !pm_clone_checkout(&record, package_dir)) {
+                free(manifest);
+                return pm_set_error(error, error_len, "package clone/checkout failed: %s", record.name);
+            }
+            if (snprintf(lock_package_path, sizeof(lock_package_path), ".ailang/packages/%s", record.name) >=
+                (int)sizeof(lock_package_path)) {
+                free(manifest);
+                return pm_set_error(error, error_len, "package lock path overflow: %s", record.name);
+            }
         }
         if (!pm_load_package_source_metadata(package_dir, &record, &source_metadata, error, error_len)) {
             free(manifest);
@@ -1751,7 +1923,7 @@ int ailang_package_manager_restore(
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "repo = \"%s\"\n", record.repo) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "packageRoot = \"%s\"\n", record.package_root) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "commit = \"%s\"\n", record.commit) ||
-            !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "path = \".ailang/packages/%s\"\n", record.name) ||
+            !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "path = \"%s\"\n", lock_package_path) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "types = [%s]\n", record.types) ||
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "namespaces = [%s]\n\n", source_metadata.namespaces)) {
             free(manifest);
@@ -1812,7 +1984,8 @@ int ailang_package_manager_add(
         free(manifest);
         return 0;
     }
-    if (pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
+    if (!pm_project_config_get_package_path(project_dir, record.name, conflict, sizeof(conflict)) &&
+        pm_tool_conflict(options, &record, conflict, sizeof(conflict))) {
         free(manifest);
         return pm_set_error(error, error_len, "package tool conflicts with %s", conflict);
     }
@@ -1989,7 +2162,7 @@ static int pm_find_local_tool(const char* project_dir, const char* tool_name, ch
         char root_path[PATH_MAX];
         if (pm_toml_get_string(p, "path", package_path, sizeof(package_path)) &&
             pm_toml_get_string(p, "packageRoot", package_root, sizeof(package_root)) &&
-            pm_join_path(project_dir, package_path, local_path, sizeof(local_path)) &&
+            pm_resolve_project_local_path(project_dir, package_path, local_path, sizeof(local_path)) &&
             pm_join_path(local_path, package_root, root_path, sizeof(root_path)) &&
             pm_find_tool_in_package_root(root_path, tool_name, out, out_len)) {
             free(text);
@@ -2014,11 +2187,20 @@ int ailang_package_manager_try_run_tool(
     char global_tools[PATH_MAX];
     char tool_path[PATH_MAX];
     char project_dir[PATH_MAX];
+    char configured_package_path[PATH_MAX];
+    char configured_package_dir[PATH_MAX];
     if (exit_code != NULL) {
         *exit_code = 0;
     }
     if (tool_name == NULL || tool_name[0] == '\0' || exit_code == NULL) {
         return pm_set_error(error, error_len, "invalid tool request");
+    }
+    if (pm_find_project_dir(options, project_dir, sizeof(project_dir)) &&
+        pm_project_config_get_package_path(project_dir, tool_name, configured_package_path, sizeof(configured_package_path)) &&
+        pm_resolve_project_local_path(project_dir, configured_package_path, configured_package_dir, sizeof(configured_package_dir)) &&
+        pm_find_tool_in_package_root(configured_package_dir, tool_name, tool_path, sizeof(tool_path))) {
+        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+            pm_set_error_if_empty(error, error_len, "failed to run configured local tool: %s", tool_name);
     }
     if (pm_resolve_install_root(options, install_root, sizeof(install_root)) &&
         pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&

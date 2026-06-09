@@ -147,13 +147,21 @@ typedef int NativeSocket;
 static int resolve_executable_path(const char* argv0, char* out, size_t out_len);
 static int dirname_of(const char* path, char* out, size_t out_len);
 static int simple_resolve_path(const char* base_file, const char* import_path, char* out_path, size_t out_path_len);
+static int simple_find_lock_dir_for_source(const char* source_file, char* out_project_dir, size_t out_len);
+static int simple_project_config_get_string(const char* project_dir, const char* key, char* out, size_t out_len);
 static int simple_resolve_import_path(const char* base_file, const char* attrs, char* out_path, size_t out_path_len);
-static int simple_resolve_sdk_import_path(const char* sdk_name, const char* import_path, char* out_path, size_t out_path_len);
+static int simple_resolve_sdk_import_path(
+    const char* base_file,
+    const char* sdk_name,
+    const char* import_path,
+    char* out_path,
+    size_t out_path_len);
 static int simple_fail(const char* message);
 static int simple_failf(const char* fmt, ...);
 static int starts_with(const char* value, const char* prefix);
 static const char* native_build_error(void);
 static AivmVm* g_native_active_vm;
+static char g_native_build_project_dir[PATH_MAX];
 static int native_vm_append_host_node(
     AivmVm* vm,
     const char* kind,
@@ -2710,7 +2718,8 @@ static AIRUN_MAYBE_UNUSED int handle_init(int argc, char** argv)
             gitignore_file,
             ".toolchain/\n"
             "dist/\n"
-            ".artifacts/\n") ||
+            ".artifacts/\n"
+            "config.local.toml\n") ||
         !write_text_file(app_file, app_text)) {
         fprintf(stderr,
             "Err#err1(code=RUN001 message=\"Failed to emit init template files.\" nodeId=project)\n");
@@ -5899,11 +5908,12 @@ static int simple_resolve_path(const char* base_file, const char* import_path, c
     return 1;
 }
 
-static int simple_resolve_sdk_root(char* out_root, size_t out_len)
+static int simple_resolve_sdk_root(const char* base_file, char* out_root, size_t out_len)
 {
     const char* env;
     char exe_dir[PATH_MAX];
     char parent_dir[PATH_MAX];
+    char project_dir[PATH_MAX];
 
     if (out_root == NULL || out_len == 0U) {
         return 0;
@@ -5912,6 +5922,12 @@ static int simple_resolve_sdk_root(char* out_root, size_t out_len)
     env = getenv("AILANG_SDK_ROOT");
     if (env != NULL && env[0] != '\0') {
         return snprintf(out_root, out_len, "%s", env) >= 0 && strlen(env) < out_len;
+    }
+
+    if (base_file != NULL &&
+        simple_find_lock_dir_for_source(base_file, project_dir, sizeof(project_dir)) &&
+        simple_project_config_get_string(project_dir, "sdkRoot", out_root, out_len)) {
+        return 1;
     }
 
     if (g_airun_runtime_exe_path[0] == '\0' ||
@@ -5923,7 +5939,12 @@ static int simple_resolve_sdk_root(char* out_root, size_t out_len)
     return snprintf(out_root, out_len, "%s", parent_dir) >= 0 && strlen(parent_dir) < out_len;
 }
 
-static int simple_resolve_sdk_import_path(const char* sdk_name, const char* import_path, char* out_path, size_t out_path_len)
+static int simple_resolve_sdk_import_path(
+    const char* base_file,
+    const char* sdk_name,
+    const char* import_path,
+    char* out_path,
+    size_t out_path_len)
 {
     char sdk_root[PATH_MAX];
     char candidate[PATH_MAX];
@@ -5935,7 +5956,7 @@ static int simple_resolve_sdk_import_path(const char* sdk_name, const char* impo
         strstr(import_path, "..") != NULL) {
         return 0;
     }
-    if (!simple_resolve_sdk_root(sdk_root, sizeof(sdk_root)) ||
+    if (!simple_resolve_sdk_root(base_file, sdk_root, sizeof(sdk_root)) ||
         !join_path(sdk_root, import_path, candidate, sizeof(candidate))) {
         return 0;
     }
@@ -5960,6 +5981,7 @@ static int simple_find_lock_dir_for_source(const char* source_file, char* out_pr
     char source_dir[PATH_MAX];
     char current[PATH_MAX];
     char lock_path[PATH_MAX];
+    char manifest_path[PATH_MAX];
     if (source_file == NULL || out_project_dir == NULL || out_len == 0U) {
         return 0;
     }
@@ -5975,6 +5997,12 @@ static int simple_find_lock_dir_for_source(const char* source_file, char* out_pr
             return snprintf(out_project_dir, out_len, "%s", current) >= 0 &&
                    strlen(current) < out_len;
         }
+        if (join_path(current, "project.aiproj", manifest_path, sizeof(manifest_path)) &&
+            file_exists(manifest_path) &&
+            (g_native_build_project_dir[0] == '\0' || strcmp(current, g_native_build_project_dir) == 0)) {
+            return snprintf(out_project_dir, out_len, "%s", current) >= 0 &&
+                   strlen(current) < out_len;
+        }
         if (!dirname_of(current, parent_dir, sizeof(parent_dir)) || strcmp(parent_dir, current) == 0) {
             break;
         }
@@ -5982,7 +6010,26 @@ static int simple_find_lock_dir_for_source(const char* source_file, char* out_pr
             return 0;
         }
     }
+    if (g_native_build_project_dir[0] != '\0') {
+        return snprintf(out_project_dir, out_len, "%s", g_native_build_project_dir) >= 0 &&
+               strlen(g_native_build_project_dir) < out_len;
+    }
     return 0;
+}
+
+static int simple_is_absolute_path(const char* path)
+{
+    if (path == NULL || path[0] == '\0') {
+        return 0;
+    }
+    if (path[0] == '/' || path[0] == '\\') {
+        return 1;
+    }
+#ifdef _WIN32
+    return isalpha((unsigned char)path[0]) && path[1] == ':';
+#else
+    return 0;
+#endif
 }
 
 static int simple_toml_get_from_section(const char* section, const char* key, char* out, size_t out_len)
@@ -6020,6 +6067,47 @@ static int simple_toml_get_from_section(const char* section, const char* key, ch
     memcpy(out, start, n);
     out[n] = '\0';
     return 1;
+}
+
+static int simple_project_config_get_string(const char* project_dir, const char* key, char* out, size_t out_len)
+{
+    static const char* files[] = { "config.toml", "config.local.toml" };
+    size_t i;
+    int found = 0;
+    if (project_dir == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    for (i = 0U; i < sizeof(files) / sizeof(files[0]); i += 1U) {
+        char path[PATH_MAX];
+        char* text = NULL;
+        char value[PATH_MAX];
+        if (!join_path(project_dir, files[i], path, sizeof(path)) ||
+            !file_exists(path) ||
+            !read_text_file_alloc(path, &text)) {
+            continue;
+        }
+        if (simple_toml_get_from_section(text, key, value, sizeof(value))) {
+            (void)snprintf(out, out_len, "%s", value);
+            found = 1;
+        }
+        free(text);
+    }
+    return found && strlen(out) < out_len;
+}
+
+static int simple_resolve_project_local_path(
+    const char* project_dir,
+    const char* configured_path,
+    char* out,
+    size_t out_len)
+{
+    if (project_dir == NULL || configured_path == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (simple_is_absolute_path(configured_path)) {
+        return snprintf(out, out_len, "%s", configured_path) >= 0 && strlen(configured_path) < out_len;
+    }
+    return join_path(project_dir, configured_path, out, out_len);
 }
 
 static int simple_lock_resolve_package(
@@ -6060,7 +6148,7 @@ static int simple_lock_resolve_package(
             strcmp(name, package_name) == 0 &&
             simple_toml_get_from_section(p, "path", package_path, sizeof(package_path)) &&
             simple_toml_get_from_section(p, "packageRoot", package_root, sizeof(package_root)) &&
-            join_path(project_dir, package_path, local_path, sizeof(local_path)) &&
+            simple_resolve_project_local_path(project_dir, package_path, local_path, sizeof(local_path)) &&
             join_path(local_path, package_root, out_package_dir, out_len)) {
             free(text);
             return 1;
@@ -6081,7 +6169,7 @@ static int simple_resolve_import_path(const char* base_file, const char* attrs, 
         return 0;
     }
     if (parse_attr_span(attrs, "sdk", sdk_name, sizeof(sdk_name))) {
-        return simple_resolve_sdk_import_path(sdk_name, import_path, out_path, out_path_len);
+        return simple_resolve_sdk_import_path(base_file, sdk_name, import_path, out_path, out_path_len);
     }
     if (!parse_attr_span(attrs, "package", package_name, sizeof(package_name))) {
         return simple_resolve_path(base_file, import_path, out_path, out_path_len);
@@ -6487,7 +6575,7 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
         if (strcmp(node.kind, "Import") == 0) {
             char resolved[PATH_MAX];
             if (!simple_resolve_import_path(path, node.attrs, resolved, sizeof(resolved))) {
-                return simple_failf("collect: import missing path in %s", path);
+                return simple_failf("collect: import missing path in %s attrs=%s", path, node.attrs);
             }
             if (!simple_collect_from_file(ctx, resolved, 0)) {
                 return 0;
@@ -9292,6 +9380,13 @@ static int build_input_to_aibc1(
 
     explicit_aibc1_input = ends_with(program_input, ".aibc1");
     explicit_aos_input = ends_with(program_input, ".aos");
+    g_native_build_project_dir[0] = '\0';
+    {
+        char manifest_path[PATH_MAX];
+        if (resolve_manifest_path_for_input(program_input, manifest_path, sizeof(manifest_path))) {
+            (void)dirname_of(manifest_path, g_native_build_project_dir, sizeof(g_native_build_project_dir));
+        }
+    }
     if (explicit_aibc1_input) {
         if (!resolve_input_to_aibc1(program_input, resolved_program, sizeof(resolved_program))) {
             set_native_build_error("could not resolve explicit .aibc1 input");
@@ -9529,11 +9624,8 @@ static AIRUN_MAYBE_UNUSED int handle_build(int argc, char** argv)
         out_dir = default_out;
     }
 
+    (void)resolved_source_input;
     build_target_input = program_input;
-    if (!ends_with(program_input, ".aibc1") &&
-        resolve_input_to_aos(program_input, resolved_source_input, sizeof(resolved_source_input))) {
-        build_target_input = resolved_source_input;
-    }
 
     build_rc = build_input_to_aibc1(build_target_input, out_dir, app_path, sizeof(app_path), use_cache);
     if (build_rc == 1) {

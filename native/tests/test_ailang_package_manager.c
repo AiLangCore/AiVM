@@ -267,6 +267,20 @@ int main(void)
         strstr(output, "added demo 0.1.0") == NULL) {
         return 11;
     }
+    if (!write_file(
+            ".tmp/pkg-manager-test/project/config.local.toml",
+            "[packages.demo]\n"
+            "path = \"../package-src\"\n")) {
+        return 23;
+    }
+    error[0] = '\0';
+    if (!ailang_package_manager_restore(&options, output, sizeof(output), error, sizeof(error)) ||
+        strstr(output, "Ok#ok1(type=int value=2)") == NULL ||
+        !read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||
+        strstr(output, "name = \"demo\"") == NULL ||
+        strstr(output, "path = \"../package-src\"") == NULL) {
+        return 24;
+    }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
         strstr(output, "Project#proj1") == NULL ||
         strstr(output, "Include#dep_demo(name=\"demo\" version=\"0.1.0\")") == NULL) {
