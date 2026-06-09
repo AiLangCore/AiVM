@@ -484,6 +484,23 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     return 1;
 }
 
+int native_host_ui_measure_text(int64_t handle, const char* text, int font_size, int* out_width)
+{
+    NativeUiLinuxWindowSlot* slot = native_ui_linux_find_slot(handle);
+    XFontStruct* font;
+    (void)font_size;
+    if (slot == NULL || g_native_ui_display == NULL || text == NULL || out_width == NULL) {
+        return 0;
+    }
+    font = XQueryFont(g_native_ui_display, XGContextFromGC(slot->gc));
+    if (font == NULL) {
+        return 0;
+    }
+    *out_width = XTextWidth(font, text, (int)strlen(text));
+    XFreeFontInfo(NULL, font, 1);
+    return 1;
+}
+
 int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, const char* color, int stroke_width)
 {
     NativeUiLinuxWindowSlot* slot = native_ui_linux_find_slot(handle);

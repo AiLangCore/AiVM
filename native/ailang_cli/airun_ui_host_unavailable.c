@@ -75,6 +75,15 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     return 0;
 }
 
+int native_host_ui_measure_text(int64_t handle, const char* text, int font_size, int* out_width)
+{
+    (void)handle;
+    (void)text;
+    (void)font_size;
+    (void)out_width;
+    return 0;
+}
+
 int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, const char* color, int stroke_width)
 {
     (void)handle;

@@ -797,6 +797,34 @@ static int native_syscall_ui_draw_text(
     return AIVM_SYSCALL_OK;
 }
 
+static int native_syscall_ui_measure_text(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int width = 0;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (target == NULL || strcmp(target, "sys.ui.measureText") != 0) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_NOT_FOUND;
+    }
+    if (args == NULL || arg_count != 3U ||
+        args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_STRING || args[2].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (!native_ui_runtime_is_active_handle(args[0].int_value) ||
+        !native_host_ui_measure_text(args[0].int_value, args[1].string_value, (int)args[2].int_value, &width)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_int(width);
+    return AIVM_SYSCALL_OK;
+}
+
 static int native_syscall_ui_draw_line(
     const char* target,
     const AivmValue* args,

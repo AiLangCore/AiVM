@@ -4360,6 +4360,8 @@ static int run_native_compiled_program(
     bindings[16].handler = native_syscall_process_stderr_read;
     bindings[17].target = "sys.process.poll";
     bindings[17].handler = native_syscall_process_poll;
+    bindings[24].target = "sys.ui.measureText";
+    bindings[24].handler = native_syscall_ui_measure_text;
     bindings[25].target = "sys.ui.createWindow";
     bindings[25].handler = native_syscall_ui_create_window;
     bindings[26].target = "sys.ui.beginFrame";

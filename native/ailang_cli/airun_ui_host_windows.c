@@ -588,6 +588,42 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     return 1;
 }
 
+int native_host_ui_measure_text(int64_t handle, const char* text, int font_size, int* out_width)
+{
+    NativeUiWindowsSlot* slot = native_ui_windows_find_slot(handle);
+    HDC dc;
+    HFONT font = NULL;
+    HFONT prev_font = NULL;
+    SIZE size;
+    int ok;
+    if (slot == NULL || slot->hwnd == NULL || text == NULL || out_width == NULL) {
+        return 0;
+    }
+    dc = GetDC(slot->hwnd);
+    if (dc == NULL) {
+        return 0;
+    }
+    if (font_size > 0) {
+        font = CreateFontA(-font_size, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS,
+            CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+        if (font != NULL) {
+            prev_font = (HFONT)SelectObject(dc, font);
+        }
+    }
+    ok = GetTextExtentPoint32A(dc, text, (int)strlen(text), &size) != 0;
+    if (ok) {
+        *out_width = (int)size.cx;
+    }
+    if (font != NULL) {
+        if (prev_font != NULL) {
+            SelectObject(dc, prev_font);
+        }
+        DeleteObject(font);
+    }
+    ReleaseDC(slot->hwnd, dc);
+    return ok;
+}
+
 int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, const char* color, int stroke_width)
 {
     NativeUiWindowsSlot* slot = native_ui_windows_find_slot(handle);

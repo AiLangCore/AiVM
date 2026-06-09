@@ -153,6 +153,7 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.ui.beginFrame` | `ui` | Begins host UI drawing. |
 | `sys.ui.drawRect` | `ui` | Draws through host UI backend. |
 | `sys.ui.drawText` | `ui` | Draws through host UI backend. |
+| `sys.ui.measureText` | `ui` | Measures text through the active host UI font backend. |
 | `sys.ui.endFrame` | `ui` | Ends host UI drawing. |
 | `sys.ui.pollEvent` | `ui` | Reads host UI input events. |
 | `sys.ui.present` | `ui` | Presents host UI output. |
@@ -300,6 +301,7 @@ baseline.
 | 56 | `sys.ui.drawPath` | 4 | `void` |
 | 57 | `sys.ui.drawImage` | 6 | `void` |
 | 58 | `sys.ui.getWindowSize` | 1 | `node` |
+| 129 | `sys.ui.measureText` | 3 | `int` |
 | 72 | `sys.ui.waitFrame` | 1 | `void` |
 | 73 | `sys.worker.start` | 2 | `int` |
 | 74 | `sys.worker.poll` | 1 | `int` |

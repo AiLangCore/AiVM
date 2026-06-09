@@ -809,6 +809,29 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     }
 }
 
+int native_host_ui_measure_text(int64_t handle, const char* text, int font_size, int* out_width)
+{
+    @autoreleasepool {
+        NativeUiWindowSlot* slot = native_ui_find_slot(handle);
+        NSString* ns_text;
+        NSFont* font;
+        NSDictionary* attrs;
+        CGFloat width;
+        if (slot == NULL || text == NULL || out_width == NULL) {
+            return 0;
+        }
+        ns_text = [NSString stringWithUTF8String:text];
+        if (ns_text == nil) {
+            return 0;
+        }
+        font = [NSFont systemFontOfSize:(font_size > 0) ? (CGFloat)font_size : 12.0];
+        attrs = @{ NSFontAttributeName: font };
+        width = [ns_text sizeWithAttributes:attrs].width;
+        *out_width = (int)(width + 0.999);
+        return 1;
+    }
+}
+
 int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, const char* color, int stroke_width)
 {
     @autoreleasepool {
