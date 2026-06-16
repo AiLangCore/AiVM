@@ -238,6 +238,7 @@ typedef struct {
     uint8_t* bytes_arena;
     size_t bytes_arena_used;
     size_t bytes_arena_limit;
+    size_t bytes_arena_gc_threshold;
     AivmSyscallCapabilityPolicy syscall_policy;
     const AivmSyscallBinding* syscall_bindings;
     size_t syscall_binding_count;

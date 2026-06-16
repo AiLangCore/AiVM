@@ -90,6 +90,7 @@ int main(void)
     char error[512];
     char commit[128];
     char registry_record[2048];
+    char package_root[4096];
     int tool_exit = 0;
 
 #ifdef _WIN32
@@ -295,6 +296,17 @@ int main(void)
         strstr(output, "namespaces = [\"demo.tool\"]") == NULL ||
         strstr(output, "namespaces = [\"base.lib\"]") == NULL) {
         return 14;
+    }
+    error[0] = '\0';
+    if (!ailang_package_manager_find_package_root(
+            &options,
+            "demo",
+            package_root,
+            sizeof(package_root),
+            error,
+            sizeof(error)) ||
+        strstr(package_root, "package-src/pkg") == NULL) {
+        return 25;
     }
 #ifndef _WIN32
     if (!ailang_package_manager_try_run_tool(

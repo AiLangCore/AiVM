@@ -22,6 +22,7 @@ static int g_native_ui_app_initialized = 0;
 static NativeHostUiEvent g_native_ui_event_queue[64];
 static size_t g_native_ui_event_queue_start = 0U;
 static size_t g_native_ui_event_queue_count = 0U;
+static void native_ui_push_command_event(const char* command);
 
 @interface NativeUiCanvasView : NSView
 @property(nonatomic, strong) NSImage* frameImage;
@@ -46,6 +47,27 @@ static size_t g_native_ui_event_queue_count = 0U;
     }
 }
 @end
+
+@interface NativeUiMenuTarget : NSObject
+- (void)showAbout:(id)sender;
+- (void)showSettings:(id)sender;
+@end
+
+@implementation NativeUiMenuTarget
+- (void)showAbout:(id)sender
+{
+    (void)sender;
+    [NSApp orderFrontStandardAboutPanel:nil];
+}
+
+- (void)showSettings:(id)sender
+{
+    (void)sender;
+    native_ui_push_command_event("settings");
+}
+@end
+
+static NativeUiMenuTarget* g_native_ui_menu_target = nil;
 
 static NSColor* native_ui_parse_color(const char* color, NSColor* fallback)
 {
@@ -296,6 +318,40 @@ static int native_ui_init_app(void)
     return 1;
 }
 
+static void native_ui_configure_app_menu(const char* app_name)
+{
+    NSString* title;
+    NSString* about_title;
+    NSString* quit_title;
+    NSMenu* main_menu;
+    NSMenuItem* app_menu_item;
+    NSMenu* app_menu;
+    NSMenuItem* about_item;
+    NSMenuItem* settings_item;
+    if (NSApp == nil) {
+        return;
+    }
+    title = [NSString stringWithUTF8String:(app_name == NULL || app_name[0] == '\0') ? "AiLang" : app_name];
+    if (g_native_ui_menu_target == nil) {
+        g_native_ui_menu_target = [NativeUiMenuTarget new];
+    }
+    about_title = [NSString stringWithFormat:@"About %@", title];
+    quit_title = [NSString stringWithFormat:@"Quit %@", title];
+    main_menu = [[NSMenu alloc] initWithTitle:@""];
+    app_menu_item = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    app_menu = [[NSMenu alloc] initWithTitle:title];
+    about_item = [app_menu addItemWithTitle:about_title action:@selector(showAbout:) keyEquivalent:@""];
+    [about_item setTarget:g_native_ui_menu_target];
+    [app_menu addItem:[NSMenuItem separatorItem]];
+    settings_item = [app_menu addItemWithTitle:@"Settings..." action:@selector(showSettings:) keyEquivalent:@","];
+    [settings_item setTarget:g_native_ui_menu_target];
+    [app_menu addItem:[NSMenuItem separatorItem]];
+    [app_menu addItemWithTitle:quit_title action:@selector(terminate:) keyEquivalent:@"q"];
+    [app_menu_item setSubmenu:app_menu];
+    [main_menu addItem:app_menu_item];
+    [NSApp setMainMenu:main_menu];
+}
+
 @interface NativeUiWindowDelegate : NSObject<NSWindowDelegate>
 @property(nonatomic, assign) NativeUiWindowSlot* slot;
 @end
@@ -417,6 +473,17 @@ static int native_ui_queue_push(const NativeHostUiEvent* event)
     g_native_ui_event_queue[write_index] = *event;
     g_native_ui_event_queue_count += 1U;
     return 1;
+}
+
+static void native_ui_push_command_event(const char* command)
+{
+    NativeHostUiEvent event;
+    memset(&event, 0, sizeof(event));
+    event.x = -1;
+    event.y = -1;
+    native_ui_set_string(event.type, sizeof(event.type), "command");
+    native_ui_set_string(event.key, sizeof(event.key), command);
+    (void)native_ui_queue_push(&event);
 }
 
 static int native_ui_queue_pop(NativeHostUiEvent* out_event)
@@ -560,6 +627,7 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
         if (!native_ui_init_app()) {
             return 0;
         }
+        native_ui_configure_app_menu(title);
         slot = native_ui_find_empty_slot();
         if (slot == NULL) {
             return 0;

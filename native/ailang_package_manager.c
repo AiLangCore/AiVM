@@ -2174,6 +2174,69 @@ static int pm_find_local_tool(const char* project_dir, const char* tool_name, ch
     return 0;
 }
 
+int ailang_package_manager_find_package_root(
+    const AilangPackageManagerOptions* options,
+    const char* package_name,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len)
+{
+    char project_dir[PATH_MAX];
+    char configured_path[PATH_MAX];
+    char lock_path[PATH_MAX];
+    char* text = NULL;
+    const char* p;
+    if (package_name == NULL || package_name[0] == '\0' || output == NULL || output_len == 0U) {
+        return pm_set_error(error, error_len, "invalid package root request");
+    }
+    output[0] = '\0';
+    if (!pm_find_project_dir(options, project_dir, sizeof(project_dir))) {
+        return pm_set_error(error, error_len, "unable to locate project directory");
+    }
+    if (pm_project_config_get_package_path(project_dir, package_name, configured_path, sizeof(configured_path))) {
+        char configured_root[PATH_MAX];
+        char descriptor[PATH_MAX];
+        char packages_dir[PATH_MAX];
+        char nested_root[PATH_MAX];
+        if (!pm_resolve_project_local_path(project_dir, configured_path, configured_root, sizeof(configured_root))) {
+            return pm_set_error(error, error_len, "configured package path is invalid: %s", package_name);
+        }
+        if (pm_join_path(configured_root, "package.toml", descriptor, sizeof(descriptor)) && pm_file_exists(descriptor)) {
+            return pm_copy_text(output, output_len, configured_root);
+        }
+        if (pm_join_path(configured_root, "packages", packages_dir, sizeof(packages_dir)) &&
+            pm_join_path(packages_dir, package_name, nested_root, sizeof(nested_root)) &&
+            pm_join_path(nested_root, "package.toml", descriptor, sizeof(descriptor)) &&
+            pm_file_exists(descriptor)) {
+            return pm_copy_text(output, output_len, nested_root);
+        }
+        /* Registry-backed local overrides record packageRoot in the lock file. */
+    }
+    if (!pm_join_path(project_dir, "ailang.lock.toml", lock_path, sizeof(lock_path)) ||
+        !pm_read_text_limited(lock_path, &text)) {
+        return pm_set_error(error, error_len, "package is not restored: %s", package_name);
+    }
+    p = text;
+    while ((p = strstr(p, "[[package]]")) != NULL) {
+        char name[128];
+        char package_path[PATH_MAX];
+        char package_root[PATH_MAX];
+        char local_path[PATH_MAX];
+        if (pm_toml_get_string(p, "name", name, sizeof(name)) && strcmp(name, package_name) == 0 &&
+            pm_toml_get_string(p, "path", package_path, sizeof(package_path)) &&
+            pm_toml_get_string(p, "packageRoot", package_root, sizeof(package_root)) &&
+            pm_resolve_project_local_path(project_dir, package_path, local_path, sizeof(local_path)) &&
+            pm_join_path(local_path, package_root, output, output_len)) {
+            free(text);
+            return 1;
+        }
+        p += strlen("[[package]]");
+    }
+    free(text);
+    return pm_set_error(error, error_len, "package is not restored: %s", package_name);
+}
+
 int ailang_package_manager_try_run_tool(
     const AilangPackageManagerOptions* options,
     const char* tool_name,

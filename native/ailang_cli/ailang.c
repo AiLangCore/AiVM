@@ -134,6 +134,7 @@ static int run_native_fullstack_server(const char* www_dir);
 static int ensure_directory_recursive(const char* path);
 static int native_fs_dir_count_entries(const char* path, int64_t* out_count);
 static int native_get_current_rss_kb(int64_t* out_kb);
+static int resolve_project_dir_for_cache(const char* input, char* out_project_dir, size_t out_project_dir_len);
 
 #ifdef _WIN32
 typedef SOCKET NativeSocket;
@@ -180,6 +181,7 @@ static int native_bytes_from_base64(
     size_t output_capacity,
     size_t* out_len);
 static int native_host_open_default(const char* target);
+static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv);
 static int native_image_decode_to_rgba_base64(
     const uint8_t* input,
     size_t input_len,
@@ -2270,7 +2272,7 @@ static void print_usage(void)
         "Usage: aivm-runtime <command> [options]\n"
         "\n"
         "Commands:\n"
-        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
+        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--target <rid>] [--wasm-profile <cli|spa|fullstack>] [--out <dir>] [--port <n>] [--no-open] [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
         "  version | --version\n"
         "\n"
         "VM selectors:\n"
@@ -2778,6 +2780,23 @@ static const char* wasm_profile_normalize(const char* profile)
     return profile;
 }
 
+static int wasm_browser_net_target_is_supported(const char* target)
+{
+    return target != NULL &&
+        (strcmp(target, "sys.net.tcp.connectStart") == 0 ||
+         strcmp(target, "sys.net.tcp.connectTlsStart") == 0 ||
+         strcmp(target, "sys.net.tcp.readStart") == 0 ||
+         strcmp(target, "sys.net.tcp.writeStart") == 0 ||
+         strcmp(target, "sys.net.tcp.close") == 0 ||
+         strcmp(target, "sys.net.async.poll") == 0 ||
+         strcmp(target, "sys.net.async.await") == 0 ||
+         strcmp(target, "sys.net.async.cancel") == 0 ||
+         strcmp(target, "sys.net.asyncCancel") == 0 ||
+         strcmp(target, "sys.net.async.resultInt") == 0 ||
+         strcmp(target, "sys.net.async.resultBytes") == 0 ||
+         strcmp(target, "sys.net.async.error") == 0);
+}
+
 static int wasm_syscall_unavailable_for_profile(const char* profile, const char* target)
 {
     if (profile == NULL || target == NULL) {
@@ -2802,7 +2821,7 @@ static int wasm_syscall_unavailable_for_profile(const char* profile, const char*
                strcmp(target, "sys.process.stderr.read") == 0 ||
                strcmp(target, "sys.process.poll") == 0 ||
                strcmp(target, "sys.image.decodeToRgbaBase64") == 0 ||
-               strncmp(target, "sys.net.", 8U) == 0 ||
+               (strncmp(target, "sys.net.", 8U) == 0 && !wasm_browser_net_target_is_supported(target)) ||
                strncmp(target, "sys.fs.", 7U) == 0;
     }
     return 0;
@@ -3005,7 +3024,7 @@ static int emit_wasm_spa_files(const char* out_dir)
     if (snprintf(
             index_html,
             sizeof(index_html),
-            "<!doctype html>\n<html lang=\"en\">\n<head><meta charset=\"utf-8\"><title>AiLang wasm app</title></head>\n<body>\n  <pre id=\"output\"></pre>\n  <script type=\"module\" src=\"./main.js\"></script>\n</body>\n</html>\n") >= (int)sizeof(index_html)) {
+            "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n  <title>AiLang wasm app</title>\n  <style>\n    html, body { width: 100%%; height: 100%%; margin: 0; overflow: hidden; }\n    body { background: #0f172a; }\n    #output:empty { display: none; }\n    [data-aivm-window-id] { width: 100%%; height: 100%%; overflow: hidden; }\n    [data-aivm-window-id] > svg { display: block; width: 100%%; height: 100%%; border: 0; outline: none; touch-action: none; }\n  </style>\n</head>\n<body>\n  <pre id=\"output\"></pre>\n  <script type=\"module\" src=\"./main.js\"></script>\n</body>\n</html>\n") >= (int)sizeof(index_html)) {
         return 0;
     }
     {
@@ -3022,6 +3041,8 @@ static int emit_wasm_spa_files(const char* out_dir)
             "const stdinQueue = [];\n"
             "let stdinClosed = false;\n"
             "const uiState = { windows: new Map() };\n"
+            "const uiMeasureCanvas = (typeof document !== 'undefined' && typeof document.createElement === 'function') ? document.createElement('canvas') : null;\n"
+            "const uiMeasureContext = uiMeasureCanvas ? uiMeasureCanvas.getContext('2d') : null;\n"
             "function xmlEscape(text) {\n"
             "  return String(text ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\"', '&quot;').replaceAll(\"'\", '&apos;');\n"
             "}\n";
@@ -3067,20 +3088,29 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  if (existing) return existing;\n"
             "  const host = document.createElement('div');\n"
             "  host.setAttribute('data-aivm-window-id', String(windowId));\n"
-            "  host.style.maxWidth = `${width}px`;\n"
+            "  host.style.width = '100%';\n"
+            "  host.style.height = '100%';\n"
             "  const label = document.createElement('div');\n"
             "  label.textContent = String(title ?? 'AiLang');\n"
+            "  label.style.display = 'none';\n"
             "  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');\n"
-            "  svg.setAttribute('width', String(width));\n"
-            "  svg.setAttribute('height', String(height));\n"
+            "  svg.setAttribute('width', '100%');\n"
+            "  svg.setAttribute('height', '100%');\n"
             "  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);\n"
+            "  svg.setAttribute('preserveAspectRatio', 'none');\n"
+            "  svg.setAttribute('aria-label', String(title ?? 'AiLang'));\n"
             "  svg.setAttribute('tabindex', '0');\n"
-            "  svg.style.border = '1px solid #999';\n"
+            "  svg.style.display = 'block';\n"
+            "  svg.style.width = '100%';\n"
+            "  svg.style.height = '100%';\n"
+            "  svg.style.border = '0';\n"
+            "  svg.style.outline = 'none';\n"
             "  svg.style.touchAction = 'none';\n"
             "  host.appendChild(label);\n"
             "  host.appendChild(svg);\n"
             "  (document.body || document.documentElement).appendChild(host);\n"
-            "  const state = { host, svg, width, height, frameParts: [], nextElementId: 1, focusedTargetId: '', closed: false, closeConsumed: false, resizeHandler: null, pointerHandler: null, clickHandler: null, touchHandler: null, keyDownHandler: null, keyUpHandler: null, blurHandler: null, eventQueue: [], lastPolledEvent: { type: 'none', targetId: '', x: -1, y: -1, key: '', text: '', modifiers: '', repeat: false } };\n"
+            "  const minLogicalWidth = Math.min(640, Math.max(1, width | 0));\n"
+            "  const state = { host, svg, width, height, frameParts: [], nextElementId: 1, focusedTargetId: '', closed: false, closeConsumed: false, resizeHandler: null, pointerHandler: null, clickHandler: null, touchHandler: null, keyDownHandler: null, blurHandler: null, eventQueue: [], lastPolledEvent: { type: 'none', targetId: '', x: -1, y: -1, key: '', text: '', modifiers: '', repeat: false } };\n"
             "  const pushEvent = (evt) => { state.eventQueue.push(evt); if (state.eventQueue.length > 64) state.eventQueue.shift(); };\n"
             "  const clampToWindow = (x, y) => {\n"
             "    const maxX = Math.max(0, (state.width | 0) - 1);\n"
@@ -3090,26 +3120,24 @@ static int emit_wasm_spa_files(const char* out_dir)
             "    return { x: nx, y: ny };\n"
             "  };\n"
             "  const eventToLocal = (ev) => {\n"
-            "    const ox = Number(ev?.offsetX);\n"
-            "    const oy = Number(ev?.offsetY);\n"
-            "    if (Number.isFinite(ox) && Number.isFinite(oy)) {\n"
-            "      return { x: ox, y: oy };\n"
-            "    }\n"
             "    const rect = svg.getBoundingClientRect();\n"
             "    const cx = Number(ev?.clientX);\n"
             "    const cy = Number(ev?.clientY);\n"
+            "    const scaleX = rect.width > 0 ? state.width / rect.width : 1;\n"
+            "    const scaleY = rect.height > 0 ? state.height / rect.height : 1;\n"
             "    return {\n"
-            "      x: Number.isFinite(cx) ? (cx - rect.left) : 0,\n"
-            "      y: Number.isFinite(cy) ? (cy - rect.top) : 0,\n"
+            "      x: Number.isFinite(cx) ? (cx - rect.left) * scaleX : 0,\n"
+            "      y: Number.isFinite(cy) ? (cy - rect.top) * scaleY : 0,\n"
             "    };\n"
             "  };\n"
             "  const syncWindowSize = () => {\n"
-            "    const rect = svg.getBoundingClientRect();\n"
-            "    const nextW = Math.max(1, rect.width | 0);\n"
-            "    const nextH = Math.max(1, rect.height | 0);\n"
+            "    const rect = host.getBoundingClientRect();\n"
+            "    const physicalW = Math.max(1, rect.width | 0);\n"
+            "    const physicalH = Math.max(1, rect.height | 0);\n"
+            "    const nextW = Math.max(minLogicalWidth, physicalW);\n"
+            "    const scale = physicalW / nextW;\n"
+            "    const nextH = Math.max(1, Math.round(physicalH / scale));\n"
             "    state.width = nextW; state.height = nextH;\n"
-            "    svg.setAttribute('width', String(nextW));\n"
-            "    svg.setAttribute('height', String(nextH));\n"
             "    svg.setAttribute('viewBox', `0 0 ${nextW} ${nextH}`);\n"
             "  };\n";
         const char* main_js_head3b =
@@ -3141,11 +3169,8 @@ static int emit_wasm_spa_files(const char* out_dir)
             "    pushEvent({ type: 'key', targetId: String(state.focusedTargetId ?? ''), x: -1, y: -1, key: uiEventKey(ev?.key), text: uiEventText(ev), modifiers: uiEventModifiers(ev), repeat: !!ev?.repeat });\n"
             "  };\n"
             "  const onKeyDown = (ev) => { emitKeyEvent(ev); };\n"
-            "  const onKeyUp = (ev) => { emitKeyEvent(ev); };\n"
             "  state.keyDownHandler = onKeyDown;\n"
-            "  state.keyUpHandler = onKeyUp;\n"
             "  svg.addEventListener('keydown', onKeyDown);\n"
-            "  svg.addEventListener('keyup', onKeyUp);\n"
             "  const onBlur = () => { state.focusedTargetId = ''; };\n"
             "  state.blurHandler = onBlur;\n"
             "  svg.addEventListener('blur', onBlur);\n"
@@ -3154,6 +3179,7 @@ static int emit_wasm_spa_files(const char* out_dir)
             "    state.resizeHandler = onResize;\n"
             "    window.addEventListener('resize', onResize);\n"
             "  }\n"
+            "  syncWindowSize();\n"
             "  uiState.windows.set(windowId, state);\n"
             "  return state;\n"
             "}\n";
@@ -3182,8 +3208,14 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
             "  const textEscaped = xmlEscape(text);\n"
-            "  win.frameParts.push(`<text data-aivm-id=\"${id}\" x=\"${x|0}\" y=\"${y|0}\" fill=\"${xmlEscape(color)}\" font-size=\"${size|0}\">${textEscaped}</text>`);\n"
+            "  win.frameParts.push(`<text data-aivm-id=\"${id}\" x=\"${x|0}\" y=\"${y|0}\" fill=\"${xmlEscape(color)}\" font-size=\"${size|0}\" font-family=\"system-ui, sans-serif\" dominant-baseline=\"text-before-edge\">${textEscaped}</text>`);\n"
             "  return 0;\n"
+            "};\n"
+            "globalThis.__aivmUiMeasureText = (windowId, text, size) => {\n"
+            "  const win = uiState.windows.get(windowId);\n"
+            "  if (!win || win.closed || !uiMeasureContext || !Number.isInteger(size) || size <= 0) return -1;\n"
+            "  uiMeasureContext.font = `${size}px system-ui, sans-serif`;\n"
+            "  return Math.ceil(uiMeasureContext.measureText(String(text ?? '')).width);\n"
             "};\n"
             "globalThis.__aivmUiDrawLine = (windowId, x1, y1, x2, y2, color, width) => {\n"
             "  const win = uiState.windows.get(windowId);\n"
@@ -3259,10 +3291,6 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  if (typeof win.keyDownHandler === 'function') {\n"
             "    win.svg.removeEventListener('keydown', win.keyDownHandler);\n"
             "    win.keyDownHandler = null;\n"
-            "  }\n"
-            "  if (typeof win.keyUpHandler === 'function') {\n"
-            "    win.svg.removeEventListener('keyup', win.keyUpHandler);\n"
-            "    win.keyUpHandler = null;\n"
             "  }\n"
             "  if (typeof win.blurHandler === 'function') {\n"
             "    win.svg.removeEventListener('blur', win.blurHandler);\n"
@@ -3378,8 +3406,13 @@ static int emit_wasm_spa_files(const char* out_dir)
             "const logs = [];\n"
             "runtime.print = (line) => { const s = String(line); logs.push(s); console.log(s); };\n"
             "runtime.printErr = (line) => { const s = String(line); logs.push(s); console.error(s); };\n"
-            "runtime.callMain(['/app.aibc1']);\n"
-            "if (output) output.textContent = logs.join('\\n');\n";
+            "const runPromise = runtime.ccall('aivm_web_run_app', 'number', [], [], { async: true });\n"
+            "Promise.resolve(runPromise).then(() => {\n"
+            "  if (output) output.textContent = logs.join('\\n');\n"
+            "}).catch((error) => {\n"
+            "  console.error(error);\n"
+            "  if (output) output.textContent = logs.join('\\n');\n"
+            "});\n";
         if (snprintf(main_js, sizeof(main_js), "%s%s%s%s%s%s%s%s%s", main_js_head, main_js_head2, main_js_head3, main_js_head3b, main_js_head4, main_js_mid, main_js_tail, main_js_tailb, main_js_tail2) >= (int)sizeof(main_js)) {
             return 0;
         }
@@ -8004,6 +8037,12 @@ typedef struct {
     int app_arg_count;
     int use_cache;
     const char* log_level;
+    const char* target;
+    const char* wasm_profile;
+    const char* out_dir;
+    int port;
+    int port_explicit;
+    int open_browser;
 } RunTarget;
 
 static int derive_build_out_dir(const char* program_input, char* out_dir, size_t out_dir_len);
@@ -8117,6 +8156,12 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     int app_arg_start = -1;
     int use_cache = 1;
     const char* log_level = NULL;
+    const char* target = NULL;
+    const char* wasm_profile = "spa";
+    const char* out_dir = "dist-wasm";
+    int port = 8768;
+    int port_explicit = 0;
+    int open_browser = 1;
 
     if (out_target == NULL) {
         return 2;
@@ -8131,6 +8176,63 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
         }
         if (strcmp(arg, "--no-cache") == 0 && app_arg_start < 0) {
             use_cache = 0;
+            continue;
+        }
+        if (strcmp(arg, "--target") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --target value.\" nodeId=argv)\n");
+                return 2;
+            }
+            target = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--target=") && app_arg_start < 0) {
+            target = arg + 9;
+            continue;
+        }
+        if (strcmp(arg, "--wasm-profile") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --wasm-profile value.\" nodeId=argv)\n");
+                return 2;
+            }
+            wasm_profile = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--wasm-profile=") && app_arg_start < 0) {
+            wasm_profile = arg + 15;
+            continue;
+        }
+        if (strcmp(arg, "--out") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --out value.\" nodeId=argv)\n");
+                return 2;
+            }
+            out_dir = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--out=") && app_arg_start < 0) {
+            out_dir = arg + 6;
+            continue;
+        }
+        if (strcmp(arg, "--port") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc || !parse_int(argv[i + 1], &port) || port <= 0 || port > 65535) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Invalid --port value.\" nodeId=argv)\n");
+                return 2;
+            }
+            i += 1;
+            port_explicit = 1;
+            continue;
+        }
+        if (starts_with(arg, "--port=") && app_arg_start < 0) {
+            if (!parse_int(arg + 7, &port) || port <= 0 || port > 65535) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Invalid --port value.\" nodeId=argv)\n");
+                return 2;
+            }
+            port_explicit = 1;
+            continue;
+        }
+        if (strcmp(arg, "--no-open") == 0 && app_arg_start < 0) {
+            open_browser = 0;
             continue;
         }
         if (strcmp(arg, "--log-level") == 0 && app_arg_start < 0) {
@@ -8180,7 +8282,280 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     }
     out_target->use_cache = use_cache;
     out_target->log_level = log_level;
+    out_target->target = target;
+    out_target->wasm_profile = wasm_profile;
+    out_target->out_dir = out_dir;
+    out_target->port = port;
+    out_target->port_explicit = port_explicit;
+    out_target->open_browser = open_browser;
     return 0;
+}
+
+static int absolute_existing_path(const char* path, char* output, size_t output_len)
+{
+    if (path == NULL || output == NULL || output_len == 0U) {
+        return 0;
+    }
+#ifdef _WIN32
+    return _fullpath(output, path, output_len) != NULL;
+#else
+    return realpath(path, output) != NULL;
+#endif
+}
+
+static void sleep_milliseconds(int milliseconds)
+{
+#ifdef _WIN32
+    Sleep((DWORD)milliseconds);
+#else
+    struct timespec delay;
+    delay.tv_sec = milliseconds / 1000;
+    delay.tv_nsec = (long)(milliseconds % 1000) * 1000000L;
+    (void)nanosleep(&delay, NULL);
+#endif
+}
+
+static int local_port_is_listening(int port)
+{
+    NativeSocket client;
+    struct sockaddr_in address;
+    int connected = 0;
+#ifdef _WIN32
+    WSADATA wsa_data;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+        return 0;
+    }
+#endif
+    client = socket(AF_INET, SOCK_STREAM, 0);
+    if (client != NATIVE_INVALID_SOCKET) {
+        memset(&address, 0, sizeof(address));
+        address.sin_family = AF_INET;
+        address.sin_port = htons((uint16_t)port);
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        connected = connect(client, (struct sockaddr*)&address, sizeof(address)) == 0;
+        native_socket_close(client);
+    }
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    return connected;
+}
+
+#ifdef _WIN32
+static int wait_for_local_server_process(int port, HANDLE process_handle)
+#else
+static int wait_for_local_server_process(int port, pid_t child)
+#endif
+{
+    int attempt;
+    for (attempt = 0; attempt < 100; attempt += 1) {
+#ifdef _WIN32
+        DWORD process_exit = STILL_ACTIVE;
+        if (!GetExitCodeProcess(process_handle, &process_exit) || process_exit != STILL_ACTIVE) {
+            return 0;
+        }
+#else
+        int status = 0;
+        pid_t result = waitpid(child, &status, WNOHANG);
+        if (result == child || result < 0) {
+            return 0;
+        }
+#endif
+        if (local_port_is_listening(port)) {
+            return 1;
+        }
+        sleep_milliseconds(50);
+    }
+    return 0;
+}
+
+static int run_wasm_browser_target(const RunTarget* target, char** argv)
+{
+    char* publish_argv[10];
+    int publish_argc = 0;
+    int publish_rc;
+    char project_dir[PATH_MAX];
+    char package_root[PATH_MAX];
+    char source_dir[PATH_MAX];
+    char server_source[PATH_MAX];
+    char build_out[PATH_MAX];
+    char built_app[PATH_MAX];
+    char server_root[PATH_MAX];
+    char absolute_out[PATH_MAX];
+    char port_text[16];
+    char url[128];
+    char package_error[512];
+    char restore_output[AILANG_NATIVE_BRIDGE_MAX_STRING];
+    int selected_port;
+    AilangPackageManagerOptions package_options;
+    if (target == NULL || argv == NULL || strcmp(target->target, "wasm32") != 0) {
+        return -1;
+    }
+    if (strcmp(target->wasm_profile, "spa") != 0 && strcmp(target->wasm_profile, "fullstack") != 0) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Browser run requires wasm profile spa or fullstack.\" nodeId=wasmProfile)\n");
+        return 2;
+    }
+    if (!resolve_project_dir_for_cache(target->program_path, project_dir, sizeof(project_dir))) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Could not resolve project directory.\" nodeId=wasmServer)\n");
+        return 2;
+    }
+    memset(&package_options, 0, sizeof(package_options));
+    package_options.project_dir = project_dir;
+    package_error[0] = '\0';
+    if (!ailang_package_manager_restore(
+            &package_options, restore_output, sizeof(restore_output), package_error, sizeof(package_error))) {
+        fprintf(stderr, "Err#err1(code=PKG001 message=\"Package restore failed: %s\" nodeId=wasmServer)\n", package_error);
+        return 2;
+    }
+    if (!ends_with(target->program_path, ".aibc1") &&
+        !ends_with(target->program_path, ".aibundle")) {
+        if (!derive_build_out_dir(target->program_path, build_out, sizeof(build_out)) ||
+            build_input_to_aibc1(
+                target->program_path,
+                build_out,
+                built_app,
+                sizeof(built_app),
+                target->use_cache) != 1) {
+            fprintf(stderr,
+                "Err#err1(code=RUN001 message=\"Native build failed: %s\" nodeId=build)\n",
+                native_build_error());
+            return 2;
+        }
+    }
+    publish_argv[publish_argc++] = argv[0];
+    publish_argv[publish_argc++] = "publish";
+    publish_argv[publish_argc++] = (char*)target->program_path;
+    publish_argv[publish_argc++] = "--target";
+    publish_argv[publish_argc++] = "wasm32";
+    publish_argv[publish_argc++] = "--wasm-profile";
+    publish_argv[publish_argc++] = (char*)target->wasm_profile;
+    publish_argv[publish_argc++] = "--out";
+    publish_argv[publish_argc++] = (char*)target->out_dir;
+    publish_rc = handle_publish(publish_argc, publish_argv);
+    if (publish_rc != 0) {
+        return publish_rc;
+    }
+    package_error[0] = '\0';
+    if (!ailang_package_manager_find_package_root(
+            &package_options, "std-http", package_root, sizeof(package_root), package_error, sizeof(package_error)) ||
+        !join_path(package_root, "src/net", source_dir, sizeof(source_dir)) ||
+        !join_path(source_dir, "http_dev_server.aos", server_source, sizeof(server_source)) ||
+        !file_exists(server_source)) {
+        fprintf(stderr,
+            "Err#err1(code=PKG001 message=\"std-http dev server is unavailable; add and restore std-http. %s\" nodeId=wasmServer)\n",
+            package_error);
+        return 2;
+    }
+    if (strcmp(target->wasm_profile, "fullstack") == 0) {
+        if (!join_path(target->out_dir, "www", server_root, sizeof(server_root))) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm server path overflow.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+    } else if (snprintf(server_root, sizeof(server_root), "%s", target->out_dir) >= (int)sizeof(server_root)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm server path overflow.\" nodeId=wasmServer)\n");
+        return 2;
+    }
+    if (!absolute_existing_path(server_root, absolute_out, sizeof(absolute_out))) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Could not resolve wasm output directory.\" nodeId=wasmServer)\n");
+        return 2;
+    }
+    selected_port = target->port;
+    if (target->port_explicit) {
+        if (local_port_is_listening(selected_port)) {
+            fprintf(stderr,
+                "Err#err1(code=RUN001 message=\"Requested port %d is already in use.\" nodeId=wasmServer)\n",
+                selected_port);
+            return 2;
+        }
+    } else {
+        while (selected_port < 65535 && local_port_is_listening(selected_port)) {
+            selected_port += 1;
+        }
+        if (local_port_is_listening(selected_port)) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"No available local WASM server port.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+    }
+    (void)snprintf(port_text, sizeof(port_text), "%d", selected_port);
+    (void)snprintf(url, sizeof(url), "http://127.0.0.1:%d/", selected_port);
+    printf("AiLang WASM: %s\n", url);
+    printf("AiLang WASM output: %s\n", absolute_out);
+    fflush(stdout);
+#ifdef _WIN32
+    {
+        intptr_t process_handle;
+        DWORD process_exit = 2U;
+        (void)_putenv_s("AILANG_DISABLE_RUN_TOOL_DISPATCH", "1");
+        process_handle = _spawnl(
+            _P_NOWAIT,
+            g_airun_runtime_exe_path,
+            g_airun_runtime_exe_path,
+            "run",
+            server_source,
+            "--",
+            absolute_out,
+            port_text,
+            NULL);
+        (void)_putenv_s("AILANG_DISABLE_RUN_TOOL_DISPATCH", "");
+        if (process_handle == -1) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"Failed to launch AiLang wasm server.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+        if (!wait_for_local_server_process(selected_port, (HANDLE)process_handle)) {
+            TerminateProcess((HANDLE)process_handle, 2);
+            CloseHandle((HANDLE)process_handle);
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"AiLang wasm server did not become ready.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+        if (target->open_browser && !native_host_open_default(url)) {
+            fprintf(stderr, "AiLang WASM warning: could not open the default browser; open %s\n", url);
+        }
+        if (WaitForSingleObject((HANDLE)process_handle, INFINITE) != WAIT_OBJECT_0 ||
+            !GetExitCodeProcess((HANDLE)process_handle, &process_exit)) {
+            CloseHandle((HANDLE)process_handle);
+            return 2;
+        }
+        CloseHandle((HANDLE)process_handle);
+        return (int)process_exit;
+    }
+#else
+    {
+        pid_t child = fork();
+        int status = 0;
+        if (child < 0) {
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"Failed to launch AiLang wasm server.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+        if (child == 0) {
+            (void)setenv("AILANG_DISABLE_RUN_TOOL_DISPATCH", "1", 1);
+            execl(
+                g_airun_runtime_exe_path,
+                g_airun_runtime_exe_path,
+                "run",
+                server_source,
+                "--",
+                absolute_out,
+                port_text,
+                (char*)NULL);
+            _exit(127);
+        }
+        if (!wait_for_local_server_process(selected_port, child)) {
+            (void)kill(child, SIGTERM);
+            (void)waitpid(child, &status, 0);
+            fprintf(stderr, "Err#err1(code=RUN001 message=\"AiLang wasm server did not become ready.\" nodeId=wasmServer)\n");
+            return 2;
+        }
+        if (target->open_browser && !native_host_open_default(url)) {
+            fprintf(stderr, "AiLang WASM warning: could not open the default browser; open %s\n", url);
+        }
+        while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
+        }
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        }
+        return 2;
+    }
+#endif
 }
 
 static int run_via_resolved_input(
@@ -8252,6 +8627,15 @@ static int handle_run(int argc, char** argv)
     }
     airun_configure_log_level(target.log_level);
     airun_reset_injected_events();
+
+    if (target.target != NULL) {
+        int wasm_rc = run_wasm_browser_target(&target, argv);
+        if (wasm_rc >= 0) {
+            return wasm_rc;
+        }
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"run --target currently supports wasm32 browser targets.\" nodeId=target)\n");
+        return 2;
+    }
 
     {
         int delegated_rc = delegate_run_to_project_tool(&target, argv);

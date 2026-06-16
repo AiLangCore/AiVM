@@ -624,6 +624,7 @@ static int mark_live_node_handles(
     size_t extra_handle_count);
 static int mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs);
 static int compact_string_arena(AivmVm* vm);
+static int compact_bytes_arena(AivmVm* vm);
 static int create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -3457,8 +3458,8 @@ static int mark_live_node_handles(
     const int64_t* extra_handles,
     size_t extra_handle_count)
 {
-    int64_t queue[AIVM_VM_NODE_CAPACITY];
-    uint8_t live_pairs[AIVM_VM_SCRATCH_PAIR_CAPACITY];
+    int64_t* queue = NULL;
+    uint8_t* live_pairs = NULL;
     size_t queue_read = 0U;
     size_t queue_write = 0U;
     size_t i;
@@ -3466,8 +3467,16 @@ static int mark_live_node_handles(
     if (vm == NULL || live == NULL) {
         return 0;
     }
-    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
+    queue = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(queue[0]));
+    live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
+    if (queue == NULL || live_pairs == NULL) {
+        free(queue);
+        free(live_pairs);
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark workspace allocation failed.");
         return 0;
+    }
+    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
+        goto fail;
     }
 
     #define ENQUEUE_HANDLE(handle_value) \
@@ -3479,11 +3488,11 @@ static int mark_live_node_handles(
                     size_t __next_queue_write; \
                     if (queue_write >= AIVM_VM_NODE_CAPACITY) { \
                         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue capacity exceeded."); \
-                        return 0; \
+                        goto fail; \
                     } \
                     if (!size_add_checked(queue_write, 1U, &__next_queue_write)) { \
                         set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue overflow."); \
-                        return 0; \
+                        goto fail; \
                     } \
                     live[__idx] = 1U; \
                     queue[queue_write] = __h; \
@@ -3534,7 +3543,7 @@ static int mark_live_node_handles(
             }
             if (handle > (int64_t)vm->node_count) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid extra node handle during GC mark.");
-                return 0;
+                goto fail;
             }
             ENQUEUE_HANDLE(handle);
         }
@@ -3546,31 +3555,39 @@ static int mark_live_node_handles(
         size_t child_index;
         if (!size_add_checked(queue_read, 1U, &queue_read)) {
             set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM003: node mark queue overflow.");
-            return 0;
+            goto fail;
         }
         if (!lookup_node(vm, handle, &node)) {
             set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid node handle during GC mark.");
-            return 0;
+            goto fail;
         }
         for (child_index = 0U; child_index < node->child_count; child_index += 1U) {
             size_t child_slot;
             if (!size_add_checked(node->child_start, child_index, &child_slot) ||
                 child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid child slot during GC mark.");
-                return 0;
+                goto fail;
             }
             ENQUEUE_HANDLE(vm->node_children[child_slot]);
         }
     }
 
     #undef ENQUEUE_HANDLE
+    free(queue);
+    free(live_pairs);
     return 1;
+
+fail:
+    #undef ENQUEUE_HANDLE
+    free(queue);
+    free(live_pairs);
+    return 0;
 }
 
 static int compact_string_arena(AivmVm* vm)
 {
-    uint8_t live[AIVM_VM_NODE_CAPACITY];
-    uint8_t live_pairs[AIVM_VM_SCRATCH_PAIR_CAPACITY];
+    uint8_t* live = NULL;
+    uint8_t* live_pairs = NULL;
     char* old_arena;
     char* new_arena = NULL;
     size_t new_used = 0U;
@@ -3582,44 +3599,38 @@ static int compact_string_arena(AivmVm* vm)
     if (vm->string_arena_used == 0U) {
         return 1;
     }
-
-    memset(live, 0, sizeof(live));
+    live = (uint8_t*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(live[0]));
+    live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
     new_arena = (char*)calloc(AIVM_VM_STRING_ARENA_CAPACITY, sizeof(new_arena[0]));
-    if (new_arena == NULL) {
-        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena compaction allocation failed.");
-        return 0;
+    if (live == NULL || live_pairs == NULL || new_arena == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena compaction workspace allocation failed.");
+        goto fail;
     }
     if (!mark_live_node_handles(vm, live, NULL, 0U)) {
-        free(new_arena);
-        return 0;
+        goto fail;
     }
     if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
-        free(new_arena);
-        return 0;
+        goto fail;
     }
 
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->stack[i], new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->locals_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->locals[i], new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->completed_task_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->completed_tasks[i].result, new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->par_value_count; i += 1U) {
         if (!compact_relocate_value_string(vm, &vm->par_values[i], new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
@@ -3628,8 +3639,7 @@ static int compact_string_arena(AivmVm* vm)
         }
         if (!compact_relocate_value_string(vm, &vm->scratch_pairs[i].first, new_arena, &new_used) ||
             !compact_relocate_value_string(vm, &vm->scratch_pairs[i].second, new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
     }
     for (i = 0U; i < vm->node_count; i += 1U) {
@@ -3641,8 +3651,7 @@ static int compact_string_arena(AivmVm* vm)
         node = &vm->nodes[i];
         if (!compact_relocate_string_ptr(vm, &node->kind, new_arena, &new_used) ||
             !compact_relocate_string_ptr(vm, &node->id, new_arena, &new_used)) {
-            free(new_arena);
-            return 0;
+            goto fail;
         }
         for (attr_i = 0U; attr_i < node->attr_count; attr_i += 1U) {
             size_t attr_slot = 0U;
@@ -3650,18 +3659,15 @@ static int compact_string_arena(AivmVm* vm)
             if (!size_add_checked(node->attr_start, attr_i, &attr_slot) ||
                 attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
                 set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during string compaction.");
-                free(new_arena);
-                return 0;
+                goto fail;
             }
             attr = &vm->node_attrs[attr_slot];
             if (!compact_relocate_string_ptr(vm, &attr->key, new_arena, &new_used)) {
-                free(new_arena);
-                return 0;
+                goto fail;
             }
             if ((attr->kind == AIVM_NODE_ATTR_IDENTIFIER || attr->kind == AIVM_NODE_ATTR_STRING) &&
                 !compact_relocate_string_ptr(vm, &attr->string_value, new_arena, &new_used)) {
-                free(new_arena);
-                return 0;
+                goto fail;
             }
         }
     }
@@ -3670,7 +3676,167 @@ static int compact_string_arena(AivmVm* vm)
     vm->string_arena = new_arena;
     vm->string_arena_used = new_used;
     free(old_arena);
+    free(live);
+    free(live_pairs);
     return 1;
+
+fail:
+    free(live);
+    free(live_pairs);
+    free(new_arena);
+    return 0;
+}
+
+typedef struct {
+    const uint8_t* old_data;
+    size_t length;
+    const uint8_t* new_data;
+} AivmBytesRelocation;
+
+static int pointer_in_bytes_arena(const AivmVm* vm, const uint8_t* data, size_t length)
+{
+    uintptr_t arena_start;
+    uintptr_t arena_end;
+    uintptr_t data_start;
+    if (vm == NULL || data == NULL || vm->bytes_arena_used == 0U) {
+        return 0;
+    }
+    arena_start = (uintptr_t)vm->bytes_arena;
+    arena_end = arena_start + vm->bytes_arena_used;
+    data_start = (uintptr_t)data;
+    return data_start >= arena_start && data_start <= arena_end && length <= (size_t)(arena_end - data_start);
+}
+
+static int compact_relocate_value_bytes(
+    AivmVm* vm,
+    AivmValue* value,
+    uint8_t* new_arena,
+    size_t* new_used,
+    AivmBytesRelocation* relocations,
+    size_t* relocation_count,
+    size_t relocation_capacity)
+{
+    size_t i;
+    size_t next_used;
+    uint8_t* destination;
+    if (vm == NULL || value == NULL || new_arena == NULL || new_used == NULL ||
+        relocations == NULL || relocation_count == NULL) {
+        return 0;
+    }
+    if (value->type != AIVM_VAL_BYTES || value->bytes_value.data == NULL ||
+        !pointer_in_bytes_arena(vm, value->bytes_value.data, value->bytes_value.length)) {
+        return 1;
+    }
+    for (i = 0U; i < *relocation_count; i += 1U) {
+        if (relocations[i].old_data == value->bytes_value.data &&
+            relocations[i].length == value->bytes_value.length) {
+            value->bytes_value.data = relocations[i].new_data;
+            return 1;
+        }
+    }
+    if (*relocation_count >= relocation_capacity ||
+        !size_add_checked(*new_used, value->bytes_value.length, &next_used) ||
+        next_used > AIVM_VM_BYTES_ARENA_CAPACITY) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded during compaction.");
+        return 0;
+    }
+    destination = &new_arena[*new_used];
+    if (value->bytes_value.length > 0U) {
+        memcpy(destination, value->bytes_value.data, value->bytes_value.length);
+    }
+    relocations[*relocation_count].old_data = value->bytes_value.data;
+    relocations[*relocation_count].length = value->bytes_value.length;
+    relocations[*relocation_count].new_data = destination;
+    *relocation_count += 1U;
+    *new_used = next_used;
+    value->bytes_value.data = destination;
+    return 1;
+}
+
+static int compact_bytes_arena(AivmVm* vm)
+{
+    uint8_t* live_pairs = NULL;
+    uint8_t* old_arena;
+    uint8_t* new_arena = NULL;
+    AivmBytesRelocation* relocations = NULL;
+    size_t relocation_capacity = 0U;
+    size_t relocation_count = 0U;
+    size_t new_used = 0U;
+    size_t pair_value_capacity = 0U;
+    size_t i;
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->bytes_arena_used == 0U) {
+        return 1;
+    }
+    if (!size_add_checked(vm->stack_count, vm->locals_count, &relocation_capacity) ||
+        !size_add_checked(relocation_capacity, vm->completed_task_count, &relocation_capacity) ||
+        !size_add_checked(relocation_capacity, vm->par_value_count, &relocation_capacity) ||
+        !size_add_checked(vm->scratch_pair_count, vm->scratch_pair_count, &pair_value_capacity) ||
+        !size_add_checked(relocation_capacity, pair_value_capacity, &relocation_capacity)) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes compaction root count overflow.");
+        return 0;
+    }
+    if (relocation_capacity == 0U) {
+        vm->bytes_arena_used = 0U;
+        vm->bytes_arena_gc_threshold = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+        return 1;
+    }
+    live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
+    new_arena = (uint8_t*)calloc(AIVM_VM_BYTES_ARENA_CAPACITY, sizeof(new_arena[0]));
+    relocations = (AivmBytesRelocation*)calloc(relocation_capacity, sizeof(relocations[0]));
+    if (live_pairs == NULL || new_arena == NULL || relocations == NULL) {
+        set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena compaction workspace allocation failed.");
+        goto fail;
+    }
+    if (!mark_live_scratch_pair_handles(vm, live_pairs)) {
+        goto fail;
+    }
+#define RELOCATE_BYTES(value_ptr) \
+    do { \
+        if (!compact_relocate_value_bytes( \
+                vm, (value_ptr), new_arena, &new_used, relocations, &relocation_count, relocation_capacity)) { \
+            goto fail; \
+        } \
+    } while (0)
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        RELOCATE_BYTES(&vm->stack[i]);
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        RELOCATE_BYTES(&vm->locals[i]);
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        RELOCATE_BYTES(&vm->completed_tasks[i].result);
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        RELOCATE_BYTES(&vm->par_values[i]);
+    }
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (live_pairs[i] != 0U) {
+            RELOCATE_BYTES(&vm->scratch_pairs[i].first);
+            RELOCATE_BYTES(&vm->scratch_pairs[i].second);
+        }
+    }
+#undef RELOCATE_BYTES
+    old_arena = vm->bytes_arena;
+    vm->bytes_arena = new_arena;
+    vm->bytes_arena_used = new_used;
+    vm->bytes_arena_gc_threshold = grow_limit(
+        new_used,
+        AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY,
+        AIVM_VM_BYTES_ARENA_CAPACITY);
+    free(old_arena);
+    free(live_pairs);
+    free(relocations);
+    return 1;
+
+fail:
+#undef RELOCATE_BYTES
+    free(live_pairs);
+    free(new_arena);
+    free(relocations);
+    return 0;
 }
 
 static int compact_node_arenas_with_map(
@@ -3968,6 +4134,13 @@ static int should_attempt_return_safe_point(const AivmVm* vm)
         return 0;
     }
     return vm->node_allocations_since_gc >= AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS;
+}
+
+static int should_attempt_bytes_return_safe_point(const AivmVm* vm)
+{
+    return vm != NULL &&
+           vm->bytes_arena_gc_threshold < AIVM_VM_BYTES_ARENA_CAPACITY &&
+           vm->bytes_arena_used >= vm->bytes_arena_gc_threshold;
 }
 
 static int create_node_record(
@@ -4406,6 +4579,7 @@ void aivm_reset_state(AivmVm* vm)
     vm->string_arena[0] = '\0';
     vm->bytes_arena_used = 0U;
     vm->bytes_arena_limit = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+    vm->bytes_arena_gc_threshold = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
     vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
@@ -4519,7 +4693,7 @@ void aivm_init_with_syscalls_and_argv(
     aivm_reset_state(vm);
 }
 
-int aivm_collect_safe_point(AivmVm* vm)
+static int collect_safe_point_internal(AivmVm* vm, int collect_bytes)
 {
     if (vm == NULL) {
         return 0;
@@ -4533,7 +4707,15 @@ int aivm_collect_safe_point(AivmVm* vm)
     if (vm->string_arena_used > 0U && !compact_string_arena(vm)) {
         return 0;
     }
+    if (collect_bytes != 0 && vm->bytes_arena_used > 0U && !compact_bytes_arena(vm)) {
+        return 0;
+    }
     return 1;
+}
+
+int aivm_collect_safe_point(AivmVm* vm)
+{
+    return collect_safe_point_internal(vm, 1);
 }
 
 void aivm_halt(AivmVm* vm)
@@ -5098,9 +5280,13 @@ void aivm_step(AivmVm* vm)
                 pre_restore_stack_count,
                 frame.frame_base,
                 has_return_value);
-            if (should_attempt_return_safe_point(vm) && !aivm_collect_safe_point(vm)) {
-                vm->instruction_pointer = vm->program->instruction_count;
-                break;
+            {
+                int collect_nodes = should_attempt_return_safe_point(vm);
+                int collect_bytes = should_attempt_bytes_return_safe_point(vm);
+                if ((collect_nodes || collect_bytes) && !collect_safe_point_internal(vm, collect_bytes)) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
             }
             vm->instruction_pointer = frame.return_instruction_pointer;
             break;
@@ -6331,7 +6517,14 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (node_value.type != AIVM_VAL_NODE || !lookup_node(vm, node_value.node_handle, &node)) {
-                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "CHILD_COUNT requires node operand.");
+                (void)snprintf(
+                    vm->error_detail_storage,
+                    sizeof(vm->error_detail_storage),
+                    "CHILD_COUNT requires node operand; actual=%s handle=%lld nodeCount=%llu.",
+                    vm_value_type_name(node_value.type),
+                    (long long)node_value.node_handle,
+                    (unsigned long long)vm->node_count);
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, vm->error_detail_storage);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

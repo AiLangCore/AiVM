@@ -113,6 +113,20 @@ static int native_ui_linux_is_text_key(KeySym keysym, const char* text)
     }
 }
 
+static void native_ui_linux_set_command_event(NativeHostUiEvent* event, const char* command)
+{
+    if (event == NULL) {
+        return;
+    }
+    memset(event, 0, sizeof(*event));
+    event->x = -1;
+    event->y = -1;
+    (void)snprintf(event->type, sizeof(event->type), "command");
+    if (command != NULL) {
+        (void)snprintf(event->key, sizeof(event->key), "%s", command);
+    }
+}
+
 static unsigned long native_ui_linux_scale_component(uint8_t component, unsigned long mask)
 {
     unsigned long scaled = 0;
@@ -639,8 +653,15 @@ int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
             KeySym keysym = NoSymbol;
             char keybuf[32];
             int len = XLookupString(&event.xkey, keybuf, (int)sizeof(keybuf) - 1, &keysym, NULL);
-            (void)keysym;
             keybuf[(len > 0) ? len : 0] = '\0';
+            if ((event.xkey.state & ControlMask) != 0 && keysym == XK_comma) {
+                native_ui_linux_set_command_event(out_event, "settings");
+                return 1;
+            }
+            if (keysym == XK_F1) {
+                native_ui_linux_set_command_event(out_event, "about");
+                return 1;
+            }
             (void)snprintf(out_event->text, sizeof(out_event->text), "%s", keybuf);
             if (native_ui_linux_is_text_key(keysym, out_event->text)) {
                 (void)snprintf(out_event->type, sizeof(out_event->type), "text");

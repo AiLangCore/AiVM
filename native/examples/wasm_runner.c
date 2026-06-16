@@ -483,6 +483,14 @@ EM_JS(int, aivm_web_ui_draw_text, (int window_id, int x, int y, const char* text
     return globalThis.__aivmUiDrawText(window_id, x, y, text, color, size) | 0;
 });
 
+EM_JS(int, aivm_web_ui_measure_text, (int window_id, const char* text_ptr, int size), {
+    if (typeof globalThis.__aivmUiMeasureText !== 'function') {
+        return -1;
+    }
+    const text = UTF8ToString(text_ptr);
+    return globalThis.__aivmUiMeasureText(window_id, text, size) | 0;
+});
+
 EM_JS(int, aivm_web_ui_draw_line, (int window_id, int x1, int y1, int x2, int y2, const char* color_ptr, int width), {
     if (typeof globalThis.__aivmUiDrawLine !== 'function') {
         return -1;
@@ -649,6 +657,107 @@ static char g_ui_event_key[64];
 static char g_ui_event_text[64];
 static char g_ui_event_modifiers[64];
 static char g_ui_event_modifiers_normalized[32];
+
+static int ui_append_host_node(
+    AivmVm* vm,
+    const char* id,
+    const AivmNodeAttr* attrs,
+    size_t attr_count,
+    int64_t* out_handle)
+{
+    AivmNodeRecord* node;
+    size_t i;
+    if (vm == NULL || id == NULL || attrs == NULL || out_handle == NULL ||
+        vm->node_count >= AIVM_VM_NODE_CAPACITY ||
+        vm->node_attr_count + attr_count > AIVM_VM_NODE_ATTR_CAPACITY) {
+        return 0;
+    }
+    node = &vm->nodes[vm->node_count];
+    node->kind = "Map";
+    node->id = id;
+    node->attr_start = vm->node_attr_count;
+    node->attr_count = attr_count;
+    node->child_start = vm->node_child_count;
+    node->child_count = 0U;
+    for (i = 0U; i < attr_count; i += 1U) {
+        vm->node_attrs[vm->node_attr_count + i] = attrs[i];
+    }
+    vm->node_count += 1U;
+    vm->node_attr_count += attr_count;
+    if (vm->node_count > vm->node_high_water) {
+        vm->node_high_water = vm->node_count;
+    }
+    if (vm->node_attr_count > vm->node_attr_high_water) {
+        vm->node_attr_high_water = vm->node_attr_count;
+    }
+    *out_handle = (int64_t)vm->node_count;
+    return 1;
+}
+
+static int ui_ensure_window_size_node(AivmVm* vm)
+{
+    AivmNodeAttr attrs[2];
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->ui_default_window_size_node_handle > 0 &&
+        vm->ui_default_window_size_node_handle <= (int64_t)vm->node_count) {
+        return 1;
+    }
+    memset(attrs, 0, sizeof(attrs));
+    attrs[0].key = "width";
+    attrs[0].kind = AIVM_NODE_ATTR_INT;
+    attrs[1].key = "height";
+    attrs[1].kind = AIVM_NODE_ATTR_INT;
+    return ui_append_host_node(
+        vm,
+        "ui_size",
+        attrs,
+        sizeof(attrs) / sizeof(attrs[0]),
+        &vm->ui_default_window_size_node_handle);
+}
+
+static int ui_ensure_event_node(AivmVm* vm)
+{
+    AivmNodeAttr attrs[8];
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->ui_empty_event_node_handle > 0 &&
+        vm->ui_empty_event_node_handle <= (int64_t)vm->node_count) {
+        return 1;
+    }
+    memset(attrs, 0, sizeof(attrs));
+    attrs[0].key = "type";
+    attrs[0].kind = AIVM_NODE_ATTR_STRING;
+    attrs[0].string_value = "none";
+    attrs[1].key = "targetId";
+    attrs[1].kind = AIVM_NODE_ATTR_STRING;
+    attrs[1].string_value = "";
+    attrs[2].key = "x";
+    attrs[2].kind = AIVM_NODE_ATTR_INT;
+    attrs[2].int_value = -1;
+    attrs[3].key = "y";
+    attrs[3].kind = AIVM_NODE_ATTR_INT;
+    attrs[3].int_value = -1;
+    attrs[4].key = "key";
+    attrs[4].kind = AIVM_NODE_ATTR_STRING;
+    attrs[4].string_value = "";
+    attrs[5].key = "text";
+    attrs[5].kind = AIVM_NODE_ATTR_STRING;
+    attrs[5].string_value = "";
+    attrs[6].key = "modifiers";
+    attrs[6].kind = AIVM_NODE_ATTR_STRING;
+    attrs[6].string_value = "";
+    attrs[7].key = "repeat";
+    attrs[7].kind = AIVM_NODE_ATTR_BOOL;
+    return ui_append_host_node(
+        vm,
+        "ui_event",
+        attrs,
+        sizeof(attrs) / sizeof(attrs[0]),
+        &vm->ui_empty_event_node_handle);
+}
 
 static int modifiers_has_token(const char* text, const char* token)
 {
@@ -969,6 +1078,40 @@ static int native_syscall_ui_draw_text(
     return AIVM_SYSCALL_OK;
 }
 
+static int native_syscall_ui_measure_text(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int width;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 3U || args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[1].string_value == NULL ||
+        args[2].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    width = aivm_web_ui_measure_text(
+        (int)args[0].int_value,
+        args[1].string_value,
+        (int)args[2].int_value);
+    if (width < 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
+    *result = aivm_value_int((int64_t)width);
+    return AIVM_SYSCALL_OK;
+}
+
 static int native_syscall_ui_draw_line(
     const char* target,
     const AivmValue* args,
@@ -1185,6 +1328,7 @@ static int native_syscall_ui_wait_frame(
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
 #ifdef AIVM_WASM_WEB
+    emscripten_sleep(16);
     if (aivm_web_ui_wait_frame((int)args[0].int_value) != 0) {
         return ui_fail_not_available(result);
     }
@@ -1224,6 +1368,9 @@ static int native_syscall_ui_poll_event(
         }
         event_repeat = aivm_web_ui_poll_event_repeat((int)args[0].int_value);
         if (event_repeat < 0) {
+            return ui_fail_not_available(result);
+        }
+        if (!ui_ensure_event_node(g_wasm_active_vm)) {
             return ui_fail_not_available(result);
         }
         (void)ui_update_event_node(
@@ -1267,6 +1414,9 @@ static int native_syscall_ui_get_window_size(
         int width = aivm_web_ui_get_window_width((int)args[0].int_value);
         int height = aivm_web_ui_get_window_height((int)args[0].int_value);
         if (width <= 0 || height <= 0) {
+            return ui_fail_not_available(result);
+        }
+        if (!ui_ensure_window_size_node(g_wasm_active_vm)) {
             return ui_fail_not_available(result);
         }
         (void)ui_update_window_size_node(g_wasm_active_vm, width, height);
@@ -1506,6 +1656,235 @@ EM_JS(int, aivm_web_remote_call_sync, (const char* cap_ptr, const char* op_ptr, 
             .catch(() => wakeUp(-2147483647));
     });
 });
+
+EM_JS(int, aivm_web_net_connect_start, (const char* host_ptr, int port, int use_tls), {
+    const root = globalThis;
+    const state = root.__aivmNetState || (root.__aivmNetState = { nextOp: 1, nextConnection: 1, ops: new Map(), connections: new Map() });
+    const opId = state.nextOp++;
+    const connectionId = state.nextConnection++;
+    state.connections.set(connectionId, { host: UTF8ToString(host_ptr), port: port | 0, useTls: !!use_tls, response: null });
+    state.ops.set(opId, { status: 1, intValue: connectionId, bytes: null, error: String() });
+    return opId;
+});
+
+EM_JS(int, aivm_web_net_write_start, (int connection_id, const unsigned char* bytes_ptr, int bytes_len), {
+    const state = globalThis.__aivmNetState;
+    if (!state || !state.connections.has(connection_id)) return -1;
+    const opId = state.nextOp++;
+    const op = { status: 0, intValue: 0, bytes: null, error: String() };
+    state.ops.set(opId, op);
+    const connection = state.connections.get(connection_id);
+    const requestBytes = HEAPU8.slice(bytes_ptr, bytes_ptr + Math.max(0, bytes_len | 0));
+    Promise.resolve().then(async () => {
+        const requestText = new TextDecoder().decode(requestBytes);
+        const marker = requestText.indexOf('\r\n\r\n');
+        const head = marker >= 0 ? requestText.slice(0, marker) : requestText;
+        const bodyText = marker >= 0 ? requestText.slice(marker + 4) : String();
+        const lines = head.split('\r\n');
+        const requestLine = String(lines.shift() || String()).split(' ');
+        const method = String(requestLine[0] || 'GET').toUpperCase();
+        const path = String(requestLine[1] || '/');
+        const headers = new Headers();
+        for (const line of lines) {
+            const colon = line.indexOf(':');
+            if (colon <= 0) continue;
+            const name = line.slice(0, colon).trim();
+            const lower = name.toLowerCase();
+            if (lower === 'host' || lower === 'connection' || lower === 'content-length' || lower === 'user-agent') continue;
+            headers.set(name, line.slice(colon + 1).trim());
+        }
+        const defaultPort = connection.useTls ? 443 : 80;
+        const portSuffix = connection.port === defaultPort ? String() : `:${connection.port}`;
+        const url = (connection.useTls ? 'https:' : 'http:') + String.fromCharCode(47, 47) + connection.host + portSuffix + path;
+        const init = { method, headers };
+        if (method !== 'GET' && method !== 'HEAD' && bodyText.length > 0) init.body = bodyText;
+        const response = await fetch(url, init);
+        const body = new Uint8Array(await response.arrayBuffer());
+        const crlf = String.fromCharCode(13, 10);
+        let headerText = 'HTTP/1.1 ' + response.status + ' ' + (response.statusText || String()) + crlf;
+        response.headers.forEach((value, name) => { headerText += name + ': ' + value + crlf; });
+        if (!response.headers.has('content-length')) headerText += 'content-length: ' + body.length + crlf;
+        headerText += crlf;
+        const headerBytes = new TextEncoder().encode(headerText);
+        const complete = new Uint8Array(headerBytes.length + body.length);
+        complete.set(headerBytes, 0);
+        complete.set(body, headerBytes.length);
+        connection.response = complete;
+        op.intValue = bytes_len | 0;
+        op.status = 1;
+    }).catch((error) => {
+        op.error = `write_failed:${String(error?.message || error || 'fetch failed')}`;
+        op.status = -1;
+    });
+    return opId;
+});
+
+EM_JS(int, aivm_web_net_read_start, (int connection_id, int max_bytes), {
+    const state = globalThis.__aivmNetState;
+    if (!state || !state.connections.has(connection_id)) return -1;
+    const opId = state.nextOp++;
+    const connection = state.connections.get(connection_id);
+    const response = connection.response;
+    if (!(response instanceof Uint8Array)) {
+        state.ops.set(opId, { status: -1, intValue: 0, bytes: null, error: 'read_failed' });
+        return opId;
+    }
+    if (response.length > (max_bytes | 0)) {
+        state.ops.set(opId, { status: -1, intValue: 0, bytes: null, error: 'read_failed:response_limit' });
+        return opId;
+    }
+    state.ops.set(opId, { status: 1, intValue: response.length, bytes: response, error: String() });
+    return opId;
+});
+
+EM_JS(int, aivm_web_net_poll, (int op_id), {
+    const op = globalThis.__aivmNetState?.ops?.get(op_id);
+    return op ? (op.status | 0) : -1;
+});
+
+EM_JS(int, aivm_web_net_result_int, (int op_id), {
+    const op = globalThis.__aivmNetState?.ops?.get(op_id);
+    return op && op.status === 1 ? (op.intValue | 0) : 0;
+});
+
+EM_JS(int, aivm_web_net_result_bytes, (int op_id, unsigned char* out_ptr, int out_len), {
+    const op = globalThis.__aivmNetState?.ops?.get(op_id);
+    if (!op || op.status !== 1 || !(op.bytes instanceof Uint8Array)) return 0;
+    if (op.bytes.length > out_len) return -1;
+    HEAPU8.set(op.bytes, out_ptr);
+    return op.bytes.length;
+});
+
+EM_JS(int, aivm_web_net_error, (int op_id, char* out_ptr, int out_len), {
+    const op = globalThis.__aivmNetState?.ops?.get(op_id);
+    stringToUTF8(op && op.status === -1 ? String(op.error || 'network_failed') : String(), out_ptr, out_len);
+    return 0;
+});
+
+EM_JS(int, aivm_web_net_cancel, (int op_id), {
+    const op = globalThis.__aivmNetState?.ops?.get(op_id);
+    if (!op) return -1;
+    if (op.status === 0) { op.error = 'canceled'; op.status = -1; }
+    return 0;
+});
+
+EM_JS(int, aivm_web_net_close, (int connection_id), {
+    const state = globalThis.__aivmNetState;
+    if (!state) return -1;
+    state.connections.delete(connection_id);
+    return 0;
+});
+
+static int native_syscall_web_net_start(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int op = -1;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 2U) return AIVM_SYSCALL_ERR_CONTRACT;
+    if ((strcmp(target, "sys.net.tcp.connectStart") == 0 || strcmp(target, "sys.net.tcp.connectTlsStart") == 0) &&
+        args[0].type == AIVM_VAL_STRING && args[0].string_value != NULL && args[1].type == AIVM_VAL_INT) {
+        op = aivm_web_net_connect_start(args[0].string_value, (int)args[1].int_value,
+            strcmp(target, "sys.net.tcp.connectTlsStart") == 0);
+    } else if (strcmp(target, "sys.net.tcp.writeStart") == 0 &&
+               args[0].type == AIVM_VAL_INT && args[1].type == AIVM_VAL_BYTES) {
+        op = aivm_web_net_write_start((int)args[0].int_value, args[1].bytes_value.data, (int)args[1].bytes_value.length);
+    } else if (strcmp(target, "sys.net.tcp.readStart") == 0 &&
+               args[0].type == AIVM_VAL_INT && args[1].type == AIVM_VAL_INT) {
+        op = aivm_web_net_read_start((int)args[0].int_value, (int)args[1].int_value);
+    } else {
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    *result = aivm_value_int(op);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_poll(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    *result = aivm_value_int(aivm_web_net_poll((int)args[0].int_value));
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_result_int(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    *result = aivm_value_int(aivm_web_net_result_int((int)args[0].int_value));
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_result_bytes(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static unsigned char bytes[1048576];
+    int length;
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    length = aivm_web_net_result_bytes((int)args[0].int_value, bytes, (int)sizeof(bytes));
+    if (length < 0) return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    *result = aivm_value_bytes(bytes, (size_t)length);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_error(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static char error[256];
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    (void)aivm_web_net_error((int)args[0].int_value, error, (int)sizeof(error));
+    *result = aivm_value_string(error);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_cancel(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    *result = aivm_value_bool(aivm_web_net_cancel((int)args[0].int_value) == 0);
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_web_net_close(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) return AIVM_SYSCALL_ERR_NULL_RESULT;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) return AIVM_SYSCALL_ERR_CONTRACT;
+    (void)aivm_web_net_close((int)args[0].int_value);
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
 #endif
 
 #ifndef AIVM_WASM_WEB
@@ -1812,6 +2191,8 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_ui_draw_rect;
         } else if (strcmp(contract->target, "sys.ui.drawText") == 0) {
             bindings[binding_count].handler = native_syscall_ui_draw_text;
+        } else if (strcmp(contract->target, "sys.ui.measureText") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_measure_text;
         } else if (strcmp(contract->target, "sys.ui.drawLine") == 0) {
             bindings[binding_count].handler = native_syscall_ui_draw_line;
         } else if (strcmp(contract->target, "sys.ui.drawEllipse") == 0) {
@@ -1832,6 +2213,26 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_ui_get_window_size;
         } else if (strcmp(contract->target, "sys.ui.closeWindow") == 0) {
             bindings[binding_count].handler = native_syscall_ui_close_window;
+#ifdef AIVM_WASM_WEB
+        } else if (strcmp(contract->target, "sys.net.tcp.connectStart") == 0 ||
+                   strcmp(contract->target, "sys.net.tcp.connectTlsStart") == 0 ||
+                   strcmp(contract->target, "sys.net.tcp.readStart") == 0 ||
+                   strcmp(contract->target, "sys.net.tcp.writeStart") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_start;
+        } else if (strcmp(contract->target, "sys.net.async.poll") == 0 ||
+                   strcmp(contract->target, "sys.net.async.await") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_poll;
+        } else if (strcmp(contract->target, "sys.net.async.cancel") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_cancel;
+        } else if (strcmp(contract->target, "sys.net.async.resultInt") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_result_int;
+        } else if (strcmp(contract->target, "sys.net.async.resultBytes") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_result_bytes;
+        } else if (strcmp(contract->target, "sys.net.async.error") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_error;
+        } else if (strcmp(contract->target, "sys.net.tcp.close") == 0) {
+            bindings[binding_count].handler = native_syscall_web_net_close;
+#endif
         }
         binding_count += 1U;
     }
@@ -1839,6 +2240,17 @@ int main(int argc, char** argv)
         fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm image decode binding missing.\" nodeId=syscall)\n");
         return 2;
     }
+#ifdef AIVM_WASM_WEB
+    if (!ensure_binding_handler(
+            bindings,
+            &binding_count,
+            sizeof(bindings) / sizeof(bindings[0]),
+            "sys.net.asyncCancel",
+            native_syscall_web_net_cancel)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm async cancel alias binding missing.\" nodeId=syscall)\n");
+        return 2;
+    }
+#endif
 
     g_wasm_active_vm = &vm;
 
@@ -1876,3 +2288,13 @@ int main(int argc, char** argv)
 
     return 0;
 }
+
+#ifdef AIVM_WASM_WEB
+EMSCRIPTEN_KEEPALIVE int aivm_web_run_app(void)
+{
+    char executable[] = "aivm-runtime-wasm32";
+    char program[] = "/app.aibc1";
+    char* argv[] = { executable, program, NULL };
+    return main(2, argv);
+}
+#endif

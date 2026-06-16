@@ -13,12 +13,16 @@
 #include <windows.h>
 #include <windowsx.h>
 
+#define NATIVE_UI_WINDOWS_COMMAND_SETTINGS 1001
+#define NATIVE_UI_WINDOWS_COMMAND_ABOUT 1002
+
 typedef struct {
     int64_t handle;
     HWND hwnd;
     int close_pending;
     int width;
     int height;
+    wchar_t title[128];
     NativeHostUiEvent pending_event;
     int has_pending_event;
 } NativeUiWindowsSlot;
@@ -83,6 +87,44 @@ static void native_ui_windows_set_pending_event(NativeUiWindowsSlot* slot, const
     }
     slot->pending_event = *event;
     slot->has_pending_event = 1;
+}
+
+static void native_ui_windows_set_command_event(NativeHostUiEvent* event, const char* command)
+{
+    native_ui_windows_set_event_type(event, "command");
+    event->x = -1;
+    event->y = -1;
+    if (command != NULL) {
+        (void)snprintf(event->key, sizeof(event->key), "%s", command);
+    }
+}
+
+static void native_ui_windows_show_about(HWND hwnd, NativeUiWindowsSlot* slot)
+{
+    const wchar_t* title = L"AiLang";
+    if (slot != NULL && slot->title[0] != L'\0') {
+        title = slot->title;
+    }
+    MessageBoxW(hwnd, L"Built with AiVectra.", title, MB_OK | MB_ICONINFORMATION);
+}
+
+static HMENU native_ui_windows_create_app_menu(void)
+{
+    HMENU menu = CreateMenu();
+    HMENU app_menu;
+    if (menu == NULL) {
+        return NULL;
+    }
+    app_menu = CreatePopupMenu();
+    if (app_menu == NULL) {
+        DestroyMenu(menu);
+        return NULL;
+    }
+    AppendMenuW(app_menu, MF_STRING, NATIVE_UI_WINDOWS_COMMAND_ABOUT, L"&About");
+    AppendMenuW(app_menu, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(app_menu, MF_STRING, NATIVE_UI_WINDOWS_COMMAND_SETTINGS, L"&Settings\tCtrl+,");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)app_menu, L"&Application");
+    return menu;
 }
 
 static int native_ui_windows_is_text_vk(WPARAM vk)
@@ -208,11 +250,32 @@ static LRESULT CALLBACK native_ui_windows_wndproc(HWND hwnd, UINT message, WPARA
             slot->close_pending = 1;
             native_ui_windows_set_event_type(&event, "closed");
             native_ui_windows_set_pending_event(slot, &event);
+        } else if (message == WM_COMMAND) {
+            UINT command_id = LOWORD(wparam);
+            if (command_id == NATIVE_UI_WINDOWS_COMMAND_SETTINGS) {
+                NativeHostUiEvent event;
+                native_ui_windows_set_command_event(&event, "settings");
+                native_ui_windows_set_pending_event(slot, &event);
+                return 0;
+            }
+            if (command_id == NATIVE_UI_WINDOWS_COMMAND_ABOUT) {
+                native_ui_windows_show_about(hwnd, slot);
+                return 0;
+            }
         } else if (message == WM_SIZE) {
             slot->width = LOWORD(lparam);
             slot->height = HIWORD(lparam);
         } else if (message == WM_KEYDOWN) {
             NativeHostUiEvent event;
+            if (wparam == VK_OEM_COMMA && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
+                native_ui_windows_set_command_event(&event, "settings");
+                native_ui_windows_set_pending_event(slot, &event);
+                return 0;
+            }
+            if (wparam == VK_F1) {
+                native_ui_windows_show_about(hwnd, slot);
+                return 0;
+            }
             if (native_ui_windows_is_text_vk(wparam)) {
                 return DefWindowProcW(hwnd, message, wparam, lparam);
             }
@@ -290,6 +353,7 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
 {
     NativeUiWindowsSlot* slot;
     HWND hwnd;
+    HMENU menu;
     RECT rect;
     DWORD style = WS_OVERLAPPEDWINDOW;
     wchar_t title_w[128];
@@ -309,7 +373,11 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
     rect.top = 0;
     rect.right = width;
     rect.bottom = height;
-    if (!AdjustWindowRect(&rect, style, FALSE)) {
+    menu = native_ui_windows_create_app_menu();
+    if (!AdjustWindowRect(&rect, style, menu != NULL)) {
+        if (menu != NULL) {
+            DestroyMenu(menu);
+        }
         return 0;
     }
     if (title == NULL || title[0] == '\0') {
@@ -328,11 +396,14 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
         CW_USEDEFAULT,
         rect.right - rect.left,
         rect.bottom - rect.top,
-        NULL,
+        menu,
         NULL,
         GetModuleHandleW(NULL),
         NULL);
     if (hwnd == NULL) {
+        if (menu != NULL) {
+            DestroyMenu(menu);
+        }
         return 0;
     }
     ShowWindow(hwnd, SW_SHOW);
@@ -342,6 +413,8 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
     slot->close_pending = 0;
     slot->width = width;
     slot->height = height;
+    wcsncpy(slot->title, title_w, (sizeof(slot->title) / sizeof(slot->title[0])) - 1U);
+    slot->title[(sizeof(slot->title) / sizeof(slot->title[0])) - 1U] = L'\0';
     slot->has_pending_event = 0;
     *out_handle = slot->handle;
     return 1;

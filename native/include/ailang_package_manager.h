@@ -56,6 +56,14 @@ int ailang_package_manager_try_run_tool(
     char* error,
     size_t error_len);
 
+int ailang_package_manager_find_package_root(
+    const AilangPackageManagerOptions* options,
+    const char* package_name,
+    char* output,
+    size_t output_len,
+    char* error,
+    size_t error_len);
+
 int ailang_package_manager_cli(int argc, char** argv);
 
 #ifdef __cplusplus
