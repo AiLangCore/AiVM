@@ -7149,6 +7149,8 @@ void aivm_step(AivmVm* vm)
                     attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
                     free(attrs);
                     free(children);
+                    attrs = NULL;
+                    children = NULL;
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR attr slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -7156,8 +7158,12 @@ void aivm_step(AivmVm* vm)
                 attrs[i] = vm->node_attrs[attr_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
-                free(attrs);
-                free(children);
+                if (attrs != NULL) {
+                    free(attrs);
+                }
+                if (children != NULL) {
+                    free(children);
+                }
                 break;
             }
             attrs[base_node->attr_count] = vm->node_attrs[attr_node->attr_start];
