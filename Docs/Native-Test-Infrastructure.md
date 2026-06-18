@@ -50,6 +50,7 @@ ctest --test-dir .tmp/aivm-c-build-native -L fuzz --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L stress --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L perf-smoke --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L perf-full --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L perf-release --output-on-failure
 ```
 
 `./test-aivm-c.sh` remains the repository-level verification entrypoint.
@@ -100,12 +101,15 @@ AIVM_STRESS_VM_ITERATIONS=250 \
 
 Performance checks live under `tests/perf/`. They are not correctness tests;
 they measure scalability and regression risk. PR CI runs `perf-smoke`, nightly
-CI runs `perf-full`, and the harness writes JSON artifacts under
-`artifacts/perf/`.
+CI runs `perf-full`, `perf-release` validates the baseline comparator, and the
+harness writes JSON artifacts under `artifacts/perf/`.
 
-The first harness covers decode, evaluation, memory reset/safe-point, syscall
-dispatch, worker dispatch, and golden replay timing. Baseline comparison is
-staged until enough stable cross-platform data exists to avoid noisy gates.
+The first harness covers decode, invalid decode rejection, evaluation,
+branching, loops, calls, tail recursion, locals, constants, strings, bytes,
+memory reset/safe-point, syscall dispatch, large syscall payloads, worker
+dispatch, async worker startup/await, par-join queue mechanics, and golden
+replay timing. Curated release baselines are staged until enough stable
+cross-platform data exists to avoid noisy gates.
 
 ## Sanitizers
 

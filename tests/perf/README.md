@@ -69,6 +69,7 @@ AIVM_PERF_EVAL_ITERATIONS=1000
 AIVM_PERF_MEMORY_ITERATIONS=10000
 AIVM_PERF_SYSCALL_ITERATIONS=100000
 AIVM_PERF_WORKER_ITERATIONS=100000
+AIVM_PERF_ASYNC_ITERATIONS=200
 AIVM_PERF_GOLDEN_ITERATIONS=10000
 ```
 
@@ -86,12 +87,27 @@ eval     vm_call_return
 eval     vm_store_load_local
 eval     vm_const_string_concat_utf8_count
 eval     vm_const_bytes_length
+eval     vm_loop_64_countdown
+eval     vm_recursive_tail_call
 memory   vm_reset_stack_safepoint
 syscall  syscall_checked_console_write
 syscall  syscall_checked_contract_failure
+syscall  syscall_checked_large_bytes_payload
 worker   worker_poll_dispatch
+worker   worker_async_call_await
+worker   worker_par_join_queue
 golden   golden_add_int_replay
 ```
+
+Baseline comparison tooling is available through:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L perf-release --output-on-failure
+```
+
+The current CTest gate verifies the comparator against stable fixtures. Release
+validation can point `aivm_perf_compare` at a stored release baseline and a new
+`artifacts/perf/results-full.json` file once platform baselines are curated.
 
 Known gaps are tracked in `baselines/README.md`. New opcodes, runtime profiles,
 and host profiles should add benchmark coverage as they become stable.

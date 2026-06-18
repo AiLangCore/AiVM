@@ -7,6 +7,8 @@ Current support:
 - Benchmark JSON output is deterministic in shape.
 - CTest labels distinguish `perf-smoke` from `perf-full`.
 - Nightly CI uploads `artifacts/perf/*.json`.
+- `aivm_perf_compare` enforces same-name operations/sec regression thresholds.
+- `perf-release` validates the comparator against stable fixtures.
 - Regression thresholds are defined here for release review.
 
 Threshold policy:
@@ -17,8 +19,10 @@ failure   15%
 critical  30%
 ```
 
-Baseline comparison must be enabled only after the project has collected enough
-stable cross-platform data to avoid noisy release gates.
+Release baseline comparison should point `aivm_perf_compare` at a curated
+platform/release baseline and the newly generated `artifacts/perf/results-full.json`.
+Curated baselines should be added only after the project has enough stable
+cross-platform data to avoid noisy gates.
 
 ## Open Coverage
 
@@ -30,8 +34,6 @@ Decode:
 
 Evaluation:
 
-- loop execution cost
-- recursive call overhead
 - opcode-by-opcode coverage
 
 Memory:
@@ -43,13 +45,10 @@ Memory:
 
 Syscalls:
 
-- large payload throughput
 - argument decoding by payload shape
 
 Workers:
 
-- worker startup and shutdown
-- real message queue throughput
 - queue saturation behavior
 - parallel execution throughput
 

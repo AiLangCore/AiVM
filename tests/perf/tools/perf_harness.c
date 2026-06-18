@@ -23,7 +23,7 @@
 #endif
 
 enum {
-    PERF_MAX_RESULTS = 32,
+    PERF_MAX_RESULTS = 48,
     PERF_PROGRAM_BYTES = 4096,
     PERF_EVAL_INSTRUCTIONS = 4097
 };
@@ -531,6 +531,105 @@ static int bench_constants_and_strings(PerfResult* results, size_t* result_count
         iterations) ? 0 : 1;
 }
 
+static int bench_loop(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 64 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_EQ, .operand_int = 0 },
+        { .opcode = AIVM_OP_JUMP_IF_FALSE, .operand_int = 10 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_SUB_NUM, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_JUMP, .operand_int = 4 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_repeated(&program, iterations, 1U, AIVM_VAL_INT, "loop benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "vm_loop_64_countdown",
+        "eval",
+        "small",
+        iterations * 64U,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
+}
+
+static int bench_recursive_tail_call(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 3 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 10 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_EQ, .operand_int = 0 },
+        { .opcode = AIVM_OP_JUMP_IF_FALSE, .operand_int = 12 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_RETURN, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = -1 },
+        { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = -1 },
+        { .opcode = AIVM_OP_ADD_INT, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_RETURN, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_repeated(&program, iterations, 1U, AIVM_VAL_INT, "recursive tail-call benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "vm_recursive_tail_call",
+        "eval",
+        "small",
+        iterations * program.instruction_count,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
+}
+
 static int bench_bytes(PerfResult* results, size_t* result_count, size_t iterations)
 {
     static const uint8_t payload[] = {
@@ -646,6 +745,21 @@ static int perf_worker_poll(
     return AIVM_SYSCALL_OK;
 }
 
+static int perf_large_file_read(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static const uint8_t payload[4096] = { 1U };
+    (void)target;
+    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_STRING) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(payload, sizeof(payload));
+    return AIVM_SYSCALL_OK;
+}
+
 static int bench_syscall(PerfResult* results, size_t* result_count, size_t iterations)
 {
     static const AivmSyscallBinding bindings[] = {
@@ -686,6 +800,46 @@ static int bench_syscall(PerfResult* results, size_t* result_count, size_t itera
         0U) ? 0 : 1;
 }
 
+static int bench_large_payload_syscall(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmSyscallBinding bindings[] = {
+        { .target = "sys.fs.file.read", .handler = perf_large_file_read }
+    };
+    AivmValue arg = aivm_value_string("large-payload.bin");
+    AivmValue result = aivm_value_void();
+    size_t index;
+    double start;
+    double elapsed;
+
+    start = now_seconds();
+    for (index = 0U; index < iterations; index += 1U) {
+        AivmSyscallStatus status = aivm_syscall_dispatch_checked(
+            bindings,
+            sizeof(bindings) / sizeof(bindings[0]),
+            "sys.fs.file.read",
+            &arg,
+            1U,
+            &result);
+        if (status != AIVM_SYSCALL_OK || result.type != AIVM_VAL_BYTES) {
+            (void)fprintf(stderr, "large payload syscall benchmark failed: %s\n", aivm_syscall_status_code(status));
+            return 1;
+        }
+        g_perf_sink += result.bytes_value.length;
+    }
+    elapsed = now_seconds() - start;
+
+    return add_result(
+        results,
+        result_count,
+        "syscall_checked_large_bytes_payload",
+        "syscall",
+        "large",
+        iterations,
+        elapsed,
+        iterations * 4096U,
+        0U) ? 0 : 1;
+}
+
 static int bench_failed_syscall(PerfResult* results, size_t* result_count, size_t iterations)
 {
     static const AivmSyscallBinding bindings[] = {
@@ -723,6 +877,80 @@ static int bench_failed_syscall(PerfResult* results, size_t* result_count, size_
         elapsed,
         0U,
         0U) ? 0 : 1;
+}
+
+static int bench_async_worker(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 4 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 9 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_repeated(&program, iterations, 1U, AIVM_VAL_INT, "async worker benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "worker_async_call_await",
+        "worker",
+        "small",
+        iterations,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
+}
+
+static int bench_par_join_queue(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_PAR_BEGIN, .operand_int = 2 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 41 },
+        { .opcode = AIVM_OP_PAR_FORK, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_PAR_FORK, .operand_int = 0 },
+        { .opcode = AIVM_OP_PAR_JOIN, .operand_int = 2 },
+        { .opcode = AIVM_OP_PAR_CANCEL, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_repeated(&program, iterations, 1U, AIVM_VAL_NODE, "par join benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "worker_par_join_queue",
+        "worker",
+        "small",
+        iterations * program.instruction_count,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
 }
 
 static int bench_worker(PerfResult* results, size_t* result_count, size_t iterations)
@@ -930,6 +1158,7 @@ int main(void)
     size_t memory_iterations = read_budget("AIVM_PERF_MEMORY_ITERATIONS", 1000U * multiplier, 1000000U);
     size_t syscall_iterations = read_budget("AIVM_PERF_SYSCALL_ITERATIONS", 10000U * multiplier, 10000000U);
     size_t worker_iterations = read_budget("AIVM_PERF_WORKER_ITERATIONS", 10000U * multiplier, 10000000U);
+    size_t async_iterations = read_budget("AIVM_PERF_ASYNC_ITERATIONS", 20U * multiplier, 10000U);
     size_t golden_iterations = read_budget("AIVM_PERF_GOLDEN_ITERATIONS", 1000U * multiplier, 1000000U);
 
     memset(results, 0, sizeof(results));
@@ -942,11 +1171,16 @@ int main(void)
         bench_call_return(results, &result_count, eval_iterations) != 0 ||
         bench_locals(results, &result_count, eval_iterations) != 0 ||
         bench_constants_and_strings(results, &result_count, eval_iterations) != 0 ||
+        bench_loop(results, &result_count, eval_iterations) != 0 ||
+        bench_recursive_tail_call(results, &result_count, eval_iterations) != 0 ||
         bench_bytes(results, &result_count, eval_iterations) != 0 ||
         bench_memory(results, &result_count, memory_iterations) != 0 ||
         bench_syscall(results, &result_count, syscall_iterations) != 0 ||
+        bench_large_payload_syscall(results, &result_count, syscall_iterations) != 0 ||
         bench_failed_syscall(results, &result_count, syscall_iterations) != 0 ||
         bench_worker(results, &result_count, worker_iterations) != 0 ||
+        bench_async_worker(results, &result_count, async_iterations) != 0 ||
+        bench_par_join_queue(results, &result_count, worker_iterations) != 0 ||
         bench_golden_replay(results, &result_count, golden_iterations) != 0) {
         return 1;
     }
