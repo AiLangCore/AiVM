@@ -2330,7 +2330,7 @@ static int print_unsupported_vm_mode(const char* mode)
     }
     fprintf(stderr,
         "Err#err1(code=DEV008 message=\"Unsupported VM mode for native C runtime: %s\" nodeId=vmMode)\n",
-        mode);
+        mode != NULL ? mode : "(null)");
     return 2;
 }
 
