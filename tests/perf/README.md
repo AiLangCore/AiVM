@@ -78,9 +78,17 @@ The first harness covers:
 
 ```text
 decode   aibc1_decode_256_instruction
+decode   aibc1_invalid_section_limit_rejection
 eval     vm_eval_stack_churn
+eval     vm_numeric_ops_sub_mul_div_mod_lt
+eval     vm_branch_jump_if_false
+eval     vm_call_return
+eval     vm_store_load_local
+eval     vm_const_string_concat_utf8_count
+eval     vm_const_bytes_length
 memory   vm_reset_stack_safepoint
 syscall  syscall_checked_console_write
+syscall  syscall_checked_contract_failure
 worker   worker_poll_dispatch
 golden   golden_add_int_replay
 ```

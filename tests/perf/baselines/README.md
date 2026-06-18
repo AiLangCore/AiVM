@@ -27,13 +27,10 @@ Decode:
 - bundle load time
 - module load time
 - dependency graph resolution
-- invalid bundle rejection time
 
 Evaluation:
 
-- branch execution cost
 - loop execution cost
-- function call overhead
 - recursive call overhead
 - opcode-by-opcode coverage
 
@@ -46,7 +43,6 @@ Memory:
 
 Syscalls:
 
-- failed syscall overhead
 - large payload throughput
 - argument decoding by payload shape
 
