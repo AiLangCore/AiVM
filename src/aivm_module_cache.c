@@ -51,13 +51,18 @@ static int pointer_in_range(const void* pointer, const void* start, size_t lengt
 {
     const unsigned char* p = (const unsigned char*)pointer;
     const unsigned char* s = (const unsigned char*)start;
+    size_t offset;
     if (pointer == NULL || start == NULL || out_offset == NULL) {
         return 0;
     }
-    if (p < s || p > s + length) {
+    if (p < s) {
         return 0;
     }
-    *out_offset = (size_t)(p - s);
+    offset = (size_t)(p - s);
+    if (offset > length) {
+        return 0;
+    }
+    *out_offset = offset;
     return 1;
 }
 
@@ -201,7 +206,7 @@ AivmModuleCacheStatus aivm_module_cache_put(
         memset(slot, 0, sizeof(*slot));
         return AIVM_MODULE_CACHE_ERR_INVALID;
     }
-    (void)snprintf(slot->name, sizeof(slot->name), "%s", name);
+    (void)snprintf(slot->name, sizeof(slot->name), "%.*s", (int)(sizeof(slot->name) - 1), name);
     slot->estimated_bytes = estimate;
     slot->active = 1;
     cache->count += 1U;
