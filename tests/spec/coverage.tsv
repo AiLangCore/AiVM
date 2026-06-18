@@ -4,7 +4,7 @@ memory-safe-point-compaction	SPEC/MEMORY.md	covered	tests/unit/memory/test_memor
 memory-worker-local-heaps	SPEC/MEMORY.md	covered	tests/unit/vm/test_vm_ops.c,tests/unit/vm/test_runtime.c,tests/perf/tools/perf_harness.c	Covers async bytecode workers, immutable result copy/freeze behavior, queue handoff, and perf timing.
 memory-deterministic-queue	SPEC/MEMORY.md	covered	tests/unit/vm/test_runtime.c,tests/stress/test_runtime_stress.c,tests/perf/tools/perf_harness.c	Covers event enqueue validation, high-inflight queue stress, and CI perf signal for queue saturation.
 memory-shared-module-cache	SPEC/MEMORY.md	tracked-gap	tests/spec/test_spec_pending.c	Production direction; blocked until AiVM owns a module/cache loader API.
-memory-large-object-storage	SPEC/MEMORY.md	tracked-gap	tests/spec/test_spec_pending.c	Production direction; blocked until handle-based large object/blob storage is designed.
+memory-large-object-storage	SPEC/MEMORY.md	covered	tests/unit/memory/test_blob_storage.c	Covers handle-based blob create/read/release, deterministic capacity and byte-limit failures, and reset/dispose cleanup.
 debug-runtime-split	SPEC/DEBUGGING.md	covered	src/CMakeLists.txt,tests/unit/memory/test_debug_artifact_budget.c,scripts/test-aivm-debug-artifacts.sh	Covers separate aivm/aivm-debug targets and debug artifact budget behavior.
 debug-capture-artifacts	SPEC/DEBUGGING.md	covered	tests/unit/memory/test_debug_artifact_budget.c,scripts/test-aivm-debug-artifacts.sh	Covers debug capture output, memory/profile/syscall summaries, and agent-facing inspect/explain commands.
 debug-full-debugger	SPEC/DEBUGGING.md	tracked-gap	tests/spec/test_spec_pending.c	Debug protocol commands are specified direction but not fully implemented.

@@ -339,6 +339,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_debug_artifact_budget PRIVATE aivm_core)
 
+    add_executable(aivm_test_blob_storage
+        ../tests/unit/memory/test_blob_storage.c
+    )
+    target_link_libraries(aivm_test_blob_storage PRIVATE aivm_core)
+
     add_executable(aivm_test_spec_coverage
         ../tests/spec/test_spec_coverage.c
     )
@@ -532,6 +537,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE /W4)
+        target_compile_options(aivm_test_blob_storage PRIVATE /W4)
         target_compile_options(aivm_test_spec_coverage PRIVATE /W4)
         target_compile_options(aivm_test_spec_pending PRIVATE /W4)
         target_compile_options(aivm_test_loader_fuzz PRIVATE /W4)
@@ -573,6 +579,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_blob_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_spec_coverage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_spec_pending PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_loader_fuzz PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -615,9 +622,9 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
+    add_test(NAME aivm_test_blob_storage COMMAND aivm_test_blob_storage)
     add_test(NAME aivm_test_spec_coverage COMMAND aivm_test_spec_coverage ${CMAKE_CURRENT_SOURCE_DIR}/..)
     add_test(NAME aivm_spec_gap_shared_module_cache COMMAND aivm_test_spec_pending memory-shared-module-cache)
-    add_test(NAME aivm_spec_gap_large_object_storage COMMAND aivm_test_spec_pending memory-large-object-storage)
     add_test(NAME aivm_spec_gap_full_debugger COMMAND aivm_test_spec_pending debug-full-debugger)
     add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
@@ -737,6 +744,7 @@ if (BUILD_TESTING)
         aivm_test_memory_rc
         aivm_test_memory_cycle
         aivm_test_debug_artifact_budget
+        aivm_test_blob_storage
         PROPERTIES LABELS "unit;memory"
     )
     set_tests_properties(
@@ -745,7 +753,6 @@ if (BUILD_TESTING)
     )
     set_tests_properties(
         aivm_spec_gap_shared_module_cache
-        aivm_spec_gap_large_object_storage
         aivm_spec_gap_full_debugger
         PROPERTIES LABELS "spec;gap"
     )

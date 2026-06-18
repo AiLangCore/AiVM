@@ -228,19 +228,32 @@ semantics in its canonical specs. AiVectra owns UI runtime integration rules.
 
 ## Large Object and Blob Storage
 
-Large object/blob storage is a production direction for assets, byte buffers,
-large UI payloads, and host data that should not pressure node/string arenas.
+Large object/blob storage exists for assets, byte buffers, large UI payloads,
+and host data that should not pressure node/string arenas.
 
 Blob storage must:
 
 - be handle-based
 - have explicit resource limits
-- report deterministic allocation/read/write failures
+- report deterministic allocation, read, and release failures
 - avoid changing semantic ordering
 - be released deterministically by VM lifetime, profile policy, or explicit
   resource ownership rules
 
 Large object storage must not become a shared mutable semantic heap.
+
+Initial native support is exposed through the AiVM C API:
+
+- `aivm_blob_create`
+- `aivm_blob_read`
+- `aivm_blob_release`
+- `aivm_blob_active_count`
+
+Blob handles are VM-local. They are not AiLang semantic values and must not be
+shared across VMs or workers as mutable state. Runtime profiles expose
+`blob_capacity` and `blob_bytes`; exceeding either limit returns a deterministic
+`AIVMB002` failure and increments blob pressure accounting. `aivm_reset_state`
+and `aivm_dispose` release all active blobs deterministically.
 
 ## Safe Points
 

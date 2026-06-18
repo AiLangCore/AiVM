@@ -55,8 +55,18 @@ typedef struct {
     size_t worker_count;
     size_t ui_window_count;
     size_t debug_artifact_bytes;
+    size_t blob_capacity;
+    size_t blob_bytes;
     size_t syscall_elapsed_ms;
 } AivmRuntimeProfileLimits;
+
+typedef enum {
+    AIVM_BLOB_OK = 0,
+    AIVM_BLOB_ERR_INVALID = 1,
+    AIVM_BLOB_ERR_LIMIT = 2,
+    AIVM_BLOB_ERR_NOT_FOUND = 3,
+    AIVM_BLOB_ERR_OOM = 4
+} AivmBlobStatus;
 
 typedef struct {
     size_t return_instruction_pointer;
@@ -148,6 +158,13 @@ typedef struct {
     AivmValue second;
 } AivmScratchPair;
 
+typedef struct {
+    int64_t handle;
+    uint8_t* data;
+    size_t length;
+    int active;
+} AivmBlobRecord;
+
 enum {
     AIVM_VM_STACK_CAPACITY = 20000,
     AIVM_VM_STACK_INITIAL_CAPACITY = 1024,
@@ -180,6 +197,8 @@ enum {
     AIVM_VM_WORKER_COUNT = 64,
     AIVM_VM_UI_WINDOW_COUNT = 16,
     AIVM_VM_DEBUG_ARTIFACT_BYTES = 64 * 1024 * 1024,
+    AIVM_VM_BLOB_CAPACITY = 64,
+    AIVM_VM_BLOB_BYTES = 16 * 1024 * 1024,
     AIVM_VM_SYSCALL_ELAPSED_MS = 30000,
     AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS = 64,
     AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS = 1024,
@@ -257,6 +276,12 @@ typedef struct {
     size_t par_value_count;
     AivmScratchPair* scratch_pairs;
     size_t scratch_pair_count;
+    AivmBlobRecord blobs[AIVM_VM_BLOB_CAPACITY];
+    size_t blob_count;
+    size_t blob_bytes_used;
+    size_t blob_bytes_high_water;
+    size_t blob_pressure_count;
+    int64_t next_blob_handle;
     int64_t next_par_node_id;
     AivmNodeRecord* nodes;
     size_t node_count;
@@ -318,5 +343,16 @@ AivmRuntimeProfile aivm_runtime_default_profile(void);
 AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile);
 void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile);
 void aivm_set_syscall_policy(AivmVm* vm, const AivmSyscallCapabilityPolicy* policy);
+AivmBlobStatus aivm_blob_create(AivmVm* vm, const uint8_t* data, size_t length, int64_t* out_handle);
+AivmBlobStatus aivm_blob_read(
+    const AivmVm* vm,
+    int64_t handle,
+    size_t offset,
+    uint8_t* out_data,
+    size_t length,
+    size_t* out_read);
+AivmBlobStatus aivm_blob_release(AivmVm* vm, int64_t handle);
+size_t aivm_blob_active_count(const AivmVm* vm);
+const char* aivm_blob_status_code(AivmBlobStatus status);
 
 #endif

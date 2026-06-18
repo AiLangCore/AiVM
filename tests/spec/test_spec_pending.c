@@ -21,12 +21,6 @@ int main(int argc, char** argv)
             "AiVM does not yet expose a module/cache loader API for immutable shared module cache verification.");
     }
 
-    if (strcmp(argv[1], "memory-large-object-storage") == 0) {
-        return fail_pending(
-            argv[1],
-            "AiVM does not yet expose handle-based large object/blob storage with deterministic limits.");
-    }
-
     if (strcmp(argv[1], "debug-full-debugger") == 0) {
         return fail_pending(
             argv[1],

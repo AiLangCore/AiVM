@@ -227,6 +227,19 @@ The `AIVMP` family reports AiBC1 program loading failures.
 | `AIVMP012` | Program string storage exceeded the loader limit. |
 | `AIVMP999` | Unknown program load status. |
 
+## Blob Storage Error Codes
+
+The `AIVMB` family reports VM-local blob storage failures.
+
+| Code | Meaning |
+| --- | --- |
+| `AIVMB000` | Blob operation completed. |
+| `AIVMB001` | Blob operation input was invalid. |
+| `AIVMB002` | Blob capacity or byte limit was exceeded. |
+| `AIVMB003` | Blob handle was not found. |
+| `AIVMB004` | Blob allocation failed. |
+| `AIVMB999` | Unknown blob status. |
+
 ## Syscall Error Codes
 
 The `AIVMS` family reports syscall dispatch failures.

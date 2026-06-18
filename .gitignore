@@ -3,6 +3,7 @@
 .tmp/
 .artifacts/
 artifacts/
+Testing/
 *.local.*
 config.local.toml
 .DS_Store
