@@ -74,12 +74,16 @@ int aivm_ws_decode_client_frame(
     if (index + 4U > length) {
         return 0;
     }
+    // Bounds checked above; memcpy_s is not portable across platforms
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memcpy(mask, &bytes[index], 4U);
     index += 4U;
     if (index + (size_t)payload_length > length) {
         return 0;
     }
 
+    // Operating on known struct size; memset_s is not portable across platforms
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(out_frame, 0, sizeof(*out_frame));
     out_frame->fin = ((b0 & 0x80U) != 0U) ? 1 : 0;
     out_frame->opcode = (uint8_t)(b0 & 0x0fU);
@@ -142,6 +146,8 @@ int aivm_ws_encode_server_control(
         return 0;
     }
     if (payload_length > 0U) {
+        // Bounds checked above; memcpy_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memcpy(&out_bytes[index], payload, payload_length);
         index += payload_length;
     }
