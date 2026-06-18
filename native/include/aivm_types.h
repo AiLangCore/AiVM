@@ -12,20 +12,21 @@ typedef struct {
 typedef enum {
     AIVM_VAL_VOID = 0,
     AIVM_VAL_INT = 1,
-    AIVM_VAL_NUMBER = 1,
-    AIVM_VAL_BOOL = 2,
-    AIVM_VAL_NULL = 3,
-    AIVM_VAL_STRING = 4,
-    AIVM_VAL_BYTES = 5,
-    AIVM_VAL_NODE = 6,
-    AIVM_VAL_PAIR = 7,
-    AIVM_VAL_UNKNOWN = 8
+    AIVM_VAL_NUMBER = 2,
+    AIVM_VAL_BOOL = 3,
+    AIVM_VAL_NULL = 4,
+    AIVM_VAL_STRING = 5,
+    AIVM_VAL_BYTES = 6,
+    AIVM_VAL_NODE = 7,
+    AIVM_VAL_PAIR = 8,
+    AIVM_VAL_UNKNOWN = 9
 } AivmValueType;
 
 typedef struct {
     AivmValueType type;
     union {
         int64_t int_value;
+        double number_value;
         int bool_value;
         const char* string_value;
         AivmBytesView bytes_value;
@@ -37,7 +38,7 @@ typedef struct {
 AivmValue aivm_value_void(void);
 AivmValue aivm_value_unknown(void);
 AivmValue aivm_value_int(int64_t value);
-AivmValue aivm_value_number(int64_t value);
+AivmValue aivm_value_number(double value);
 AivmValue aivm_value_bool(int value);
 AivmValue aivm_value_null(void);
 AivmValue aivm_value_string(const char* value);

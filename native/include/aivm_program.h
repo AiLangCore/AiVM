@@ -73,7 +73,13 @@ typedef enum {
     AIVM_OP_BYTES_TO_BASE64 = 63,
     AIVM_OP_MAKE_PAIR = 64,
     AIVM_OP_PAIR_FIRST = 65,
-    AIVM_OP_PAIR_SECOND = 66
+    AIVM_OP_PAIR_SECOND = 66,
+    AIVM_OP_SUB_NUM = 67,
+    AIVM_OP_MUL_NUM = 68,
+    AIVM_OP_DIV_NUM = 69,
+    AIVM_OP_MOD_NUM = 70,
+    AIVM_OP_POW_NUM = 71,
+    AIVM_OP_LT_NUM = 72
 } AivmOpcode;
 
 typedef struct {

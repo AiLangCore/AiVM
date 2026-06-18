@@ -76,6 +76,12 @@ static const char* opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
         case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
         case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
+        case AIVM_OP_SUB_NUM: return "SUB_NUM";
+        case AIVM_OP_MUL_NUM: return "MUL_NUM";
+        case AIVM_OP_DIV_NUM: return "DIV_NUM";
+        case AIVM_OP_MOD_NUM: return "MOD_NUM";
+        case AIVM_OP_POW_NUM: return "POW_NUM";
+        case AIVM_OP_LT_NUM: return "LT_NUM";
         default: return "UNKNOWN";
     }
 }

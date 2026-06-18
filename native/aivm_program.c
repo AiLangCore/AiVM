@@ -1,5 +1,7 @@
 #include "aivm_program.h"
 
+#include <string.h>
+
 static int size_add_checked(size_t a, size_t b, size_t* out)
 {
     if (out == NULL) {
@@ -38,6 +40,16 @@ static int64_t read_i64_le(const uint8_t* bytes, size_t offset)
     uint64_t high = (uint64_t)read_u32_le(bytes, offset + 4U);
     uint64_t combined = low | (high << 32U);
     return (int64_t)combined;
+}
+
+static double read_f64_le(const uint8_t* bytes, size_t offset)
+{
+    uint64_t low = (uint64_t)read_u32_le(bytes, offset);
+    uint64_t high = (uint64_t)read_u32_le(bytes, offset + 4U);
+    uint64_t combined = low | (high << 32U);
+    double value = 0.0;
+    memcpy(&value, &combined, sizeof(value));
+    return value;
 }
 
 static int write_string_constant(
@@ -258,7 +270,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             for (instruction_index = 0U; instruction_index < instruction_count; instruction_index += 1U) {
                 uint32_t raw_opcode = read_u32_le(bytes, instruction_cursor);
                 int64_t operand_int = read_i64_le(bytes, instruction_cursor + 4U);
-                if (raw_opcode > (uint32_t)AIVM_OP_PAIR_SECOND) {
+                if (raw_opcode > (uint32_t)AIVM_OP_LT_NUM) {
                     result.status = AIVM_PROGRAM_ERR_INVALID_OPCODE;
                     result.error_offset = instruction_cursor;
                     return result;
@@ -317,6 +329,16 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     }
                     out_program->constant_storage[constant_index] =
                         aivm_value_int(read_i64_le(bytes, constant_cursor));
+                    constant_cursor += 8U;
+                } else if (kind == 7U) {
+                    size_t next_cursor;
+                    if (!size_add_checked(constant_cursor, 8U, &next_cursor) || next_cursor > section_end) {
+                        result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
+                        result.error_offset = constant_cursor;
+                        return result;
+                    }
+                    out_program->constant_storage[constant_index] =
+                        aivm_value_number(read_f64_le(bytes, constant_cursor));
                     constant_cursor += 8U;
                 } else if (kind == 2U) {
                     size_t next_cursor;

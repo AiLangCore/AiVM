@@ -517,6 +517,9 @@ static void airun_format_value_preview(const AivmValue* value, char* buffer, siz
         case AIVM_VAL_INT:
             (void)snprintf(buffer, buffer_size, "int(%lld)", (long long)value->int_value);
             break;
+        case AIVM_VAL_NUMBER:
+            (void)snprintf(buffer, buffer_size, "number(%.15g)", value->number_value);
+            break;
         case AIVM_VAL_BOOL:
             (void)snprintf(buffer, buffer_size, "bool(%s)", value->bool_value ? "true" : "false");
             break;
@@ -4113,6 +4116,12 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
         case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
         case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
+        case AIVM_OP_SUB_NUM: return "SUB_NUM";
+        case AIVM_OP_MUL_NUM: return "MUL_NUM";
+        case AIVM_OP_DIV_NUM: return "DIV_NUM";
+        case AIVM_OP_MOD_NUM: return "MOD_NUM";
+        case AIVM_OP_POW_NUM: return "POW_NUM";
+        case AIVM_OP_LT_NUM: return "LT_NUM";
         default: return "UNKNOWN";
     }
 }
@@ -4122,6 +4131,7 @@ static const char* airun_value_type_name(AivmValueType type)
     switch (type) {
         case AIVM_VAL_VOID: return "void";
         case AIVM_VAL_INT: return "int";
+        case AIVM_VAL_NUMBER: return "number";
         case AIVM_VAL_BOOL: return "bool";
         case AIVM_VAL_NULL: return "null";
         case AIVM_VAL_STRING: return "string";
@@ -4809,6 +4819,22 @@ static int parse_attr_int64(const char* attrs, const char* key, int64_t* out_val
     return 1;
 }
 
+static int parse_attr_double(const char* attrs, const char* key, double* out_value)
+{
+    char text[128];
+    char* end = NULL;
+    double v;
+    if (out_value == NULL || !parse_attr_span(attrs, key, text, sizeof(text))) {
+        return 0;
+    }
+    v = strtod(text, &end);
+    if (end == text || *end != '\0') {
+        return 0;
+    }
+    *out_value = v;
+    return 1;
+}
+
 static int parse_attr_bool(const char* attrs, const char* key, int* out_value)
 {
     char text[16];
@@ -4931,6 +4957,12 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(MAKE_PAIR)
     MAP_OP(PAIR_FIRST)
     MAP_OP(PAIR_SECOND)
+    MAP_OP(SUB_NUM)
+    MAP_OP(MUL_NUM)
+    MAP_OP(DIV_NUM)
+    MAP_OP(MOD_NUM)
+    MAP_OP(POW_NUM)
+    MAP_OP(LT_NUM)
 #undef MAP_OP
     return 0;
 }
@@ -5012,10 +5044,14 @@ static int parse_bytecode_aos_to_program_text(
         }
         if (strcmp(kind, "int") == 0 || strcmp(kind, "number") == 0) {
             int64_t v = 0;
-            if (!parse_attr_int64(attrs, "value", &v)) {
+            double number_value = 0.0;
+            if (parse_attr_int64(attrs, "value", &v)) {
+                out_program->constant_storage[out_program->constant_count] = aivm_value_int(v);
+            } else if (strcmp(kind, "number") == 0 && parse_attr_double(attrs, "value", &number_value)) {
+                out_program->constant_storage[out_program->constant_count] = aivm_value_number(number_value);
+            } else {
                 return 0;
             }
-            out_program->constant_storage[out_program->constant_count] = aivm_value_int(v);
         } else if (strcmp(kind, "bool") == 0) {
             int b = 0;
             if (!parse_attr_bool(attrs, "value", &b)) {
@@ -5424,6 +5460,30 @@ static int simple_add_string_const(AivmProgram* program, const char* value, size
     return 1;
 }
 
+static int simple_add_number_const(AivmProgram* program, double value, size_t* out_idx)
+{
+    size_t i;
+    if (program == NULL || out_idx == NULL) {
+        simple_fail("add number const: invalid args");
+        return 0;
+    }
+    for (i = 0U; i < program->constant_count; i += 1U) {
+        if (program->constant_storage[i].type == AIVM_VAL_NUMBER &&
+            program->constant_storage[i].number_value == value) {
+            *out_idx = i;
+            return 1;
+        }
+    }
+    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+        simple_fail("add number const: constant capacity exceeded");
+        return 0;
+    }
+    program->constant_storage[program->constant_count] = aivm_value_number(value);
+    *out_idx = program->constant_count;
+    program->constant_count += 1U;
+    return 1;
+}
+
 static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* program, char locals[][64], size_t* local_count)
 {
     if (node == NULL || program == NULL || locals == NULL || local_count == NULL) {
@@ -5454,6 +5514,16 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
             long long parsed = strtoll(value, &end, 10);
             if (end != value && *end == '\0') {
                 return simple_emit_instruction(program, AIVM_OP_PUSH_INT, (int64_t)parsed);
+            }
+            if (strchr(value, '.') != NULL) {
+                double parsed_number = strtod(value, &end);
+                size_t number_idx = 0U;
+                if (end != value && *end == '\0') {
+                    if (!simple_add_number_const(program, parsed_number, &number_idx)) {
+                        return 0;
+                    }
+                    return simple_emit_instruction(program, AIVM_OP_CONST, (int64_t)number_idx);
+                }
             }
         }
         {
@@ -5504,6 +5574,35 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
             return 0;
         }
         return simple_emit_instruction(program, AIVM_OP_STR_ESCAPE, 0);
+    }
+    if (strcmp(node->kind, "Add") == 0 || strcmp(node->kind, "Sub") == 0 ||
+        strcmp(node->kind, "Mul") == 0 || strcmp(node->kind, "Div") == 0 ||
+        strcmp(node->kind, "Mod") == 0 || strcmp(node->kind, "Pow") == 0 ||
+        strcmp(node->kind, "Lt") == 0 ||
+        strcmp(node->kind, "Eq") == 0 || strcmp(node->kind, "ToString") == 0) {
+        SimpleNodeView first;
+        SimpleNodeView second;
+        if (strcmp(node->kind, "ToString") == 0) {
+            if (!simple_parse_next_node(node->body_start, node->body_end, &first) ||
+                !simple_compile_expr_node(&first, program, locals, local_count)) {
+                return simple_fail("ToString missing arg");
+            }
+            return simple_emit_instruction(program, AIVM_OP_TO_STRING, 0);
+        }
+        if (!simple_parse_next_node(node->body_start, node->body_end, &first) ||
+            !simple_parse_next_node(first.next, node->body_end, &second) ||
+            !simple_compile_expr_node(&first, program, locals, local_count) ||
+            !simple_compile_expr_node(&second, program, locals, local_count)) {
+            return simple_failf("%s missing args", node->kind);
+        }
+        if (strcmp(node->kind, "Add") == 0) return simple_emit_instruction(program, AIVM_OP_ADD_INT, 0);
+        if (strcmp(node->kind, "Sub") == 0) return simple_emit_instruction(program, AIVM_OP_SUB_NUM, 0);
+        if (strcmp(node->kind, "Mul") == 0) return simple_emit_instruction(program, AIVM_OP_MUL_NUM, 0);
+        if (strcmp(node->kind, "Div") == 0) return simple_emit_instruction(program, AIVM_OP_DIV_NUM, 0);
+        if (strcmp(node->kind, "Mod") == 0) return simple_emit_instruction(program, AIVM_OP_MOD_NUM, 0);
+        if (strcmp(node->kind, "Pow") == 0) return simple_emit_instruction(program, AIVM_OP_POW_NUM, 0);
+        if (strcmp(node->kind, "Lt") == 0) return simple_emit_instruction(program, AIVM_OP_LT_NUM, 0);
+        return simple_emit_instruction(program, AIVM_OP_EQ, 0);
     }
     return simple_failf("unsupported expr kind: %s", node->kind);
 }
@@ -7352,7 +7451,11 @@ static int simple_compile_expr_ext(
         }
         return simple_emit_instruction(program, AIVM_OP_STR_REMOVE, 0);
     }
-    if (strcmp(node->kind, "Add") == 0 || strcmp(node->kind, "Eq") == 0 || strcmp(node->kind, "ToString") == 0 ||
+    if (strcmp(node->kind, "Add") == 0 || strcmp(node->kind, "Sub") == 0 ||
+        strcmp(node->kind, "Mul") == 0 || strcmp(node->kind, "Div") == 0 ||
+        strcmp(node->kind, "Mod") == 0 || strcmp(node->kind, "Pow") == 0 ||
+        strcmp(node->kind, "Lt") == 0 ||
+        strcmp(node->kind, "Eq") == 0 || strcmp(node->kind, "ToString") == 0 ||
         strcmp(node->kind, "AttrCount") == 0 || strcmp(node->kind, "AttrKey") == 0 ||
         strcmp(node->kind, "AttrValueString") == 0 || strcmp(node->kind, "AttrValueInt") == 0 ||
         strcmp(node->kind, "AttrValueBool") == 0 || strcmp(node->kind, "AttrValueKind") == 0 ||
@@ -7387,6 +7490,12 @@ static int simple_compile_expr_ext(
             return 0;
         }
         if (strcmp(node->kind, "Add") == 0) return simple_emit_instruction(program, AIVM_OP_ADD_INT, 0);
+        if (strcmp(node->kind, "Sub") == 0) return simple_emit_instruction(program, AIVM_OP_SUB_NUM, 0);
+        if (strcmp(node->kind, "Mul") == 0) return simple_emit_instruction(program, AIVM_OP_MUL_NUM, 0);
+        if (strcmp(node->kind, "Div") == 0) return simple_emit_instruction(program, AIVM_OP_DIV_NUM, 0);
+        if (strcmp(node->kind, "Mod") == 0) return simple_emit_instruction(program, AIVM_OP_MOD_NUM, 0);
+        if (strcmp(node->kind, "Pow") == 0) return simple_emit_instruction(program, AIVM_OP_POW_NUM, 0);
+        if (strcmp(node->kind, "Lt") == 0) return simple_emit_instruction(program, AIVM_OP_LT_NUM, 0);
         if (strcmp(node->kind, "Eq") == 0) return simple_emit_instruction(program, AIVM_OP_EQ, 0);
         if (strcmp(node->kind, "AttrKey") == 0) return simple_emit_instruction(program, AIVM_OP_ATTR_KEY, 0);
         if (strcmp(node->kind, "AttrValueString") == 0) return simple_emit_instruction(program, AIVM_OP_ATTR_VALUE_STRING, 0);
@@ -7941,6 +8050,13 @@ static void write_i64_le(FILE* f, int64_t value)
     (void)fwrite(bytes, 1U, 8U, f);
 }
 
+static void write_f64_le(FILE* f, double value)
+{
+    uint64_t u = 0U;
+    memcpy(&u, &value, sizeof(u));
+    write_i64_le(f, (int64_t)u);
+}
+
 static int write_program_as_aibc1(const AivmProgram* program, const char* out_path)
 {
     FILE* f;
@@ -7956,6 +8072,8 @@ static int write_program_as_aibc1(const AivmProgram* program, const char* out_pa
     for (i = 0U; i < program->constant_count; i += 1U) {
         AivmValue v = program->constant_storage[i];
         if (v.type == AIVM_VAL_INT) {
+            const_payload_size += 1U + 8U;
+        } else if (v.type == AIVM_VAL_NUMBER) {
             const_payload_size += 1U + 8U;
         } else if (v.type == AIVM_VAL_BOOL) {
             const_payload_size += 1U + 1U;
@@ -8012,6 +8130,9 @@ static int write_program_as_aibc1(const AivmProgram* program, const char* out_pa
             if (v.type == AIVM_VAL_INT) {
                 (void)fputc(1, f);
                 write_i64_le(f, v.int_value);
+            } else if (v.type == AIVM_VAL_NUMBER) {
+                (void)fputc(7, f);
+                write_f64_le(f, v.number_value);
             } else if (v.type == AIVM_VAL_BOOL) {
                 (void)fputc(2, f);
                 (void)fputc(v.bool_value ? 1 : 0, f);

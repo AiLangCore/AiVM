@@ -47,9 +47,12 @@ AivmValue aivm_value_int(int64_t input)
     return value;
 }
 
-AivmValue aivm_value_number(int64_t input)
+AivmValue aivm_value_number(double input)
 {
-    return aivm_value_int(input);
+    AivmValue value;
+    value.type = AIVM_VAL_NUMBER;
+    value.number_value = input;
+    return value;
 }
 
 AivmValue aivm_value_bool(int input)
@@ -103,6 +106,13 @@ AivmValue aivm_value_pair(int64_t input)
 
 int aivm_value_equals(AivmValue left, AivmValue right)
 {
+    if ((left.type == AIVM_VAL_INT || left.type == AIVM_VAL_NUMBER) &&
+        (right.type == AIVM_VAL_INT || right.type == AIVM_VAL_NUMBER)) {
+        double left_number = (left.type == AIVM_VAL_INT) ? (double)left.int_value : left.number_value;
+        double right_number = (right.type == AIVM_VAL_INT) ? (double)right.int_value : right.number_value;
+        return left_number == right_number ? 1 : 0;
+    }
+
     if (left.type != right.type) {
         return 0;
     }
@@ -113,6 +123,9 @@ int aivm_value_equals(AivmValue left, AivmValue right)
 
         case AIVM_VAL_INT:
             return left.int_value == right.int_value ? 1 : 0;
+
+        case AIVM_VAL_NUMBER:
+            return left.number_value == right.number_value ? 1 : 0;
 
         case AIVM_VAL_BOOL:
             return left.bool_value == right.bool_value ? 1 : 0;
@@ -161,6 +174,7 @@ int aivm_value_is_immutable_message_payload(AivmValue value)
     switch (value.type) {
         case AIVM_VAL_VOID:
         case AIVM_VAL_INT:
+        case AIVM_VAL_NUMBER:
         case AIVM_VAL_BOOL:
         case AIVM_VAL_NULL:
             return 1;

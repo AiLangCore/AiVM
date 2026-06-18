@@ -255,6 +255,12 @@ static const char* cli_opcode_name(AivmOpcode opcode)
         case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
         case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
         case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
+        case AIVM_OP_SUB_NUM: return "SUB_NUM";
+        case AIVM_OP_MUL_NUM: return "MUL_NUM";
+        case AIVM_OP_DIV_NUM: return "DIV_NUM";
+        case AIVM_OP_MOD_NUM: return "MOD_NUM";
+        case AIVM_OP_POW_NUM: return "POW_NUM";
+        case AIVM_OP_LT_NUM: return "LT_NUM";
         default: return "UNKNOWN";
     }
 }
@@ -264,6 +270,7 @@ static const char* cli_value_type_name(AivmValueType type)
     switch (type) {
         case AIVM_VAL_VOID: return "void";
         case AIVM_VAL_INT: return "int";
+        case AIVM_VAL_NUMBER: return "number";
         case AIVM_VAL_BOOL: return "bool";
         case AIVM_VAL_NULL: return "null";
         case AIVM_VAL_STRING: return "string";
@@ -287,6 +294,9 @@ static void format_value_preview(const AivmValue* value, char* out, size_t out_l
     switch (value->type) {
         case AIVM_VAL_INT:
             (void)snprintf(out, out_len, "int(%lld)", (long long)value->int_value);
+            break;
+        case AIVM_VAL_NUMBER:
+            (void)snprintf(out, out_len, "number(%.15g)", value->number_value);
             break;
         case AIVM_VAL_BOOL:
             (void)snprintf(out, out_len, "bool(%s)", value->bool_value ? "true" : "false");

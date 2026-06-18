@@ -388,6 +388,7 @@ static const char* vm_value_type_name(AivmValueType type)
     switch (type) {
         case AIVM_VAL_VOID: return "void";
         case AIVM_VAL_INT: return "int";
+        case AIVM_VAL_NUMBER: return "number";
         case AIVM_VAL_BOOL: return "bool";
         case AIVM_VAL_NULL: return "null";
         case AIVM_VAL_STRING: return "string";
@@ -396,6 +397,66 @@ static const char* vm_value_type_name(AivmValueType type)
         case AIVM_VAL_PAIR: return "pair";
         default: return "unknown";
     }
+}
+
+static int vm_value_is_numeric(AivmValue value)
+{
+    return value.type == AIVM_VAL_INT || value.type == AIVM_VAL_NUMBER;
+}
+
+static double vm_value_as_number(AivmValue value)
+{
+    return value.type == AIVM_VAL_INT ? (double)value.int_value : value.number_value;
+}
+
+static int64_t double_truncate_to_i64(double value)
+{
+    return (int64_t)value;
+}
+
+static int double_is_i64_value(double value, int64_t* out)
+{
+    int64_t truncated = double_truncate_to_i64(value);
+    if ((double)truncated != value) {
+        return 0;
+    }
+    if (out != NULL) {
+        *out = truncated;
+    }
+    return 1;
+}
+
+static AivmValue vm_numeric_result(double value)
+{
+    int64_t int_value = 0;
+    if (double_is_i64_value(value, &int_value)) {
+        return aivm_value_int(int_value);
+    }
+    return aivm_value_number(value);
+}
+
+static double double_trunc_toward_zero(double value)
+{
+    return (double)((int64_t)value);
+}
+
+static double double_pow_whole(double base, double exponent)
+{
+    int64_t exp = (int64_t)exponent;
+    int negative = 0;
+    double result = 1.0;
+    if ((double)exp != exponent) {
+        return 0.0;
+    }
+    if (exp < 0) {
+        negative = 1;
+        exp = -exp;
+    }
+    while (exp > 0) {
+        result *= base;
+        exp -= 1;
+    }
+    return negative ? (1.0 / result) : result;
 }
 
 static void set_vm_error_add_int_type_mismatch(AivmVm* vm, AivmValue left, AivmValue right)
@@ -2304,6 +2365,12 @@ static size_t append_vm_value_preview(char* buffer, size_t capacity, size_t used
             capacity - used,
             "(%lld)",
             (long long)value.int_value);
+    } else if (value.type == AIVM_VAL_NUMBER) {
+        wrote = snprintf(
+            buffer + used,
+            capacity - used,
+            "(%.15g)",
+            value.number_value);
     } else if (value.type == AIVM_VAL_BOOL) {
         wrote = snprintf(
             buffer + used,
@@ -3026,6 +3093,7 @@ static int copy_worker_boundary_value_with_context(
     switch (source.type) {
         case AIVM_VAL_VOID:
         case AIVM_VAL_INT:
+        case AIVM_VAL_NUMBER:
         case AIVM_VAL_BOOL:
         case AIVM_VAL_NULL:
             *out_value = source;
@@ -4440,6 +4508,21 @@ static int create_runtime_node_from_value(AivmVm* vm, AivmValue value, int64_t* 
         attrs[0].kind = AIVM_NODE_ATTR_INT;
         attrs[0].int_value = value.int_value;
         attr_count = 1U;
+    } else if (value.type == AIVM_VAL_NUMBER) {
+        char* number_text;
+        char number_buffer[64];
+        (void)snprintf(number_buffer, sizeof(number_buffer), "%.15g", value.number_value);
+        number_text = copy_string_to_arena(vm, number_buffer);
+        if (number_text == NULL) {
+            set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "Runtime number string allocation failed.");
+            return 0;
+        }
+        node_kind = "Lit";
+        node_id = "runtime_number";
+        attrs[0].key = "value";
+        attrs[0].kind = AIVM_NODE_ATTR_STRING;
+        attrs[0].string_value = number_text;
+        attr_count = 1U;
     } else if (value.type == AIVM_VAL_BOOL) {
         node_kind = "Lit";
         node_id = "runtime_bool";
@@ -5100,12 +5183,113 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (left.type != AIVM_VAL_INT || right.type != AIVM_VAL_INT) {
+            if (!vm_value_is_numeric(left) || !vm_value_is_numeric(right)) {
                 set_vm_error_add_int_type_mismatch(vm, left, right);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!aivm_stack_push(vm, aivm_value_int(left.int_value + right.int_value))) {
+            if (left.type == AIVM_VAL_INT && right.type == AIVM_VAL_INT) {
+                if (!aivm_stack_push(vm, aivm_value_int(left.int_value + right.int_value))) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+            } else if (!aivm_stack_push(vm, vm_numeric_result(vm_value_as_number(left) + vm_value_as_number(right)))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_SUB_NUM:
+        case AIVM_OP_MUL_NUM:
+        case AIVM_OP_DIV_NUM:
+        case AIVM_OP_MOD_NUM:
+        case AIVM_OP_POW_NUM: {
+            AivmValue right;
+            AivmValue left;
+            double left_number;
+            double right_number;
+            double result_number;
+            if (!aivm_stack_pop(vm, &right) || !aivm_stack_pop(vm, &left)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!vm_value_is_numeric(left) || !vm_value_is_numeric(right)) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "Numeric operation requires number operands.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            left_number = vm_value_as_number(left);
+            right_number = vm_value_as_number(right);
+            if (instruction->opcode == AIVM_OP_SUB_NUM) {
+                if (left.type == AIVM_VAL_INT && right.type == AIVM_VAL_INT) {
+                    if (!aivm_stack_push(vm, aivm_value_int(left.int_value - right.int_value))) {
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                    vm->instruction_pointer += 1U;
+                    break;
+                }
+                result_number = left_number - right_number;
+            } else if (instruction->opcode == AIVM_OP_MUL_NUM) {
+                if (left.type == AIVM_VAL_INT && right.type == AIVM_VAL_INT) {
+                    if (!aivm_stack_push(vm, aivm_value_int(left.int_value * right.int_value))) {
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                    vm->instruction_pointer += 1U;
+                    break;
+                }
+                result_number = left_number * right_number;
+            } else if (instruction->opcode == AIVM_OP_DIV_NUM) {
+                if (right_number == 0.0) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "DIV requires non-zero divisor.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                result_number = left_number / right_number;
+            } else if (instruction->opcode == AIVM_OP_MOD_NUM) {
+                double quotient;
+                if (right_number == 0.0) {
+                    set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MOD requires non-zero divisor.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                if (left.type == AIVM_VAL_INT && right.type == AIVM_VAL_INT) {
+                    if (!aivm_stack_push(vm, aivm_value_int(left.int_value % right.int_value))) {
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                    vm->instruction_pointer += 1U;
+                    break;
+                }
+                quotient = double_trunc_toward_zero(left_number / right_number);
+                result_number = left_number - (quotient * right_number);
+            } else {
+                result_number = double_pow_whole(left_number, right_number);
+            }
+            if (!aivm_stack_push(vm, vm_numeric_result(result_number))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_LT_NUM: {
+            AivmValue right;
+            AivmValue left;
+            if (!aivm_stack_pop(vm, &right) || !aivm_stack_pop(vm, &left)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!vm_value_is_numeric(left) || !vm_value_is_numeric(right)) {
+                set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "LT requires number operands.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_bool(vm_value_as_number(left) < vm_value_as_number(right) ? 1 : 0))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
@@ -5448,6 +5632,7 @@ void aivm_step(AivmVm* vm)
             AivmValue value;
             char bool_buffer[6];
             char int_buffer[32];
+            char number_buffer[64];
             char* bytes_output;
             size_t int_index;
             uint64_t magnitude;
@@ -5525,6 +5710,15 @@ void aivm_step(AivmVm* vm)
                     int_buffer[int_index] = '-';
                 }
                 if (!push_string_copy(vm, &int_buffer[int_index])) {
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                vm->instruction_pointer += 1U;
+                break;
+            }
+            if (value.type == AIVM_VAL_NUMBER) {
+                (void)snprintf(number_buffer, sizeof(number_buffer), "%.15g", value.number_value);
+                if (!push_string_copy(vm, number_buffer)) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }

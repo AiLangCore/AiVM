@@ -47,8 +47,11 @@ int main(void)
     if (expect(int_value.int_value == 42) != 0) {
         return 1;
     }
-    number_value = aivm_value_number(42);
-    if (expect(number_value.type == AIVM_VAL_INT) != 0) {
+    number_value = aivm_value_number(42.5);
+    if (expect(number_value.type == AIVM_VAL_NUMBER) != 0) {
+        return 1;
+    }
+    if (expect(number_value.number_value == 42.5) != 0) {
         return 1;
     }
 
@@ -73,6 +76,12 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(int_value, aivm_value_int(42)) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(int_value, aivm_value_number(42.0)) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(int_value, number_value) == 0) != 0) {
         return 1;
     }
     if (expect(aivm_value_equals(true_value, false_value) == 0) != 0) {
