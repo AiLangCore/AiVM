@@ -23,6 +23,7 @@ changed deliberately.
 tests/
   unit/         isolated mechanical checks for VM, memory, bytecode, syscalls
   integration/ subsystem interaction checks and host-boundary smoke tests
+  spec/         specification-to-verification coverage matrix and gate
   fuzz/         deterministic corpus/mutation targets and future libFuzzer harnesses
   stress/       long-running and repeated-operation abuse tests
   perf/         benchmark and performance regression checks
@@ -44,6 +45,7 @@ ctest --test-dir .tmp/aivm-c-build-native -L memory --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L bytecode --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L syscalls --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L stdlib --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L spec --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L golden --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L security --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L fuzz --output-on-failure
@@ -58,6 +60,15 @@ ctest --test-dir .tmp/aivm-c-build-native -L perf-release --output-on-failure
 Default local verification runs `unit|integration|golden|security`. Fuzz and
 stress labels are available locally and are intended for nightly or explicit
 long-running validation.
+
+## Specification Coverage
+
+Specification coverage lives in `tests/spec/coverage.tsv`. It maps normative
+AiVM specs and contract documents to the tests, scripts, or native gates that
+verify them. Rows can be `covered` or `tracked-gap`; tracked gaps are allowed
+only when the note states what API or implementation work is missing. The
+`aivm_test_spec_coverage` CTest gate verifies the matrix shape, required spec
+representation, duplicate row IDs, and referenced verification paths.
 
 ## Fuzz And Stress Budgets
 

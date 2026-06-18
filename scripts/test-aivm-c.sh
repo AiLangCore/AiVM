@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PRESET="${AIVM_CMAKE_PRESET:-aivm-native-unix}"
-TEST_LABEL="${AIVM_CTEST_LABEL:-unit|integration|golden|security}"
+TEST_LABEL="${AIVM_CTEST_LABEL:-unit|integration|golden|security|spec}"
 
 "${ROOT_DIR}/scripts/check-syscall-contracts.sh"
 
