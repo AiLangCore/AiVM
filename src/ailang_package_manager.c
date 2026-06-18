@@ -1891,10 +1891,13 @@ int ailang_package_manager_restore(
                 free(manifest);
                 return pm_set_error(error, error_len, "package clone/checkout failed: %s", record.name);
             }
-            if (snprintf(lock_package_path, sizeof(lock_package_path), ".ailang/packages/%s", record.name) >=
-                (int)sizeof(lock_package_path)) {
-                free(manifest);
-                return pm_set_error(error, error_len, "package lock path overflow: %s", record.name);
+            {
+                char packages_dir[PATH_MAX];
+                if (!pm_join_path(".ailang", "packages", packages_dir, sizeof(packages_dir)) ||
+                    !pm_join_path(packages_dir, record.name, lock_package_path, sizeof(lock_package_path))) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "package lock path overflow: %s", record.name);
+                }
             }
         }
         if (!pm_load_package_source_metadata(package_dir, &record, &source_metadata, error, error_len)) {
