@@ -96,11 +96,17 @@ int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, con
     return 0;
 }
 
-int native_host_ui_draw_path(int64_t handle, const char* path, const char* color, int stroke_width)
+int native_host_ui_draw_path(
+    int64_t handle,
+    const char* path,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width)
 {
     (void)handle;
     (void)path;
-    (void)color;
+    (void)fill_color;
+    (void)stroke_color;
     (void)stroke_width;
     return 0;
 }

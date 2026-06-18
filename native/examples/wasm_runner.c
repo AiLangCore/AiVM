@@ -429,6 +429,41 @@ static int native_syscall_process_argv(
     return AIVM_SYSCALL_OK;
 }
 
+static int native_syscall_identity_0(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    const char* value = "";
+    (void)args;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (target == NULL || arg_count != 0U) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (strcmp(target, "sys.platform") == 0) {
+        value = "wasm";
+    } else if (strcmp(target, "sys.arch") == 0) {
+        value = "wasm32";
+    } else if (strcmp(target, "sys.os.version") == 0) {
+        value = "web";
+    } else if (strcmp(target, "sys.runtime") == 0) {
+        value = "aivm-wasm32-web";
+    } else if (strcmp(target, "sys.runtime.platform") == 0) {
+        value = "web";
+    } else if (strcmp(target, "sys.runtime.target") == 0) {
+        value = "wasm32";
+    } else {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_NOT_FOUND;
+    }
+    *result = aivm_value_string(value);
+    return AIVM_SYSCALL_OK;
+}
+
 #ifdef AIVM_WASM_WEB
 EM_JS(int, aivm_web_stdin_fill, (char* out_ptr, int out_len), {
     if (typeof globalThis.__aivmStdinRead !== 'function') {
@@ -507,13 +542,14 @@ EM_JS(int, aivm_web_ui_draw_ellipse, (int window_id, int x, int y, int w, int h,
     return globalThis.__aivmUiDrawEllipse(window_id, x, y, w, h, color) | 0;
 });
 
-EM_JS(int, aivm_web_ui_draw_path, (int window_id, const char* path_ptr, const char* color_ptr, int stroke_width), {
+EM_JS(int, aivm_web_ui_draw_path, (int window_id, const char* path_ptr, const char* fill_color_ptr, const char* stroke_color_ptr, int stroke_width), {
     if (typeof globalThis.__aivmUiDrawPath !== 'function') {
         return -1;
     }
     const path = UTF8ToString(path_ptr);
-    const color = UTF8ToString(color_ptr);
-    return globalThis.__aivmUiDrawPath(window_id, path, color, stroke_width) | 0;
+    const fillColor = UTF8ToString(fill_color_ptr);
+    const strokeColor = UTF8ToString(stroke_color_ptr);
+    return globalThis.__aivmUiDrawPath(window_id, path, fillColor, strokeColor, stroke_width) | 0;
 });
 
 EM_JS(int, aivm_web_ui_draw_image, (int window_id, int x, int y, int w, int h, const char* src_ptr), {
@@ -1200,13 +1236,15 @@ static int native_syscall_ui_draw_path(
     if (result == NULL) {
         return AIVM_SYSCALL_ERR_NULL_RESULT;
     }
-    if (arg_count != 4U || args == NULL ||
+    if (arg_count != 5U || args == NULL ||
         args[0].type != AIVM_VAL_INT ||
         args[1].type != AIVM_VAL_STRING ||
         args[1].string_value == NULL ||
         args[2].type != AIVM_VAL_STRING ||
         args[2].string_value == NULL ||
-        args[3].type != AIVM_VAL_INT) {
+        args[3].type != AIVM_VAL_STRING ||
+        args[3].string_value == NULL ||
+        args[4].type != AIVM_VAL_INT) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
@@ -1215,7 +1253,8 @@ static int native_syscall_ui_draw_path(
             (int)args[0].int_value,
             args[1].string_value,
             args[2].string_value,
-            (int)args[3].int_value) != 0) {
+            args[3].string_value,
+            (int)args[4].int_value) != 0) {
         return ui_fail_not_available(result);
     }
 #else
@@ -2181,6 +2220,13 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_console_read_line;
         } else if (strcmp(contract->target, "sys.console.readAllStdin") == 0) {
             bindings[binding_count].handler = native_syscall_console_read_all_stdin;
+        } else if (strcmp(contract->target, "sys.platform") == 0 ||
+                   strcmp(contract->target, "sys.arch") == 0 ||
+                   strcmp(contract->target, "sys.os.version") == 0 ||
+                   strcmp(contract->target, "sys.runtime") == 0 ||
+                   strcmp(contract->target, "sys.runtime.platform") == 0 ||
+                   strcmp(contract->target, "sys.runtime.target") == 0) {
+            bindings[binding_count].handler = native_syscall_identity_0;
         } else if (strcmp(contract->target, "sys.remote.call") == 0) {
             bindings[binding_count].handler = native_syscall_remote_call;
         } else if (strcmp(contract->target, "sys.ui.createWindow") == 0) {

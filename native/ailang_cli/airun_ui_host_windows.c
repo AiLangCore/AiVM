@@ -213,6 +213,11 @@ static int native_ui_windows_path_parse_number(const char** io_cursor, double* o
     return 1;
 }
 
+static int native_ui_windows_paint_is_active(const char* color)
+{
+    return color != NULL && color[0] != '\0' && _stricmp(color, "none") != 0;
+}
+
 static void native_ui_windows_key_name(WPARAM wparam, char* out_key, size_t key_capacity)
 {
     UINT vk = (UINT)wparam;
@@ -724,12 +729,19 @@ int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, con
     return 1;
 }
 
-int native_host_ui_draw_path(int64_t handle, const char* path, const char* color, int stroke_width)
+int native_host_ui_draw_path(
+    int64_t handle,
+    const char* path,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width)
 {
     NativeUiWindowsSlot* slot = native_ui_windows_find_slot(handle);
     HDC dc;
     HPEN pen = NULL;
     HPEN prev_pen = NULL;
+    HBRUSH brush = NULL;
+    HBRUSH prev_brush = NULL;
     const char* cursor;
     char cmd = '\0';
     double x = 0.0;
@@ -737,6 +749,10 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
     double start_x = 0.0;
     double start_y = 0.0;
     int has_point = 0;
+    int fill_active;
+    int stroke_active;
+    POINT points[256];
+    int point_count = 0;
     if (slot == NULL || slot->hwnd == NULL || path == NULL) {
         return 0;
     }
@@ -744,12 +760,26 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
     if (dc == NULL) {
         return 0;
     }
-    pen = CreatePen(PS_SOLID, stroke_width > 0 ? stroke_width : 1, native_ui_windows_parse_color(color, RGB(0, 0, 0)));
-    if (pen == NULL) {
+    fill_active = native_ui_windows_paint_is_active(fill_color);
+    stroke_active = stroke_width > 0 && native_ui_windows_paint_is_active(stroke_color);
+    if (stroke_active) {
+        pen = CreatePen(PS_SOLID, stroke_width, native_ui_windows_parse_color(stroke_color, RGB(0, 0, 0)));
+    } else {
+        pen = CreatePen(PS_NULL, 0, RGB(0, 0, 0));
+    }
+    brush = CreateSolidBrush(native_ui_windows_parse_color(fill_color, RGB(0, 0, 0)));
+    if (pen == NULL || brush == NULL) {
+        if (pen != NULL) {
+            DeleteObject(pen);
+        }
+        if (brush != NULL) {
+            DeleteObject(brush);
+        }
         ReleaseDC(slot->hwnd, dc);
         return 0;
     }
     prev_pen = (HPEN)SelectObject(dc, pen);
+    prev_brush = (HBRUSH)SelectObject(dc, brush);
     cursor = path;
     while (cursor != NULL && *cursor != '\0') {
         double a = 0.0;
@@ -762,26 +792,36 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
             cmd = *cursor;
             cursor += 1;
             if (cmd == 'Z' || cmd == 'z') {
+                if (fill_active && point_count >= 3) {
+                    (void)Polygon(dc, points, point_count);
+                }
                 if (has_point) {
-                    MoveToEx(dc, (int)x, (int)y, NULL);
-                    (void)LineTo(dc, (int)start_x, (int)start_y);
+                    if (stroke_active) {
+                        MoveToEx(dc, (int)x, (int)y, NULL);
+                        (void)LineTo(dc, (int)start_x, (int)start_y);
+                    }
                     x = start_x;
                     y = start_y;
                 }
                 cmd = '\0';
+                point_count = 0;
             }
             continue;
         }
         if (cmd == '\0') {
             SelectObject(dc, prev_pen);
+            SelectObject(dc, prev_brush);
             DeleteObject(pen);
+            DeleteObject(brush);
             ReleaseDC(slot->hwnd, dc);
             return 0;
         }
         if (cmd == 'M' || cmd == 'm' || cmd == 'L' || cmd == 'l') {
             if (!native_ui_windows_path_parse_number(&cursor, &a) || !native_ui_windows_path_parse_number(&cursor, &b)) {
                 SelectObject(dc, prev_pen);
+                SelectObject(dc, prev_brush);
                 DeleteObject(pen);
+                DeleteObject(brush);
                 ReleaseDC(slot->hwnd, dc);
                 return 0;
             }
@@ -795,51 +835,84 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
                 start_x = x;
                 start_y = y;
                 has_point = 1;
+                point_count = 0;
+                points[point_count].x = (LONG)((int)x);
+                points[point_count].y = (LONG)((int)y);
+                point_count += 1;
                 cmd = (cmd == 'm') ? 'l' : 'L';
             } else {
-                MoveToEx(dc, (int)x, (int)y, NULL);
-                (void)LineTo(dc, (int)a, (int)b);
+                if (stroke_active) {
+                    MoveToEx(dc, (int)x, (int)y, NULL);
+                    (void)LineTo(dc, (int)a, (int)b);
+                }
                 x = a;
                 y = b;
                 has_point = 1;
+                if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                    points[point_count].x = (LONG)((int)x);
+                    points[point_count].y = (LONG)((int)y);
+                    point_count += 1;
+                }
             }
             continue;
         }
         if (cmd == 'H' || cmd == 'h') {
             if (!native_ui_windows_path_parse_number(&cursor, &a)) {
                 SelectObject(dc, prev_pen);
+                SelectObject(dc, prev_brush);
                 DeleteObject(pen);
+                DeleteObject(brush);
                 ReleaseDC(slot->hwnd, dc);
                 return 0;
             }
             a = (cmd == 'h') ? (x + a) : a;
-            MoveToEx(dc, (int)x, (int)y, NULL);
-            (void)LineTo(dc, (int)a, (int)y);
+            if (stroke_active) {
+                MoveToEx(dc, (int)x, (int)y, NULL);
+                (void)LineTo(dc, (int)a, (int)y);
+            }
             x = a;
             has_point = 1;
+            if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                points[point_count].x = (LONG)((int)x);
+                points[point_count].y = (LONG)((int)y);
+                point_count += 1;
+            }
             continue;
         }
         if (cmd == 'V' || cmd == 'v') {
             if (!native_ui_windows_path_parse_number(&cursor, &a)) {
                 SelectObject(dc, prev_pen);
+                SelectObject(dc, prev_brush);
                 DeleteObject(pen);
+                DeleteObject(brush);
                 ReleaseDC(slot->hwnd, dc);
                 return 0;
             }
             a = (cmd == 'v') ? (y + a) : a;
-            MoveToEx(dc, (int)x, (int)y, NULL);
-            (void)LineTo(dc, (int)x, (int)a);
+            if (stroke_active) {
+                MoveToEx(dc, (int)x, (int)y, NULL);
+                (void)LineTo(dc, (int)x, (int)a);
+            }
             y = a;
             has_point = 1;
+            if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                points[point_count].x = (LONG)((int)x);
+                points[point_count].y = (LONG)((int)y);
+                point_count += 1;
+            }
             continue;
         }
         SelectObject(dc, prev_pen);
+        SelectObject(dc, prev_brush);
         DeleteObject(pen);
+        DeleteObject(brush);
         ReleaseDC(slot->hwnd, dc);
         return 0;
     }
     SelectObject(dc, prev_pen);
+    SelectObject(dc, prev_brush);
     DeleteObject(pen);
+    DeleteObject(brush);
     ReleaseDC(slot->hwnd, dc);
     return 1;
 }

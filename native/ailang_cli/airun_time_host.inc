@@ -21,6 +21,44 @@ static int native_syscall_identity_0(
 #else
         value = "linux";
 #endif
+    } else if (strcmp(target, "sys.runtime.platform") == 0) {
+        const char* override = getenv("AILANG_RUNTIME_PLATFORM");
+        if (override != NULL && override[0] != '\0') {
+            value = override;
+        } else {
+#if defined(__EMSCRIPTEN__)
+            value = "web";
+#else
+            value = "desktop";
+#endif
+        }
+    } else if (strcmp(target, "sys.runtime.target") == 0) {
+        const char* override = getenv("AILANG_RUNTIME_TARGET");
+        if (override != NULL && override[0] != '\0') {
+            value = override;
+        } else {
+#if defined(__EMSCRIPTEN__)
+            value = "wasm32";
+#elif defined(_WIN32)
+#if defined(_M_ARM64) || defined(__aarch64__)
+            value = "windows-arm64";
+#else
+            value = "windows-x64";
+#endif
+#elif defined(__APPLE__)
+#if defined(__aarch64__) || defined(__arm64__)
+            value = "osx-arm64";
+#else
+            value = "osx-x64";
+#endif
+#else
+#if defined(__aarch64__) || defined(__arm64__)
+            value = "linux-arm64";
+#else
+            value = "linux-x64";
+#endif
+#endif
+        }
     } else if (strcmp(target, "sys.arch") == 0) {
 #if defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
         value = "arm64";

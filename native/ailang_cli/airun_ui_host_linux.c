@@ -208,6 +208,11 @@ static int native_ui_linux_path_parse_number(const char** io_cursor, double* out
     return 1;
 }
 
+static int native_ui_linux_paint_is_active(const char* color)
+{
+    return color != NULL && color[0] != '\0' && strcmp(color, "none") != 0;
+}
+
 void native_host_ui_reset(void)
 {
     size_t i;
@@ -531,10 +536,16 @@ int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, con
     return 1;
 }
 
-int native_host_ui_draw_path(int64_t handle, const char* path, const char* color, int stroke_width)
+int native_host_ui_draw_path(
+    int64_t handle,
+    const char* path,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width)
 {
     NativeUiLinuxWindowSlot* slot = native_ui_linux_find_slot(handle);
-    unsigned long pixel;
+    unsigned long fill_pixel;
+    unsigned long stroke_pixel;
     const char* cursor;
     char cmd = '\0';
     double x = 0.0;
@@ -542,12 +553,19 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
     double start_x = 0.0;
     double start_y = 0.0;
     int has_point = 0;
+    int fill_active;
+    int stroke_active;
+    XPoint points[256];
+    int point_count = 0;
     if (slot == NULL || g_native_ui_display == NULL || path == NULL) {
         return 0;
     }
-    pixel = native_ui_linux_parse_color(color, BlackPixel(g_native_ui_display, g_native_ui_screen));
-    XSetForeground(g_native_ui_display, slot->gc, pixel);
-    if (stroke_width > 0) {
+    fill_active = native_ui_linux_paint_is_active(fill_color);
+    stroke_active = stroke_width > 0 && native_ui_linux_paint_is_active(stroke_color);
+    fill_pixel = native_ui_linux_parse_color(fill_color, BlackPixel(g_native_ui_display, g_native_ui_screen));
+    stroke_pixel = native_ui_linux_parse_color(stroke_color, BlackPixel(g_native_ui_display, g_native_ui_screen));
+    if (stroke_active) {
+        XSetForeground(g_native_ui_display, slot->gc, stroke_pixel);
         XSetLineAttributes(g_native_ui_display, slot->gc, (unsigned int)stroke_width, LineSolid, CapButt, JoinMiter);
     }
     cursor = path;
@@ -562,12 +580,22 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
             cmd = *cursor;
             cursor += 1;
             if (cmd == 'Z' || cmd == 'z') {
+                if (fill_active && point_count >= 3) {
+                    XSetForeground(g_native_ui_display, slot->gc, fill_pixel);
+                    XFillPolygon(g_native_ui_display, slot->window, slot->gc, points, point_count, Complex, CoordModeOrigin);
+                    if (stroke_active) {
+                        XSetForeground(g_native_ui_display, slot->gc, stroke_pixel);
+                    }
+                }
                 if (has_point) {
-                    XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)start_x, (int)start_y);
+                    if (stroke_active) {
+                        XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)start_x, (int)start_y);
+                    }
                     x = start_x;
                     y = start_y;
                 }
                 cmd = '\0';
+                point_count = 0;
             }
             continue;
         }
@@ -588,12 +616,23 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
                 start_x = x;
                 start_y = y;
                 has_point = 1;
+                point_count = 0;
+                points[point_count].x = (short)((int)x);
+                points[point_count].y = (short)((int)y);
+                point_count += 1;
                 cmd = (cmd == 'm') ? 'l' : 'L';
             } else {
-                XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)a, (int)b);
+                if (stroke_active) {
+                    XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)a, (int)b);
+                }
                 x = a;
                 y = b;
                 has_point = 1;
+                if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                    points[point_count].x = (short)((int)x);
+                    points[point_count].y = (short)((int)y);
+                    point_count += 1;
+                }
             }
             continue;
         }
@@ -602,9 +641,16 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
                 return 0;
             }
             a = (cmd == 'h') ? (x + a) : a;
-            XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)a, (int)y);
+            if (stroke_active) {
+                XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)a, (int)y);
+            }
             x = a;
             has_point = 1;
+            if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                points[point_count].x = (short)((int)x);
+                points[point_count].y = (short)((int)y);
+                point_count += 1;
+            }
             continue;
         }
         if (cmd == 'V' || cmd == 'v') {
@@ -612,9 +658,16 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
                 return 0;
             }
             a = (cmd == 'v') ? (y + a) : a;
-            XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)x, (int)a);
+            if (stroke_active) {
+                XDrawLine(g_native_ui_display, slot->window, slot->gc, (int)x, (int)y, (int)x, (int)a);
+            }
             y = a;
             has_point = 1;
+            if (point_count < (int)(sizeof(points) / sizeof(points[0]))) {
+                points[point_count].x = (short)((int)x);
+                points[point_count].y = (short)((int)y);
+                point_count += 1;
+            }
             continue;
         }
         return 0;

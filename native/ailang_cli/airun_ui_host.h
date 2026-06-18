@@ -43,7 +43,12 @@ int native_host_ui_draw_image(
 int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, const char* color, int font_size);
 int native_host_ui_measure_text(int64_t handle, const char* text, int font_size, int* out_width);
 int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, const char* color, int stroke_width);
-int native_host_ui_draw_path(int64_t handle, const char* path, const char* color, int stroke_width);
+int native_host_ui_draw_path(
+    int64_t handle,
+    const char* path,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width);
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event);
 int native_host_ui_get_window_size(int64_t handle, int* out_width, int* out_height);
 

@@ -2272,18 +2272,22 @@ static void print_usage(void)
         "Usage: aivm-runtime <command> [options]\n"
         "\n"
         "Commands:\n"
-        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--target <rid>] [--wasm-profile <cli|spa|fullstack>] [--out <dir>] [--port <n>] [--no-open] [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
+        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--target <rid>] [--platform <console|desktop|web|server|tablet|phone|watch>] [--wasm-profile <cli|spa|fullstack>] [--out <dir>] [--port <n>] [--no-open] [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
         "  version | --version\n"
         "\n"
         "VM selectors:\n"
         "  c      current stable C VM (default)\n"
-        "  cvN    reserved future C VM profile/version selector (currently maps to c)\n");
+        "  cvN    reserved future C VM profile/version selector (currently maps to c)\n"
+        "\n"
+        "Target/platform:\n"
+        "  --target selects runtime output and derives the default UI platform.\n"
+        "  --platform is an advanced layout/input-profile override.\n");
 #else
     fprintf(stderr,
         "Usage: ailang <command> [options]\n"
         "\n"
         "Commands:\n"
-        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
+        "  run <program(.aibc1|.aos|project-dir|project.aiproj)> [--target <rid>] [--platform <console|desktop|web|server|tablet|phone|watch>] [--wasm-profile <cli|spa|fullstack>] [--out <dir>] [--port <n>] [--no-open] [--vm=<selector>] [--no-cache] [--] [app-args...]\n"
         "  build <program(.aibc1|.aos|project-dir|project.aiproj)> [--out <dir>] [--no-cache]\n"
         "  init <project-dir> [--template <cli|cli-args>] [--agent <codex|claude|cursor|gemini|copilot|windsurf>] [--agents <list|all>] [--force]\n"
         "  template list [projects|files] [project-dir]\n"
@@ -2306,7 +2310,11 @@ static void print_usage(void)
         "\n"
         "VM selectors:\n"
         "  c      current stable C VM (default)\n"
-        "  cvN    reserved future C VM profile/version selector (currently maps to c)\n");
+        "  cvN    reserved future C VM profile/version selector (currently maps to c)\n"
+        "\n"
+        "Target/platform:\n"
+        "  --target selects runtime output and derives the default UI platform.\n"
+        "  --platform is an advanced layout/input-profile override.\n");
 #endif
 }
 
@@ -3235,17 +3243,17 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  win.frameParts.push(`<ellipse data-aivm-id=\"${id}\" cx=\"${cx}\" cy=\"${cy}\" rx=\"${rx}\" ry=\"${ry}\" fill=\"${xmlEscape(color)}\"/>`);\n"
             "  return 0;\n"
             "};\n"
-            "globalThis.__aivmUiDrawPath = (windowId, path, color, strokeWidth) => {\n"
+            "globalThis.__aivmUiDrawPath = (windowId, path, fillColor, strokeColor, strokeWidth) => {\n"
             "  const win = uiState.windows.get(windowId);\n"
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
             "  const sw = strokeWidth|0;\n"
             "  const safePath = xmlEscape(path);\n"
-            "  if (sw > 0) {\n"
-            "    win.frameParts.push(`<path data-aivm-id=\"${id}\" d=\"${safePath}\" fill=\"none\" stroke=\"${xmlEscape(color)}\" stroke-width=\"${sw}\"/>`);\n"
-            "  } else {\n"
-            "    win.frameParts.push(`<path data-aivm-id=\"${id}\" d=\"${safePath}\" fill=\"${xmlEscape(color)}\"/>`);\n"
-            "  }\n"
+            "  const fill = String(fillColor ?? '');\n"
+            "  const stroke = String(strokeColor ?? '');\n"
+            "  const fillAttr = fill.length > 0 && fill !== 'none' ? xmlEscape(fill) : 'none';\n"
+            "  const strokeAttr = sw > 0 && stroke.length > 0 && stroke !== 'none' ? ` stroke=\"${xmlEscape(stroke)}\" stroke-width=\"${sw}\"` : '';\n"
+            "  win.frameParts.push(`<path data-aivm-id=\"${id}\" d=\"${safePath}\" fill=\"${fillAttr}\"${strokeAttr}/>`);\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiDrawImage = (windowId, x, y, w, h, src) => {\n"
@@ -4452,6 +4460,10 @@ static int run_native_compiled_program(
     bindings[51].handler = native_syscall_identity_0;
     bindings[52].target = "sys.runtime";
     bindings[52].handler = native_syscall_identity_0;
+    bindings[63].target = "sys.runtime.platform";
+    bindings[63].handler = native_syscall_identity_0;
+    bindings[108].target = "sys.runtime.target";
+    bindings[108].handler = native_syscall_identity_0;
     bindings[53].target = "sys.time.nowUnixMs";
     bindings[53].handler = native_syscall_time_now_unix_ms;
     bindings[54].target = "sys.time.monotonicMs";
@@ -8038,6 +8050,7 @@ typedef struct {
     int use_cache;
     const char* log_level;
     const char* target;
+    const char* ui_platform;
     const char* wasm_profile;
     const char* out_dir;
     int port;
@@ -8067,6 +8080,82 @@ static int resolve_project_run_tool(const char* input, char* out_tool, size_t ou
         return 0;
     }
     return out_tool[0] != '\0';
+}
+
+static int ui_platform_is_valid(const char* platform)
+{
+    return platform == NULL ||
+           strcmp(platform, "console") == 0 ||
+           strcmp(platform, "desktop") == 0 ||
+           strcmp(platform, "web") == 0 ||
+           strcmp(platform, "server") == 0 ||
+           strcmp(platform, "tablet") == 0 ||
+           strcmp(platform, "phone") == 0 ||
+           strcmp(platform, "watch") == 0;
+}
+
+static int run_target_is_wasm(const char* target)
+{
+    return target != NULL && strcmp(target, "wasm32") == 0;
+}
+
+static int run_target_is_native_host(const char* target)
+{
+    const char* host = host_rid();
+    if (target == NULL || target[0] == '\0') {
+        return 1;
+    }
+    if (strcmp(target, host) == 0) {
+        return 1;
+    }
+#if defined(__APPLE__)
+    return strcmp(target, "macos") == 0 ||
+           strcmp(target, "macOS") == 0 ||
+           strcmp(target, "osx") == 0;
+#elif defined(_WIN32)
+    return strcmp(target, "windows") == 0;
+#else
+    return strcmp(target, "linux") == 0;
+#endif
+}
+
+static const char* derive_ui_platform_from_target(const char* target)
+{
+    if (run_target_is_wasm(target)) {
+        return "web";
+    }
+    if (target == NULL || target[0] == '\0') {
+        return "desktop";
+    }
+    if (starts_with(target, "ios-") || strcmp(target, "ios") == 0 ||
+        starts_with(target, "android-") || strcmp(target, "android") == 0) {
+        return "phone";
+    }
+    if (starts_with(target, "watchos-") || strcmp(target, "watchos") == 0) {
+        return "watch";
+    }
+    return "desktop";
+}
+
+static int configure_runtime_context(const char* target, const char* platform)
+{
+    const char* effective_platform = (platform != NULL && platform[0] != '\0')
+        ? platform
+        : derive_ui_platform_from_target(target);
+    const char* effective_target = (target != NULL && target[0] != '\0')
+        ? target
+        : host_rid();
+    if (!ui_platform_is_valid(effective_platform)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Unsupported --platform value.\" nodeId=platform)\n");
+        return 0;
+    }
+#ifdef _WIN32
+    return _putenv_s("AILANG_RUNTIME_PLATFORM", effective_platform) == 0 &&
+           _putenv_s("AILANG_RUNTIME_TARGET", effective_target) == 0;
+#else
+    return setenv("AILANG_RUNTIME_PLATFORM", effective_platform, 1) == 0 &&
+           setenv("AILANG_RUNTIME_TARGET", effective_target, 1) == 0;
+#endif
 }
 
 static int delegate_run_to_project_tool(const RunTarget* target, char** argv)
@@ -8116,7 +8205,7 @@ static int delegate_run_to_project_tool(const RunTarget* target, char** argv)
 #endif
     }
     error[0] = '\0';
-    if (ailang_package_manager_try_run_tool(
+    if (ailang_package_manager_try_run_interactive_tool(
             &package_options,
             tool_name,
             tool_arg_count,
@@ -8129,7 +8218,7 @@ static int delegate_run_to_project_tool(const RunTarget* target, char** argv)
     }
     error[0] = '\0';
     if (ailang_package_manager_restore(&package_options, restore_output, sizeof(restore_output), error, sizeof(error)) &&
-        ailang_package_manager_try_run_tool(
+        ailang_package_manager_try_run_interactive_tool(
             &package_options,
             tool_name,
             tool_arg_count,
@@ -8157,6 +8246,7 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     int use_cache = 1;
     const char* log_level = NULL;
     const char* target = NULL;
+    const char* ui_platform = NULL;
     const char* wasm_profile = "spa";
     const char* out_dir = "dist-wasm";
     int port = 8768;
@@ -8188,6 +8278,18 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
         }
         if (starts_with(arg, "--target=") && app_arg_start < 0) {
             target = arg + 9;
+            continue;
+        }
+        if (strcmp(arg, "--platform") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --platform value.\" nodeId=argv)\n");
+                return 2;
+            }
+            ui_platform = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--platform=") && app_arg_start < 0) {
+            ui_platform = arg + 11;
             continue;
         }
         if (strcmp(arg, "--wasm-profile") == 0 && app_arg_start < 0) {
@@ -8283,6 +8385,7 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     out_target->use_cache = use_cache;
     out_target->log_level = log_level;
     out_target->target = target;
+    out_target->ui_platform = ui_platform;
     out_target->wasm_profile = wasm_profile;
     out_target->out_dir = out_dir;
     out_target->port = port;
@@ -8625,15 +8728,23 @@ static int handle_run(int argc, char** argv)
     if (parse_rc != 0) {
         return parse_rc;
     }
+    if (!configure_runtime_context(target.target, target.ui_platform)) {
+        return 2;
+    }
     airun_configure_log_level(target.log_level);
     airun_reset_injected_events();
 
-    if (target.target != NULL) {
+    if (run_target_is_wasm(target.target)) {
         int wasm_rc = run_wasm_browser_target(&target, argv);
         if (wasm_rc >= 0) {
             return wasm_rc;
         }
-        fprintf(stderr, "Err#err1(code=RUN001 message=\"run --target currently supports wasm32 browser targets.\" nodeId=target)\n");
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"run --target wasm32 failed to start browser target.\" nodeId=target)\n");
+        return 2;
+    }
+
+    if (!run_target_is_native_host(target.target)) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"run --target currently supports wasm32 or the current native host target.\" nodeId=target)\n");
         return 2;
     }
 

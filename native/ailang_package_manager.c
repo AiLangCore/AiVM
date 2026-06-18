@@ -1032,14 +1032,39 @@ static int pm_run_bounded_command(
 #endif
 }
 
-static int pm_run_tool_command(
+static int pm_run_unbounded_command(const char* command, int* exit_code)
+{
+    int status;
+    if (exit_code == NULL || command == NULL || command[0] == '\0') {
+        return 0;
+    }
+    status = system(command);
+    if (status < 0) {
+        return 0;
+    }
+#ifdef _WIN32
+    *exit_code = status;
+#else
+    if (WIFEXITED(status)) {
+        *exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        *exit_code = 128 + WTERMSIG(status);
+    } else {
+        *exit_code = 1;
+    }
+#endif
+    return 1;
+}
+
+static int pm_run_tool_command_mode(
     const char* tool_name,
     const char* tool_path,
     int arg_count,
     char** args,
     int* exit_code,
     char* error,
-    size_t error_len)
+    size_t error_len,
+    int bounded)
 {
     char command[PATH_MAX * 4];
     char quoted[PATH_MAX * 2];
@@ -1060,6 +1085,9 @@ static int pm_run_tool_command(
             !pm_append(command, sizeof(command), &used, quoted)) {
             return 0;
         }
+    }
+    if (!bounded) {
+        return pm_run_unbounded_command(command, exit_code);
     }
     if (!pm_run_bounded_command(command, timeout_seconds, exit_code, &timed_out)) {
         return 0;
@@ -2237,14 +2265,15 @@ int ailang_package_manager_find_package_root(
     return pm_set_error(error, error_len, "package is not restored: %s", package_name);
 }
 
-int ailang_package_manager_try_run_tool(
+static int pm_try_run_tool_mode(
     const AilangPackageManagerOptions* options,
     const char* tool_name,
     int arg_count,
     char** args,
     int* exit_code,
     char* error,
-    size_t error_len)
+    size_t error_len,
+    int bounded)
 {
     char install_root[PATH_MAX];
     char global_tools[PATH_MAX];
@@ -2262,14 +2291,14 @@ int ailang_package_manager_try_run_tool(
         pm_project_config_get_package_path(project_dir, tool_name, configured_package_path, sizeof(configured_package_path)) &&
         pm_resolve_project_local_path(project_dir, configured_package_path, configured_package_dir, sizeof(configured_package_dir)) &&
         pm_find_tool_in_package_root(configured_package_dir, tool_name, tool_path, sizeof(tool_path))) {
-        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+        return pm_run_tool_command_mode(tool_name, tool_path, arg_count, args, exit_code, error, error_len, bounded) ? 1 :
             pm_set_error_if_empty(error, error_len, "failed to run configured local tool: %s", tool_name);
     }
     if (pm_resolve_install_root(options, install_root, sizeof(install_root)) &&
         pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
         pm_join_path(global_tools, tool_name, tool_path, sizeof(tool_path)) &&
         pm_file_exists(tool_path)) {
-        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+        return pm_run_tool_command_mode(tool_name, tool_path, arg_count, args, exit_code, error, error_len, bounded) ? 1 :
             pm_set_error_if_empty(error, error_len, "failed to run global tool: %s", tool_name);
     }
 #ifdef _WIN32
@@ -2277,16 +2306,40 @@ int ailang_package_manager_try_run_tool(
         pm_join_path(install_root, "tools", global_tools, sizeof(global_tools)) &&
         snprintf(tool_path, sizeof(tool_path), "%s%c%s.exe", global_tools, AILANG_PM_PATH_SEP, tool_name) < (int)sizeof(tool_path) &&
         pm_file_exists(tool_path)) {
-        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+        return pm_run_tool_command_mode(tool_name, tool_path, arg_count, args, exit_code, error, error_len, bounded) ? 1 :
             pm_set_error_if_empty(error, error_len, "failed to run global tool: %s", tool_name);
     }
 #endif
     if (pm_find_project_dir(options, project_dir, sizeof(project_dir)) &&
         pm_find_local_tool(project_dir, tool_name, tool_path, sizeof(tool_path))) {
-        return pm_run_tool_command(tool_name, tool_path, arg_count, args, exit_code, error, error_len) ? 1 :
+        return pm_run_tool_command_mode(tool_name, tool_path, arg_count, args, exit_code, error, error_len, bounded) ? 1 :
             pm_set_error_if_empty(error, error_len, "failed to run local tool: %s", tool_name);
     }
     return 0;
+}
+
+int ailang_package_manager_try_run_tool(
+    const AilangPackageManagerOptions* options,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len)
+{
+    return pm_try_run_tool_mode(options, tool_name, arg_count, args, exit_code, error, error_len, 1);
+}
+
+int ailang_package_manager_try_run_interactive_tool(
+    const AilangPackageManagerOptions* options,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len)
+{
+    return pm_try_run_tool_mode(options, tool_name, arg_count, args, exit_code, error, error_len, 0);
 }
 
 static int bridge_package_list(

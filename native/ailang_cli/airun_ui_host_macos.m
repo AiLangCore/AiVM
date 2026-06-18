@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -22,6 +23,7 @@ static int g_native_ui_app_initialized = 0;
 static NativeHostUiEvent g_native_ui_event_queue[64];
 static size_t g_native_ui_event_queue_start = 0U;
 static size_t g_native_ui_event_queue_count = 0U;
+static void native_ui_configure_app_menu(const char* app_name);
 static void native_ui_push_command_event(const char* command);
 
 @interface NativeUiCanvasView : NSView
@@ -129,6 +131,20 @@ static NativeUiWindowSlot* native_ui_find_empty_slot(void)
     return NULL;
 }
 
+static NativeUiWindowSlot* native_ui_find_slot_by_window(NSWindow* window)
+{
+    size_t i;
+    if (window == nil) {
+        return NULL;
+    }
+    for (i = 0U; i < sizeof(g_native_ui_windows) / sizeof(g_native_ui_windows[0]); i += 1U) {
+        if (g_native_ui_windows[i].window == window && window != nil) {
+            return &g_native_ui_windows[i];
+        }
+    }
+    return NULL;
+}
+
 static NativeUiCanvasView* native_ui_canvas_for_slot(NativeUiWindowSlot* slot)
 {
     if (slot == NULL || slot->window == nil || slot->canvas_ref == nil) {
@@ -225,14 +241,25 @@ static int native_ui_path_parse_number(const char** io_cursor, double* out_numbe
     return 1;
 }
 
-static int native_ui_draw_svg_path(NSRect bounds, const char* path_text, const char* color, int stroke_width)
+static int native_ui_paint_is_active(const char* color)
+{
+    return color != NULL && color[0] != '\0' && strcmp(color, "none") != 0;
+}
+
+static int native_ui_draw_svg_path(
+    NSRect bounds,
+    const char* path_text,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width)
 {
     const char* cursor;
     char cmd = '\0';
     double x = 0.0;
     double y = 0.0;
     NSBezierPath* bezier;
-    NSColor* stroke_color;
+    NSColor* parsed_color;
+    int closed = 0;
     if (path_text == NULL) {
         return 0;
     }
@@ -290,19 +317,27 @@ static int native_ui_draw_svg_path(NSRect bounds, const char* path_text, const c
         }
         if (cmd == 'Z' || cmd == 'z') {
             [bezier closePath];
+            closed = 1;
             cmd = '\0';
             continue;
         }
         return 0;
     }
-    stroke_color = native_ui_parse_color(color, [NSColor blackColor]);
-    [stroke_color setStroke];
-    [bezier setLineWidth:(stroke_width > 0) ? (CGFloat)stroke_width : 1.0];
-    [bezier stroke];
+    if (closed && native_ui_paint_is_active(fill_color)) {
+        parsed_color = native_ui_parse_color(fill_color, [NSColor clearColor]);
+        [parsed_color setFill];
+        [bezier fill];
+    }
+    if (stroke_width > 0 && native_ui_paint_is_active(stroke_color)) {
+        parsed_color = native_ui_parse_color(stroke_color, [NSColor blackColor]);
+        [parsed_color setStroke];
+        [bezier setLineWidth:(CGFloat)stroke_width];
+        [bezier stroke];
+    }
     return 1;
 }
 
-static int native_ui_init_app(void)
+static int native_ui_init_app(const char* app_name)
 {
     if (g_native_ui_app_initialized != 0) {
         return 1;
@@ -311,8 +346,8 @@ static int native_ui_init_app(void)
     if (NSApp == nil) {
         return 0;
     }
-    (void)[NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
     (void)[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+    native_ui_configure_app_menu(app_name);
     [NSApp finishLaunching];
     g_native_ui_app_initialized = 1;
     return 1;
@@ -486,15 +521,48 @@ static void native_ui_push_command_event(const char* command)
     (void)native_ui_queue_push(&event);
 }
 
-static int native_ui_queue_pop(NativeHostUiEvent* out_event)
+static int native_ui_event_matches_handle(const NativeHostUiEvent* event, int64_t handle)
 {
+    char* end_ptr = NULL;
+    long long event_handle;
+    if (event == NULL) {
+        return 0;
+    }
+    if (event->target_id[0] == '\0') {
+        return 1;
+    }
+    event_handle = strtoll(event->target_id, &end_ptr, 10);
+    return end_ptr != event->target_id && *end_ptr == '\0' && event_handle == (long long)handle;
+}
+
+static int native_ui_queue_pop_for_handle(int64_t handle, NativeHostUiEvent* out_event)
+{
+    NativeHostUiEvent retained[64];
+    size_t retained_count = 0U;
+    size_t i;
+    int found = 0;
     if (out_event == NULL || g_native_ui_event_queue_count == 0U) {
         return 0;
     }
-    *out_event = g_native_ui_event_queue[g_native_ui_event_queue_start];
-    g_native_ui_event_queue_start =
-        (g_native_ui_event_queue_start + 1U) % (sizeof(g_native_ui_event_queue) / sizeof(g_native_ui_event_queue[0]));
-    g_native_ui_event_queue_count -= 1U;
+    for (i = 0U; i < g_native_ui_event_queue_count; i += 1U) {
+        size_t index = (g_native_ui_event_queue_start + i) %
+                       (sizeof(g_native_ui_event_queue) / sizeof(g_native_ui_event_queue[0]));
+        if (!found && native_ui_event_matches_handle(&g_native_ui_event_queue[index], handle)) {
+            *out_event = g_native_ui_event_queue[index];
+            found = 1;
+        } else if (retained_count < (sizeof(retained) / sizeof(retained[0]))) {
+            retained[retained_count] = g_native_ui_event_queue[index];
+            retained_count += 1U;
+        }
+    }
+    if (!found) {
+        return 0;
+    }
+    for (i = 0U; i < retained_count; i += 1U) {
+        g_native_ui_event_queue[i] = retained[i];
+    }
+    g_native_ui_event_queue_start = 0U;
+    g_native_ui_event_queue_count = retained_count;
     return 1;
 }
 
@@ -513,6 +581,7 @@ static int native_ui_translate_event(NativeUiWindowSlot* slot, NSEvent* event, N
     memset(out_event, 0, sizeof(*out_event));
     out_event->x = -1;
     out_event->y = -1;
+    (void)snprintf(out_event->target_id, sizeof(out_event->target_id), "%lld", (long long)slot->handle);
     *out_forward_to_appkit = 1;
     canvas = native_ui_canvas_for_slot(slot);
     switch ([event type]) {
@@ -570,8 +639,15 @@ static void native_ui_pump_events(NativeUiWindowSlot* slot)
                                           inMode:NSDefaultRunLoopMode
                                          dequeue:YES]) != nil) {
         NativeHostUiEvent translated;
+        NativeUiWindowSlot* event_slot = slot;
         int forward_to_appkit = 1;
-        if (native_ui_translate_event(slot, event, &translated, &forward_to_appkit)) {
+        if ([event window] != nil) {
+            NativeUiWindowSlot* source_slot = native_ui_find_slot_by_window([event window]);
+            if (source_slot != NULL) {
+                event_slot = source_slot;
+            }
+        }
+        if (native_ui_translate_event(event_slot, event, &translated, &forward_to_appkit)) {
             (void)native_ui_queue_push(&translated);
         }
         if (forward_to_appkit != 0) {
@@ -624,10 +700,9 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
             return 0;
         }
         *out_handle = 0;
-        if (!native_ui_init_app()) {
+        if (!native_ui_init_app(title)) {
             return 0;
         }
-        native_ui_configure_app_menu(title);
         slot = native_ui_find_empty_slot();
         if (slot == NULL) {
             return 0;
@@ -653,6 +728,7 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
         delegate.slot = slot;
         [window setDelegate:delegate];
         [window makeKeyAndOrderFront:nil];
+        [NSApp activateIgnoringOtherApps:YES];
         [NSApp updateWindows];
         slot->handle = g_native_ui_next_handle++;
         slot->window = window;
@@ -923,7 +999,12 @@ int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, con
     }
 }
 
-int native_host_ui_draw_path(int64_t handle, const char* path, const char* color, int stroke_width)
+int native_host_ui_draw_path(
+    int64_t handle,
+    const char* path,
+    const char* fill_color,
+    const char* stroke_color,
+    int stroke_width)
 {
     @autoreleasepool {
         NativeUiWindowSlot* slot = native_ui_find_slot(handle);
@@ -935,7 +1016,7 @@ int native_host_ui_draw_path(int64_t handle, const char* path, const char* color
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
-        ok = native_ui_draw_svg_path(bounds, path, color, stroke_width);
+        ok = native_ui_draw_svg_path(bounds, path, fill_color, stroke_color, stroke_width);
         native_ui_unlock_focus(slot);
         return ok;
     }
@@ -957,7 +1038,7 @@ int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
             slot->close_pending = 0;
             return 1;
         }
-        if (native_ui_queue_pop(out_event)) {
+        if (native_ui_queue_pop_for_handle(handle, out_event)) {
             return 1;
         }
         native_ui_pump_events(slot);
@@ -966,7 +1047,7 @@ int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
             slot->close_pending = 0;
             return 1;
         }
-        if (native_ui_queue_pop(out_event)) {
+        if (native_ui_queue_pop_for_handle(handle, out_event)) {
             return 1;
         }
         return 1;

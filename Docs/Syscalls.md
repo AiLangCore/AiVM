@@ -109,6 +109,8 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.arch` | `host.info` | Reads host architecture identity. |
 | `sys.os.version` | `host.info` | Reads host OS version. |
 | `sys.runtime` | `host.info` | Reads host runtime identity. |
+| `sys.runtime.platform` | `host.info` | Reads the runtime surface class (`console`, `desktop`, `web`, `server`, `tablet`, `phone`, or `watch`), derived from target unless explicitly overridden by the launcher. |
+| `sys.runtime.target` | `host.info` | Reads the runtime target selected by the launcher, such as `wasm32`, `osx-arm64`, `linux-x64`, or `windows-x64`. |
 | `sys.time.nowUnixMs` | `time.wall` | Reads host wall-clock time. |
 | `sys.time.monotonicMs` | `time.monotonic` | Reads host monotonic time. |
 | `sys.time.sleepMs` | `time.sleep` | Blocks or schedules against host time. |
@@ -160,7 +162,7 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.ui.closeWindow` | `ui` | Mutates host UI resources. |
 | `sys.ui.drawLine` | `ui` | Draws through host UI backend. |
 | `sys.ui.drawEllipse` | `ui` | Draws through host UI backend. |
-| `sys.ui.drawPath` | `ui` | Draws through host UI backend. |
+| `sys.ui.drawPath` | `ui` | Draws a host UI path as `handle, path, fillColor, strokeColor, strokeWidth`; non-closed paths ignore fill. Empty color or `none` disables that paint. |
 | `sys.ui.drawImage` | `ui` | Draws through host UI backend. |
 | `sys.ui.getWindowSize` | `ui` | Reads host UI state. |
 | `sys.ui.waitFrame` | `ui` | Waits on host UI frame timing. |
@@ -298,10 +300,12 @@ baseline.
 | 53 | `sys.ui.closeWindow` | 1 | `void` |
 | 54 | `sys.ui.drawLine` | 7 | `void` |
 | 55 | `sys.ui.drawEllipse` | 6 | `void` |
-| 56 | `sys.ui.drawPath` | 4 | `void` |
+| 56 | `sys.ui.drawPath` | 5 | `void` |
 | 57 | `sys.ui.drawImage` | 6 | `void` |
 | 58 | `sys.ui.getWindowSize` | 1 | `node` |
 | 129 | `sys.ui.measureText` | 3 | `int` |
+| 130 | `sys.runtime.platform` | 0 | `string` |
+| 131 | `sys.runtime.target` | 0 | `string` |
 | 72 | `sys.ui.waitFrame` | 1 | `void` |
 | 73 | `sys.worker.start` | 2 | `int` |
 | 74 | `sys.worker.poll` | 1 | `int` |

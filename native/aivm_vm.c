@@ -289,6 +289,17 @@ static int validate_vm_call_local_state(AivmVm* vm, const char* op_name)
     return 1;
 }
 
+static int syscall_elapsed_limit_applies(const char* target)
+{
+    if (target == NULL) {
+        return 1;
+    }
+    if (strcmp(target, "sys.ui.waitFrame") == 0) {
+        return 0;
+    }
+    return 1;
+}
+
 static int validate_vm_frame_record(
     AivmVm* vm,
     const AivmCallFrame* frame,
@@ -2136,6 +2147,7 @@ static int call_sys_with_arity(AivmVm* vm, size_t arg_count, AivmValue* out_resu
     record_profile_syscall(vm, target_value.string_value, syscall_elapsed_seconds);
 #endif
     if (vm->syscall_elapsed_limit_ms > 0U &&
+        syscall_elapsed_limit_applies(target_value.string_value) &&
         syscall_elapsed_seconds * 1000.0 > (double)vm->syscall_elapsed_limit_ms) {
         (void)snprintf(
             vm->error_detail_storage,

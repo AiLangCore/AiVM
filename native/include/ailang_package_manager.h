@@ -56,6 +56,15 @@ int ailang_package_manager_try_run_tool(
     char* error,
     size_t error_len);
 
+int ailang_package_manager_try_run_interactive_tool(
+    const AilangPackageManagerOptions* options,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len);
+
 int ailang_package_manager_find_package_root(
     const AilangPackageManagerOptions* options,
     const char* package_name,

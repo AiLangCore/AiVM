@@ -900,9 +900,10 @@ static int native_syscall_ui_draw_path(
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_NOT_FOUND;
     }
-    if (args == NULL || arg_count != 4U ||
+    if (args == NULL || arg_count != 5U ||
         args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_STRING ||
-        args[2].type != AIVM_VAL_STRING || args[3].type != AIVM_VAL_INT) {
+        args[2].type != AIVM_VAL_STRING || args[3].type != AIVM_VAL_STRING ||
+        args[4].type != AIVM_VAL_INT) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_CONTRACT;
     }
@@ -914,15 +915,16 @@ static int native_syscall_ui_draw_path(
             args[0].int_value,
             args[1].string_value,
             args[2].string_value,
-            (int)args[3].int_value)) {
+            args[3].string_value,
+            (int)args[4].int_value)) {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_INVALID;
     }
     native_scene_capture_emit_node(
         "Path",
-        "",
         args[2].string_value,
-        (int)args[3].int_value,
+        args[3].string_value,
+        (int)args[4].int_value,
         "",
         args[1].string_value,
         0,

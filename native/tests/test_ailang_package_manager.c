@@ -339,6 +339,19 @@ int main(void)
         strstr(error, "package tool timed out after 1 seconds: slow") == NULL) {
         return 17;
     }
+    error[0] = '\0';
+    tool_exit = -1;
+    if (!ailang_package_manager_try_run_interactive_tool(
+            &options,
+            "slow",
+            0,
+            NULL,
+            &tool_exit,
+            error,
+            sizeof(error)) ||
+        tool_exit != 0) {
+        return 26;
+    }
 #endif
     if (!ailang_package_manager_remove(&options, "demo", output, sizeof(output), error, sizeof(error)) ||
         strstr(output, "removed demo") == NULL) {
