@@ -22,14 +22,29 @@ jobs:
       - name: Build native
         run: cmake --build ./.tmp/aivm-c-build-native
 
-      - name: Fuzz smoke
+      - name: Loader fuzz
+        env:
+          AIVM_FUZZ_ITERATIONS: "50000"
         run: ctest --test-dir ./.tmp/aivm-c-build-native -L fuzz --output-on-failure
 
-      - name: Stress smoke
+      - name: Runtime stress
+        env:
+          AIVM_STRESS_ITERATIONS: "100000"
+          AIVM_STRESS_VM_ITERATIONS: "25000"
         run: ctest --test-dir ./.tmp/aivm-c-build-native -L stress --output-on-failure
 
       - name: Security
         run: ctest --test-dir ./.tmp/aivm-c-build-native -L security --output-on-failure
+
+      - name: Performance full
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L perf-full --output-on-failure
+
+      - name: Upload performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivm-perf-results
+          path: artifacts/perf/*.json
+          if-no-files-found: error
 
   leak-sanitizer:
     name: lsan

@@ -339,20 +339,26 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_debug_artifact_budget PRIVATE aivm_core)
 
-    add_executable(aivm_test_fuzz_smoke
-        ../tests/fuzz/test_fuzz_smoke.c
+    add_executable(aivm_test_loader_fuzz
+        ../tests/fuzz/test_loader_fuzz.c
     )
-    target_link_libraries(aivm_test_fuzz_smoke PRIVATE aivm_core)
+    target_link_libraries(aivm_test_loader_fuzz PRIVATE aivm_core)
 
     add_executable(aivm_test_security_malformed_inputs
         ../tests/security/test_security_malformed_inputs.c
     )
     target_link_libraries(aivm_test_security_malformed_inputs PRIVATE aivm_core)
 
-    add_executable(aivm_test_stress_smoke
-        ../tests/stress/test_stress_smoke.c
+    add_executable(aivm_test_runtime_stress
+        ../tests/stress/test_runtime_stress.c
     )
-    target_link_libraries(aivm_test_stress_smoke PRIVATE aivm_core)
+    target_link_libraries(aivm_test_runtime_stress PRIVATE aivm_core)
+
+    add_executable(aivm_perf_harness
+        ../tests/perf/tools/perf_harness.c
+    )
+    target_link_libraries(aivm_perf_harness PRIVATE aivm_core)
+    aivm_apply_build_metadata(aivm_perf_harness)
 
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_bytes_host
@@ -509,9 +515,10 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE /W4)
-        target_compile_options(aivm_test_fuzz_smoke PRIVATE /W4)
+        target_compile_options(aivm_test_loader_fuzz PRIVATE /W4)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE /W4)
-        target_compile_options(aivm_test_stress_smoke PRIVATE /W4)
+        target_compile_options(aivm_test_runtime_stress PRIVATE /W4)
+        target_compile_options(aivm_perf_harness PRIVATE /W4)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE /W4)
             target_compile_options(aivm_test_ui_image_host PRIVATE /W4)
@@ -545,9 +552,10 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE -Wall -Wextra -Wpedantic -Werror)
-        target_compile_options(aivm_test_fuzz_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_loader_fuzz PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE -Wall -Wextra -Wpedantic -Werror)
-        target_compile_options(aivm_test_stress_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_runtime_stress PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_perf_harness PRIVATE -Wall -Wextra -Wpedantic -Werror)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
             target_compile_options(aivm_test_ui_image_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -582,9 +590,11 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
-    add_test(NAME aivm_test_fuzz_smoke COMMAND aivm_test_fuzz_smoke)
+    add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
-    add_test(NAME aivm_test_stress_smoke COMMAND aivm_test_stress_smoke)
+    add_test(NAME aivm_test_runtime_stress COMMAND aivm_test_runtime_stress)
+    add_test(NAME aivm_perf_smoke COMMAND aivm_perf_harness)
+    add_test(NAME aivm_perf_full COMMAND aivm_perf_harness)
     if (AIVM_BUILD_HOST_TESTS)
         add_test(NAME aivm_test_bytes_host COMMAND aivm_test_bytes_host)
         add_test(NAME aivm_test_ui_image_host COMMAND aivm_test_ui_image_host)
@@ -726,7 +736,7 @@ if (BUILD_TESTING)
         PROPERTIES LABELS "golden;parity;stdlib"
     )
     set_tests_properties(
-        aivm_test_fuzz_smoke
+        aivm_test_loader_fuzz
         PROPERTIES LABELS "fuzz"
     )
     set_tests_properties(
@@ -734,8 +744,22 @@ if (BUILD_TESTING)
         PROPERTIES LABELS "security"
     )
     set_tests_properties(
-        aivm_test_stress_smoke
+        aivm_test_runtime_stress
         PROPERTIES LABELS "stress"
+    )
+    set_tests_properties(
+        aivm_perf_smoke
+        PROPERTIES
+            LABELS "perf;perf-smoke"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ENVIRONMENT "AIVM_PERF_SUITE=smoke;AIVM_PERF_OUTPUT=artifacts/perf/results-smoke.json"
+    )
+    set_tests_properties(
+        aivm_perf_full
+        PROPERTIES
+            LABELS "perf;perf-full"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+            ENVIRONMENT "AIVM_PERF_SUITE=full;AIVM_PERF_OUTPUT=artifacts/perf/results-full.json"
     )
     if (AIVM_BUILD_HOST_TESTS)
         set_tests_properties(
