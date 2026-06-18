@@ -159,7 +159,10 @@ Syscall elapsed time is measured around the host syscall dispatch call. If the
 call returns after the selected runtime profile's `syscall_elapsed_ms` budget,
 the VM enters syscall error state with `AIVMS007`. This is a deterministic
 post-call failure signal; it does not currently interrupt a blocking host
-syscall while it is still running.
+syscall while it is still running. Explicit runtime scheduling waits such as
+`sys.ui.waitFrame` are not counted as host work for this elapsed-time guard;
+they yield to the active UI/event runtime and remain governed by the runtime's
+event-loop policy instead.
 
 Debug artifact output is accounted across the files in a single `aivm-debug`
 artifact directory. Existing captured `stdout.txt` and `stderr.txt` bytes count
