@@ -240,6 +240,19 @@ The `AIVMB` family reports VM-local blob storage failures.
 | `AIVMB004` | Blob allocation failed. |
 | `AIVMB999` | Unknown blob status. |
 
+## Module Cache Error Codes
+
+The `AIVMMOD` family reports immutable module cache failures.
+
+| Code | Meaning |
+| --- | --- |
+| `AIVMMOD000` | Module cache operation completed. |
+| `AIVMMOD001` | Module cache input was invalid. |
+| `AIVMMOD002` | Module count or estimated byte limit was exceeded. |
+| `AIVMMOD003` | Module name already exists in the cache. |
+| `AIVMMOD004` | Module name was not found in the cache. |
+| `AIVMMOD999` | Unknown module cache status. |
+
 ## Syscall Error Codes
 
 The `AIVMS` family reports syscall dispatch failures.

@@ -203,9 +203,20 @@ Mutable semantic values are not shared across workers. If a value must cross a
 worker boundary, it must be copied, frozen, or represented as a deterministic
 message.
 
-An immutable shared module cache is a production direction after worker-local
-heap and deterministic message rules are stable. The cache must not contain
+The immutable shared module cache is exposed through `AivmModuleCache`. Cache
+entries deep-copy loaded `AivmProgram` data into cache-owned storage and expose
+only `const AivmProgram*` views to callers. Cached modules must not contain
 mutable per-execution semantic state.
+
+Module cache operations must:
+
+- reject duplicate module names deterministically
+- reject invalid or oversized names deterministically
+- enforce `AIVM_MODULE_CACHE_MAX_MODULES`
+- enforce `AIVM_MODULE_CACHE_MAX_BYTES`
+- preserve cached program contents even if the caller mutates or clears the
+  source program after insertion
+- keep string and byte constants pointed at cache-owned immutable storage
 
 ## Deterministic Queue Dispatch
 

@@ -84,6 +84,7 @@ set(AIVM_CORE_SOURCES
     aivm_types.c
     aivm_vm.c
     aivm_program.c
+    aivm_module_cache.c
     sys/aivm_syscall.c
     sys/aivm_syscall_contracts.c
     aivm_parity.c
@@ -263,6 +264,11 @@ if (BUILD_TESTING)
         ../tests/unit/bytecode/test_values.c
     )
     target_link_libraries(aivm_test_values PRIVATE aivm_core)
+
+    add_executable(aivm_test_module_cache
+        ../tests/unit/bytecode/test_module_cache.c
+    )
+    target_link_libraries(aivm_test_module_cache PRIVATE aivm_core)
 
     add_executable(aivm_test_syscall
         ../tests/integration/syscalls/test_syscall.c
@@ -522,6 +528,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_program_loader PRIVATE /W4)
         target_compile_options(aivm_test_vm_core PRIVATE /W4)
         target_compile_options(aivm_test_values PRIVATE /W4)
+        target_compile_options(aivm_test_module_cache PRIVATE /W4)
         target_compile_options(aivm_test_syscall PRIVATE /W4)
         target_compile_options(aivm_test_vm_diagnostics PRIVATE /W4)
         target_compile_options(aivm_test_vm_determinism PRIVATE /W4)
@@ -564,6 +571,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_program_loader PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_values PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_module_cache PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_syscall PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_diagnostics PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_determinism PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -607,6 +615,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_program_loader COMMAND aivm_test_program_loader)
     add_test(NAME aivm_test_vm_core COMMAND aivm_test_vm_core)
     add_test(NAME aivm_test_values COMMAND aivm_test_values)
+    add_test(NAME aivm_test_module_cache COMMAND aivm_test_module_cache)
     add_test(NAME aivm_test_syscall COMMAND aivm_test_syscall)
     add_test(NAME aivm_test_vm_diagnostics COMMAND aivm_test_vm_diagnostics)
     add_test(NAME aivm_test_vm_determinism COMMAND aivm_test_vm_determinism)
@@ -624,7 +633,6 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
     add_test(NAME aivm_test_blob_storage COMMAND aivm_test_blob_storage)
     add_test(NAME aivm_test_spec_coverage COMMAND aivm_test_spec_coverage ${CMAKE_CURRENT_SOURCE_DIR}/..)
-    add_test(NAME aivm_spec_gap_shared_module_cache COMMAND aivm_test_spec_pending memory-shared-module-cache)
     add_test(NAME aivm_spec_gap_full_debugger COMMAND aivm_test_spec_pending debug-full-debugger)
     add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
@@ -716,6 +724,7 @@ if (BUILD_TESTING)
     set_tests_properties(
         aivm_test_program_loader
         aivm_test_values
+        aivm_test_module_cache
         PROPERTIES LABELS "unit;core;bytecode"
     )
     set_tests_properties(
@@ -752,7 +761,6 @@ if (BUILD_TESTING)
         PROPERTIES LABELS "spec;coverage"
     )
     set_tests_properties(
-        aivm_spec_gap_shared_module_cache
         aivm_spec_gap_full_debugger
         PROPERTIES LABELS "spec;gap"
     )

@@ -15,12 +15,6 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    if (strcmp(argv[1], "memory-shared-module-cache") == 0) {
-        return fail_pending(
-            argv[1],
-            "AiVM does not yet expose a module/cache loader API for immutable shared module cache verification.");
-    }
-
     if (strcmp(argv[1], "debug-full-debugger") == 0) {
         return fail_pending(
             argv[1],
