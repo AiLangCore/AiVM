@@ -65,18 +65,13 @@ long-running validation.
 
 Specification coverage lives in `tests/spec/coverage.tsv`. It maps normative
 AiVM specs and contract documents to the tests, scripts, or native gates that
-verify them. Rows can be `covered` or `tracked-gap`; tracked gaps are allowed
-only when the note states what API or implementation work is missing. The
-`aivm_test_spec_coverage` CTest gate verifies the matrix shape, required spec
-representation, duplicate row IDs, and referenced verification paths.
+verify them. Rows can be `covered` or `tracked-gap`; tracked gaps are failures.
+The `aivm_test_spec_coverage` CTest gate verifies the matrix shape, required
+spec representation, duplicate row IDs, referenced verification paths, and
+fails when any tracked gap remains.
 
 Tracked gaps also have executable pending tests. They are normal failing tests,
-not expected-fail or skipped tests. Run only the green matrix coverage check
-with:
-
-```bash
-ctest --test-dir .tmp/aivm-c-build-native -L coverage --output-on-failure
-```
+not expected-fail or skipped tests.
 
 ## Fuzz And Stress Budgets
 

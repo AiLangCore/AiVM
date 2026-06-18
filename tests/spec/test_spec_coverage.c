@@ -187,6 +187,12 @@ int main(int argc, char** argv)
             }
         } else if (strcmp(row->status, "tracked-gap") == 0) {
             tracked_gaps += 1U;
+            (void)fprintf(
+                stderr,
+                "spec coverage: tracked gap is not implemented: %s (%s)\n",
+                row->id,
+                row->notes);
+            failed = 1;
             if (row->notes[0] == '\0') {
                 (void)fprintf(stderr, "spec coverage: tracked gap has no note: %s\n", row->id);
                 failed = 1;
