@@ -29,30 +29,26 @@ cycle.
 The native C VM lives under:
 
 ```text
-native/
+src/
 ```
 
 ## Layout
 
-- `native` - imported native C VM source, tests, native launcher code, and CMake build.
-- `native/ailang_cli` - temporary native AiLang launcher/host adapter code.
+- `src` - imported native C VM source, tests, native launcher code, and CMake build.
+- `src/ailang_cli` - temporary native AiLang launcher/host adapter code.
 - `.github/workflows` - CI and release workflows.
 
-Target native layout:
+Source layout:
 
 ```text
-include/
 src/
-tests/
-examples/
+src/include/
+src/tests/
+src/examples/
 scripts/
-CMakeLists.txt
-CMakePresets.json
+src/CMakeLists.txt
+src/CMakePresets.json
 ```
-
-The native tree is intentionally under `native/` during the first import. A
-later cleanup can flatten it to the repository root after AiLang is rewired to
-consume this repository.
 
 ## Deliverables
 
@@ -80,7 +76,7 @@ call into AiVM rather than expanding the production VM command surface.
 
 ## Versioning
 
-The CMake project declaration in `native/CMakeLists.txt` is the base semantic
+The CMake project declaration in `src/CMakeLists.txt` is the base semantic
 version for AiVM release automation. Release tags use `v` plus the derived
 version, for example `v0.0.1-beta.1`.
 

@@ -12,9 +12,9 @@ A new `sys.*` target may only be added when all of these are true:
   device, native adapter, debug/profiling host, or external resource.
 - It cannot be implemented deterministically in AiLang or AiLang core
   libraries.
-- It has an explicit contract entry in `native/sys/aivm_syscall_contracts.c`.
+- It has an explicit contract entry in `src/sys/aivm_syscall_contracts.c`.
   The contract entry must include the syscall capability group.
-- It has contract tests in `native/tests/test_syscall_contracts.c`.
+- It has contract tests in `src/tests/test_syscall_contracts.c`.
 - It is listed in this document with a host-boundary justification.
 - The change notes explain why it is a syscall instead of AiLang library code.
 

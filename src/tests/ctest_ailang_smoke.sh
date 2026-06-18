@@ -17,7 +17,7 @@ TMP_DIR="${ROOT_DIR}/.tmp/ctest-ailang-smoke"
 rm -rf "${TMP_DIR}"
 mkdir -p "${TMP_DIR}"
 
-CASE_PATH="${ROOT_DIR}/src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_main_params.aos"
+CASE_PATH="${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_main_params.aos"
 "${AILANG_BIN}" run "${CASE_PATH}" --vm=c >/dev/null
 
 PUBLISH_DIR="${TMP_DIR}/publish-main-params"

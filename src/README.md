@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`native` contains the active native C implementation of the deterministic AiVM
+`src` contains the active native C implementation of the deterministic AiVM
 core and its native test/build surface.
 
 ## Deterministic VM Goal
@@ -105,12 +105,12 @@ Example:
 ctest --test-dir .tmp/aivm-c-build-native -L host --output-on-failure
 ```
 
-Preset-based workflows are also available via `native/CMakePresets.json`.
+Preset-based workflows are also available via `src/CMakePresets.json`.
 
 Examples:
 
 ```bash
-cmake --preset aivm-native-unix -S native
+cmake --preset aivm-native-unix -S src
 cmake --build .tmp/aivm-c-build-native
 ctest --test-dir .tmp/aivm-c-build-native -L unit --output-on-failure
 ```

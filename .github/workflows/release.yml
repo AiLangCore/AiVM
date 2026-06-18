@@ -35,7 +35,7 @@ jobs:
 
       - name: Configure native
         if: runner.os != 'Windows'
-        run: cmake --preset aivm-native-unix -S ./native
+        run: cmake --preset aivm-native-unix -S ./src
 
       - name: Build native
         if: runner.os != 'Windows'
@@ -43,7 +43,7 @@ jobs:
 
       - name: Configure native (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset aivm-native-windows -S ./native
+        run: cmake --preset aivm-native-windows -S ./src
 
       - name: Build native (Windows)
         if: runner.os == 'Windows'
@@ -61,7 +61,7 @@ jobs:
           cp ./.tmp/aivm-c-build-native/aivm-debug "${stage}/bin/"
           cp ./.tmp/aivm-c-build-native/libaivm_core.a "${stage}/lib/"
           cp ./.tmp/aivm-c-build-native/libaivm_core_debug.a "${stage}/lib/"
-          cp ./native/include/*.h "${stage}/include/"
+          cp ./src/include/*.h "${stage}/include/"
           tar -czf "./aivm-${version}-${{ matrix.id }}.${{ matrix.archive }}" -C artifacts "aivm-${version}-${{ matrix.id }}"
 
       - name: Stage artifact (Windows)
@@ -75,7 +75,7 @@ jobs:
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm-debug.exe" -Destination "$stage\bin\"
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core.lib" -Destination "$stage\lib\"
           Copy-Item -Path ".\.tmp\aivm-c-build-native\Release\aivm_core_debug.lib" -Destination "$stage\lib\"
-          Copy-Item -Path ".\native\include\*.h" -Destination "$stage\include\"
+          Copy-Item -Path ".\src\include\*.h" -Destination "$stage\include\"
           Compress-Archive -Path $stage -DestinationPath ".\aivm-$version-${{ matrix.id }}.${{ matrix.archive }}"
 
       - name: Upload packaged artifact

@@ -55,8 +55,8 @@ For syscall changes, also run:
 - Keep all host effects behind explicit `sys.*` contracts.
 - New syscalls require absolute host-boundary justification.
 - Every syscall change must update `Docs/Syscalls.md`,
-  `native/sys/aivm_syscall_contracts.c`, and
-  `native/tests/test_syscall_contracts.c`.
+  `src/sys/aivm_syscall_contracts.c`, and
+  `src/tests/test_syscall_contracts.c`.
 - Do not add AiLang compiler/tooling behavior or AiVectra UI policy here.
 - Keep generated outputs out of commits: `.tmp/`, `.artifacts/`, local SDK
   files, and local notes.

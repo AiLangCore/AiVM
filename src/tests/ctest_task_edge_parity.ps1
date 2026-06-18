@@ -48,15 +48,15 @@ function Run-Case {
 }
 
 Run-Case 'await_edge_invalid' `
-  (Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_await_edge_invalid.aos') `
-  (Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_await_edge_invalid.out') `
+  (Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_await_edge_invalid.aos') `
+  (Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_await_edge_invalid.out') `
   3
 Run-Case 'par_join_edge_invalid' `
-  (Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos') `
-  (Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.out') `
+  (Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos') `
+  (Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.out') `
   3
 Run-Case 'par_cancel_edge_noop' `
-  (Join-Path $RepoRoot 'src/AiVM.Core/native/tests/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos') `
+  (Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos') `
   '' `
   0
 

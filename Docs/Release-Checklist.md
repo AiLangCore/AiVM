@@ -5,7 +5,7 @@ Use this checklist for alpha, beta, release-candidate, and stable AiVM releases.
 ## Preflight
 
 - Confirm the release branch follows the workspace Git Flow policy.
-- Confirm `native/CMakeLists.txt` contains the intended base version.
+- Confirm `src/CMakeLists.txt` contains the intended base version.
 - Confirm `README.md`, `CHANGELOG.md`, and release notes describe the release accurately.
 - Confirm the working tree contains no generated artifacts.
 

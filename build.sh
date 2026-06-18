@@ -5,11 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-host}" in
   host)
-    cmake --preset aivm-native-unix -S "${ROOT_DIR}/native"
+    cmake --preset aivm-native-unix -S "${ROOT_DIR}/src"
     cmake --build "${ROOT_DIR}/.tmp/aivm-c-build-native"
     ;;
   shared)
-    cmake --preset aivm-native-shared-unix -S "${ROOT_DIR}/native"
+    cmake --preset aivm-native-shared-unix -S "${ROOT_DIR}/src"
     cmake --build "${ROOT_DIR}/.tmp/aivm-c-build-shared-native"
     ;;
   -h|--help|help)
