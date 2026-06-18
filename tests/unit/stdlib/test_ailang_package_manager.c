@@ -306,7 +306,11 @@ int main(void)
             sizeof(package_root),
             error,
             sizeof(error)) ||
+#ifdef _WIN32
+        strstr(package_root, "package-src\\pkg") == NULL) {
+#else
         strstr(package_root, "package-src/pkg") == NULL) {
+#endif
         return 25;
     }
 #ifndef _WIN32
