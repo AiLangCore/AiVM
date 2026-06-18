@@ -174,6 +174,7 @@ int main(void)
     }
 #endif
     if (!run_ok("git -C .tmp/pkg-manager-test/package-src init --quiet") ||
+        !run_ok("git -C .tmp/pkg-manager-test/package-src config core.autocrlf false") ||
         !run_ok("git -C .tmp/pkg-manager-test/package-src add .") ||
         !run_ok("git -C .tmp/pkg-manager-test/package-src -c user.name=AiLangTest -c user.email=ailang-test@example.invalid commit --quiet -m init") ||
         !run_ok("git -C .tmp/pkg-manager-test/package-src rev-parse HEAD > .tmp/pkg-manager-test/package-commit.txt") ||
