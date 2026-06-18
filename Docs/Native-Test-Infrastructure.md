@@ -57,8 +57,8 @@ ctest --test-dir .tmp/aivm-c-build-native -L perf-release --output-on-failure
 
 `./test-aivm-c.sh` remains the repository-level verification entrypoint.
 
-Default local verification runs `unit|integration|golden|security`. Fuzz and
-stress labels are available locally and are intended for nightly or explicit
+Default local verification runs `unit|integration|golden|security|spec`. Fuzz
+and stress labels are available locally and are intended for nightly or explicit
 long-running validation.
 
 ## Specification Coverage
@@ -69,6 +69,14 @@ verify them. Rows can be `covered` or `tracked-gap`; tracked gaps are allowed
 only when the note states what API or implementation work is missing. The
 `aivm_test_spec_coverage` CTest gate verifies the matrix shape, required spec
 representation, duplicate row IDs, and referenced verification paths.
+
+Tracked gaps also have executable pending tests. They are normal failing tests,
+not expected-fail or skipped tests. Run only the green matrix coverage check
+with:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L coverage --output-on-failure
+```
 
 ## Fuzz And Stress Budgets
 

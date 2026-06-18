@@ -79,11 +79,8 @@ static int verify_paths(const char* root, const CoverageRow* row)
     if (row == NULL || root == NULL) {
         return 1;
     }
-    if (strcmp(row->status, "covered") != 0) {
-        return 0;
-    }
     if (row->verification[0] == '\0') {
-        (void)fprintf(stderr, "spec coverage: covered row has no verification: %s\n", row->id);
+        (void)fprintf(stderr, "spec coverage: row has no verification: %s\n", row->id);
         return 1;
     }
     (void)snprintf(verification, sizeof(verification), "%s", row->verification);
@@ -192,6 +189,9 @@ int main(int argc, char** argv)
             tracked_gaps += 1U;
             if (row->notes[0] == '\0') {
                 (void)fprintf(stderr, "spec coverage: tracked gap has no note: %s\n", row->id);
+                failed = 1;
+            }
+            if (verify_paths(root, row) != 0) {
                 failed = 1;
             }
         } else {
