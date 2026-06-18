@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACTS_FILE="${ROOT_DIR}/src/sys/aivm_syscall_contracts.c"
 DOCS_FILE="${ROOT_DIR}/Docs/Syscalls.md"
-TEST_FILE="${ROOT_DIR}/src/tests/test_syscall_contracts.c"
+TEST_FILE="${ROOT_DIR}/src/tests/syscalls/test_syscall_contracts.c"
 TMP_DIR="${ROOT_DIR}/.tmp/syscall-contract-check"
 CONTRACT_LIST="${TMP_DIR}/contracts.txt"
 DETERMINISTIC_ACTUAL="${TMP_DIR}/deterministic-utility-contracts.actual.txt"
@@ -52,7 +52,7 @@ while read -r _id target; do
     missing_docs=1
   fi
   if ! grep -qF "\"${target}\"" "${TEST_FILE}"; then
-    echo "syscall check: ${target} is missing from src/tests/test_syscall_contracts.c" >&2
+    echo "syscall check: ${target} is missing from src/tests/syscalls/test_syscall_contracts.c" >&2
     missing_tests=1
   fi
 done < "${CONTRACT_LIST}"

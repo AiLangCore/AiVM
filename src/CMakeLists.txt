@@ -225,98 +225,98 @@ endif()
 include(CTest)
 if (BUILD_TESTING)
     add_executable(aivm_test_program_loader
-        tests/test_program_loader.c
+        tests/bytecode/test_program_loader.c
     )
     target_link_libraries(aivm_test_program_loader PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_core
-        tests/test_vm_core.c
+        tests/vm/test_vm_core.c
     )
     target_link_libraries(aivm_test_vm_core PRIVATE aivm_core)
 
     add_executable(aivm_test_values
-        tests/test_values.c
+        tests/bytecode/test_values.c
     )
     target_link_libraries(aivm_test_values PRIVATE aivm_core)
 
     add_executable(aivm_test_syscall
-        tests/test_syscall.c
+        tests/syscalls/test_syscall.c
     )
     target_link_libraries(aivm_test_syscall PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_diagnostics
-        tests/test_vm_diagnostics.c
+        tests/vm/test_vm_diagnostics.c
     )
     target_link_libraries(aivm_test_vm_diagnostics PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_determinism
-        tests/test_vm_determinism.c
+        tests/vm/test_vm_determinism.c
     )
     target_link_libraries(aivm_test_vm_determinism PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_stack
-        tests/test_vm_stack.c
+        tests/vm/test_vm_stack.c
     )
     target_link_libraries(aivm_test_vm_stack PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_frames_locals
-        tests/test_vm_frames_locals.c
+        tests/vm/test_vm_frames_locals.c
     )
     target_link_libraries(aivm_test_vm_frames_locals PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_ops
-        tests/test_vm_ops.c
+        tests/vm/test_vm_ops.c
     )
     target_link_libraries(aivm_test_vm_ops PRIVATE aivm_core)
 
     add_executable(aivm_test_parity
-        tests/test_parity.c
+        tests/stdlib/test_parity.c
     )
     target_link_libraries(aivm_test_parity PRIVATE aivm_core)
 
     add_executable(aivm_test_runtime
-        tests/test_runtime.c
+        tests/vm/test_runtime.c
     )
     target_link_libraries(aivm_test_runtime PRIVATE aivm_core)
 
     add_executable(aivm_test_syscall_contracts
-        tests/test_syscall_contracts.c
+        tests/syscalls/test_syscall_contracts.c
     )
     target_link_libraries(aivm_test_syscall_contracts PRIVATE aivm_core)
 
     add_executable(aivm_test_c_api
-        tests/test_c_api.c
+        tests/vm/test_c_api.c
     )
     target_link_libraries(aivm_test_c_api PRIVATE aivm_core)
 
     add_executable(aivm_test_ailang_native_bridge
-        tests/test_ailang_native_bridge.c
+        tests/stdlib/test_ailang_native_bridge.c
     )
     target_link_libraries(aivm_test_ailang_native_bridge PRIVATE ailang_native_bridge)
 
     add_executable(aivm_test_ailang_package_manager
-        tests/test_ailang_package_manager.c
+        tests/stdlib/test_ailang_package_manager.c
     )
     target_link_libraries(aivm_test_ailang_package_manager PRIVATE ailang_package_manager)
 
     add_executable(aivm_test_memory_rc
-        tests/test_memory_rc.c
+        tests/memory/test_memory_rc.c
     )
     target_link_libraries(aivm_test_memory_rc PRIVATE aivm_core)
 
     add_executable(aivm_test_memory_cycle
-        tests/test_memory_cycle.c
+        tests/memory/test_memory_cycle.c
     )
     target_link_libraries(aivm_test_memory_cycle PRIVATE aivm_core)
 
     add_executable(aivm_test_debug_artifact_budget
-        tests/test_debug_artifact_budget.c
+        tests/memory/test_debug_artifact_budget.c
     )
     target_link_libraries(aivm_test_debug_artifact_budget PRIVATE aivm_core)
 
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_bytes_host
-            tests/test_bytes_host.c
+            tests/syscalls/test_bytes_host.c
         )
         target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -324,7 +324,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_ui_image_host
-            tests/test_ui_image_host.c
+            tests/syscalls/test_ui_image_host.c
         )
         target_link_libraries(aivm_test_ui_image_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -332,7 +332,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_net_async_host
-            tests/test_net_async_host.c
+            tests/syscalls/test_net_async_host.c
         )
         target_link_libraries(aivm_test_net_async_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -340,7 +340,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_host_open_default
-            tests/test_host_open_default.c
+            tests/syscalls/test_host_open_default.c
         )
         target_link_libraries(aivm_test_host_open_default PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -348,7 +348,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_host_resource_limits
-            tests/test_host_resource_limits.c
+            tests/syscalls/test_host_resource_limits.c
         )
         target_link_libraries(aivm_test_host_resource_limits PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -357,33 +357,34 @@ if (BUILD_TESTING)
     endif()
 
     add_executable(aivm_test_remote_channel
-        tests/test_remote_channel.c
+        tests/vm/test_remote_channel.c
     )
     target_link_libraries(aivm_test_remote_channel PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_session
-        tests/test_remote_session.c
+        tests/vm/test_remote_session.c
     )
     target_link_libraries(aivm_test_remote_session PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_transport
-        tests/test_remote_transport.c
+        tests/vm/test_remote_transport.c
     )
     target_link_libraries(aivm_test_remote_transport PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_ws_frame
-        tests/test_remote_ws_frame.c
+        tests/vm/test_remote_ws_frame.c
     )
     target_link_libraries(aivm_test_remote_ws_frame PRIVATE aivm_core)
 
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_process_lifecycle_stress
-            tests/test_process_lifecycle_stress.c
+            tests/syscalls/test_process_lifecycle_stress.c
         )
         target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
             target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE ws2_32 psapi)
         endif()
+
         if (APPLE)
             target_link_libraries(
                 aivm_test_bytes_host PRIVATE
@@ -432,7 +433,7 @@ if (BUILD_TESTING)
 
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
-            tests/test_shared_bridge_loader.c
+            tests/bytecode/test_shared_bridge_loader.c
         )
         target_include_directories(aivm_test_shared_bridge_loader PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -443,6 +444,10 @@ if (BUILD_TESTING)
             target_compile_options(aivm_test_shared_bridge_loader PRIVATE -Wall -Wextra -Wpedantic -Werror)
         endif()
         add_test(NAME aivm_test_shared_bridge_loader COMMAND aivm_test_shared_bridge_loader)
+        set_tests_properties(
+            aivm_test_shared_bridge_loader
+            PROPERTIES LABELS "unit;core;bytecode"
+        )
     endif()
 
     if (MSVC)
@@ -607,26 +612,27 @@ if (BUILD_TESTING)
 
     set_tests_properties(
         aivm_test_program_loader
-        aivm_test_vm_core
         aivm_test_values
+        PROPERTIES LABELS "unit;core;bytecode"
+    )
+    set_tests_properties(
+        aivm_test_vm_core
         aivm_test_vm_stack
         aivm_test_vm_frames_locals
         aivm_test_vm_ops
         aivm_test_runtime
         aivm_test_c_api
-        aivm_test_ailang_native_bridge
-        aivm_test_ailang_package_manager
-        PROPERTIES LABELS "unit;core"
+        PROPERTIES LABELS "unit;core;vm"
     )
     set_tests_properties(
         aivm_test_syscall
         aivm_test_syscall_contracts
-        PROPERTIES LABELS "unit;syscall"
+        PROPERTIES LABELS "unit;syscall;syscalls"
     )
     set_tests_properties(
         aivm_test_vm_diagnostics
         aivm_test_vm_determinism
-        PROPERTIES LABELS "unit;determinism"
+        PROPERTIES LABELS "unit;determinism;vm"
     )
     set_tests_properties(
         aivm_test_memory_rc
@@ -639,7 +645,12 @@ if (BUILD_TESTING)
         aivm_test_remote_session
         aivm_test_remote_transport
         aivm_test_remote_ws_frame
-        PROPERTIES LABELS "unit;remote"
+        PROPERTIES LABELS "unit;remote;vm"
+    )
+    set_tests_properties(
+        aivm_test_ailang_native_bridge
+        aivm_test_ailang_package_manager
+        PROPERTIES LABELS "unit;core;stdlib"
     )
     if (AIVM_BUILD_HOST_TESTS)
         set_tests_properties(
@@ -650,7 +661,7 @@ if (BUILD_TESTING)
             aivm_test_host_resource_limits
             aivm_test_process_lifecycle_stress
             aivm_test_ailang_smoke
-            PROPERTIES LABELS "integration;host"
+            PROPERTIES LABELS "integration;host;syscalls"
         )
         set_tests_properties(
             aivm_test_debug_memory_smoke
@@ -660,7 +671,7 @@ if (BUILD_TESTING)
     set_tests_properties(
         aivm_test_parity
         aivm_test_parity_cli
-        PROPERTIES LABELS "integration;parity"
+        PROPERTIES LABELS "integration;parity;stdlib"
     )
     if (AIVM_BUILD_HOST_TESTS)
         set_tests_properties(

@@ -69,6 +69,7 @@ call into AiVM rather than expanding the production VM command surface.
 - `Docs/Syscalls.md` defines the syscall boundary and syscall addition rules.
 - `Docs/Resource-Limits-And-Errors.md` defines beta resource limits and
   error-code families.
+- `Docs/Native-Test-Infrastructure.md` defines the CTest native test layout.
 - `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
 - `Docs/Production-VM-Readiness.md` tracks production hardening work.
 - [AiLangCore roadmap](https://ailang.codes/docs/roadmap.html) tracks the
@@ -97,6 +98,16 @@ Run the standalone native unit test surface:
 Optional host/parity tests that exercise AiLang tooling must be run explicitly
 with an installed AiLang toolchain. The default AiVM build and test path does
 not require an AiLang checkout.
+
+Focused native CTest labels are available for implementation work:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L vm --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L memory --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L bytecode --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L syscalls --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L stdlib --output-on-failure
+```
 
 ## CI
 

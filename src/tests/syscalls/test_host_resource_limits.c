@@ -2,7 +2,7 @@
 #define AIRUN_TEST_HOST_RESOURCE_LIMIT_BYTES 8
 #define AIRUN_TEST_HOST_RESOURCE_LIMIT_WORKER_COUNT 2
 #define main airun_embedded_main_for_test
-#include "../ailang_cli/ailang.c"
+#include "../../ailang_cli/ailang.c"
 #undef main
 
 #define CHECK(cond) \

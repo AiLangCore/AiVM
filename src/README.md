@@ -94,8 +94,12 @@ CTest labels are available after configuring/building the native tree. Useful gr
 
 - `unit`
 - `integration`
+- `vm`
 - `host`
 - `memory`
+- `bytecode`
+- `syscalls`
+- `stdlib`
 - `parity`
 - `wasm`
 

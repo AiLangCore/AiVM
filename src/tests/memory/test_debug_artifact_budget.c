@@ -1,6 +1,6 @@
 #define AIVM_DEBUG_RUNTIME 1
 #define main aivm_cli_main_for_test
-#include "../examples/aivm_cli.c"
+#include "../../examples/aivm_cli.c"
 #undef main
 
 #define CHECK(cond) \

@@ -29,7 +29,7 @@ jobs:
 
       - name: Configure native
         if: runner.os != 'Windows'
-        run: cmake --preset aivm-native-unix -S ./native
+        run: cmake --preset aivm-native-unix -S ./src
 
       - name: Build native
         if: runner.os != 'Windows'
@@ -41,7 +41,7 @@ jobs:
 
       - name: Configure native (Windows)
         if: runner.os == 'Windows'
-        run: cmake --preset aivm-native-windows -S ./native
+        run: cmake --preset aivm-native-windows -S ./src
 
       - name: Build native (Windows)
         if: runner.os == 'Windows'
