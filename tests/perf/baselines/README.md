@@ -34,7 +34,8 @@ Decode:
 
 Evaluation:
 
-- opcode-by-opcode coverage
+- opcode-specific benchmark rows for tracked gaps reported by
+  `aivm_perf_opcode_coverage`
 
 Memory:
 
@@ -49,13 +50,21 @@ Syscalls:
 
 Workers:
 
-- queue saturation behavior
-- parallel execution throughput
+- deeper worker scheduling saturation under long-running stress budgets
 
 Runtime profiles:
 
-- CLI
-- service
-- GUI
-- WASM
-- future mobile hosts
+- host profile benchmarks for CLI, service, GUI, WASM, and future mobile hosts
+  once AiVM exposes those as runtime profile contracts instead of host/tooling
+  conventions
+
+Modules:
+
+- dependency graph loading once AiVM owns a module/bundle graph loader API
+
+## Stress Versus Perf
+
+Stress tests should thrash the VM and prove durability under high budgets.
+Performance tests should stay small enough for CI and provide comparable
+throughput signals. When both touch the same runtime path, stress owns abuse
+coverage and perf owns regression timing.

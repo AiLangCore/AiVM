@@ -11,6 +11,7 @@
 #endif
 
 #include "aivm_program.h"
+#include "aivm_runtime.h"
 #include "aivm_vm.h"
 #include "sys/aivm_syscall.h"
 
@@ -23,9 +24,11 @@
 #endif
 
 enum {
-    PERF_MAX_RESULTS = 48,
+    PERF_MAX_RESULTS = 64,
     PERF_PROGRAM_BYTES = 4096,
-    PERF_EVAL_INSTRUCTIONS = 4097
+    PERF_EVAL_INSTRUCTIONS = 4097,
+    PERF_QUEUE_CAPACITY = 2048,
+    PERF_QUEUE_EVENT_COUNT = 1500
 };
 
 typedef struct {
@@ -39,6 +42,15 @@ typedef struct {
     size_t peak_memory_bytes;
     size_t allocation_count;
 } PerfResult;
+
+typedef struct {
+    int64_t values[PERF_QUEUE_CAPACITY];
+    size_t head;
+    size_t tail;
+    size_t count;
+    size_t drained_total;
+    size_t drained_checksum;
+} PerfQueueState;
 
 static volatile uint64_t g_perf_sink = 0ULL;
 
@@ -338,6 +350,47 @@ static int run_program_repeated(
         if (expected_stack_count > 0U) {
             g_perf_sink += (uint64_t)vm.stack[expected_stack_count - 1U].type;
         }
+    }
+
+    aivm_dispose(&vm);
+    return 0;
+}
+
+static int run_program_with_syscalls_repeated(
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    size_t iterations,
+    size_t expected_stack_count,
+    AivmValueType expected_top_type,
+    const char* failure_name)
+{
+    static AivmVm vm;
+    size_t index;
+
+    for (index = 0U; index < iterations; index += 1U) {
+        aivm_init_with_syscalls(&vm, program, bindings, binding_count);
+        aivm_run(&vm);
+        if (vm.status != AIVM_VM_STATUS_HALTED ||
+            vm.error != AIVM_VM_ERR_NONE ||
+            vm.stack_count != expected_stack_count) {
+            (void)fprintf(
+                stderr,
+                "%s failed: status=%d error=%d stack=%zu detail=%s\n",
+                failure_name,
+                (int)vm.status,
+                (int)vm.error,
+                vm.stack_count,
+                aivm_vm_error_detail(&vm));
+            aivm_dispose(&vm);
+            return 1;
+        }
+        if (expected_stack_count > 0U && vm.stack[expected_stack_count - 1U].type != expected_top_type) {
+            (void)fprintf(stderr, "%s failed: unexpected top value type\n", failure_name);
+            aivm_dispose(&vm);
+            return 1;
+        }
+        g_perf_sink += vm.instruction_pointer + vm.stack_count;
     }
 
     aivm_dispose(&vm);
@@ -879,6 +932,56 @@ static int bench_failed_syscall(PerfResult* results, size_t* result_count, size_
         0U) ? 0 : 1;
 }
 
+static int bench_vm_call_sys(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.console.write" },
+        { .type = AIVM_VAL_STRING, .string_value = "perf" }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { .target = "sys.console.write", .handler = perf_console_write }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_with_syscalls_repeated(
+            &program,
+            bindings,
+            sizeof(bindings) / sizeof(bindings[0]),
+            iterations,
+            1U,
+            AIVM_VAL_VOID,
+            "vm call_sys benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "vm_call_sys_console_write",
+        "syscall",
+        "tiny",
+        iterations * program.instruction_count,
+        elapsed,
+        iterations * 4U,
+        iterations) ? 0 : 1;
+}
+
 static int bench_async_worker(PerfResult* results, size_t* result_count, size_t iterations)
 {
     static const AivmInstruction instructions[] = {
@@ -913,6 +1016,65 @@ static int bench_async_worker(PerfResult* results, size_t* result_count, size_t 
         elapsed,
         0U,
         iterations) ? 0 : 1;
+}
+
+static int bench_async_parallel_workers(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 21 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 23 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 25 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_ASYNC_CALL, .operand_int = 27 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 3 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 3 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 1 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 2 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 3 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 4 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    double start = now_seconds();
+    double elapsed;
+
+    if (run_program_repeated(&program, iterations, 1U, AIVM_VAL_INT, "async parallel worker benchmark") != 0) {
+        return 1;
+    }
+    elapsed = now_seconds() - start;
+    return add_result(
+        results,
+        result_count,
+        "worker_async_parallel_four_await",
+        "worker",
+        "medium",
+        iterations * 4U,
+        elapsed,
+        0U,
+        iterations * 4U) ? 0 : 1;
 }
 
 static int bench_par_join_queue(PerfResult* results, size_t* result_count, size_t iterations)
@@ -991,6 +1153,147 @@ static int bench_worker(PerfResult* results, size_t* result_count, size_t iterat
         elapsed,
         0U,
         0U) ? 0 : 1;
+}
+
+static int perf_queue_enqueue(void* context, const char* event_name, AivmValue payload)
+{
+    PerfQueueState* state = (PerfQueueState*)context;
+    if (state == NULL || event_name == NULL || payload.type != AIVM_VAL_INT) {
+        return 1;
+    }
+    if (state->count >= PERF_QUEUE_CAPACITY) {
+        return 1;
+    }
+    state->values[state->tail] = payload.int_value;
+    state->tail = (state->tail + 1U) % PERF_QUEUE_CAPACITY;
+    state->count += 1U;
+    return 0;
+}
+
+static int perf_queue_drain(void* context, size_t max_events, size_t* out_drained_count)
+{
+    PerfQueueState* state = (PerfQueueState*)context;
+    size_t drained = 0U;
+    if (state == NULL || out_drained_count == NULL) {
+        return 1;
+    }
+    while (state->count > 0U && drained < max_events) {
+        int64_t value = state->values[state->head];
+        state->head = (state->head + 1U) % PERF_QUEUE_CAPACITY;
+        state->count -= 1U;
+        drained += 1U;
+        state->drained_total += 1U;
+        state->drained_checksum = (state->drained_checksum * 131U) + (size_t)(value + 17);
+    }
+    *out_drained_count = drained;
+    return 0;
+}
+
+static int bench_runtime_queue_saturation(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    size_t index;
+    double start;
+    double elapsed;
+    size_t drained = 0U;
+
+    start = now_seconds();
+    for (index = 0U; index < iterations; index += 1U) {
+        int64_t value;
+        PerfQueueState state;
+        AivmRuntimeHostAdapter adapter;
+
+        memset(&state, 0, sizeof(state));
+        adapter.context = &state;
+        adapter.enqueue = perf_queue_enqueue;
+        adapter.drain = perf_queue_drain;
+
+        for (value = 1; value <= (int64_t)PERF_QUEUE_EVENT_COUNT; value += 1) {
+            if (aivm_runtime_host_enqueue_event(&adapter, "host.event.perf", aivm_value_int(value)) !=
+                AIVM_RUNTIME_HOST_EVENT_OK) {
+                (void)fprintf(stderr, "queue saturation enqueue failed at value=%lld\n", (long long)value);
+                return 1;
+            }
+        }
+
+        while (state.count > 0U) {
+            if (aivm_runtime_host_drain_events(&adapter, 7U, &drained) != AIVM_RUNTIME_HOST_EVENT_OK ||
+                drained == 0U) {
+                (void)fprintf(stderr, "queue saturation drain failed\n");
+                return 1;
+            }
+        }
+
+        if (state.drained_total != PERF_QUEUE_EVENT_COUNT) {
+            (void)fprintf(stderr, "queue saturation lost events: %zu\n", state.drained_total);
+            return 1;
+        }
+        g_perf_sink += state.drained_checksum;
+    }
+    elapsed = now_seconds() - start;
+
+    return add_result(
+        results,
+        result_count,
+        "runtime_event_queue_saturation",
+        "worker",
+        "large",
+        iterations * PERF_QUEUE_EVENT_COUNT,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
+}
+
+static int bench_runtime_profiles(PerfResult* results, size_t* result_count, size_t iterations)
+{
+    static AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmRuntimeProfile profiles[] = {
+        AIVM_RUNTIME_PROFILE_PRODUCTION,
+        AIVM_RUNTIME_PROFILE_DEBUG,
+        AIVM_RUNTIME_PROFILE_TOOLING
+    };
+    size_t index;
+    double start;
+    double elapsed;
+
+    start = now_seconds();
+    for (index = 0U; index < iterations; index += 1U) {
+        AivmRuntimeProfile profile = profiles[index % (sizeof(profiles) / sizeof(profiles[0]))];
+        AivmRuntimeProfileLimits limits = aivm_runtime_profile_limits(profile);
+        aivm_init(&vm, &program);
+        aivm_set_runtime_profile(&vm, profile);
+        if (vm.runtime_profile != profile ||
+            limits.stack_capacity == 0U ||
+            limits.worker_count == 0U ||
+            limits.syscall_elapsed_ms == 0U) {
+            (void)fprintf(stderr, "runtime profile benchmark failed for profile=%d\n", (int)profile);
+            aivm_dispose(&vm);
+            return 1;
+        }
+        g_perf_sink += limits.stack_capacity + limits.worker_count + vm.syscall_elapsed_limit_ms;
+    }
+    elapsed = now_seconds() - start;
+    aivm_dispose(&vm);
+
+    return add_result(
+        results,
+        result_count,
+        "runtime_profile_limits_production_debug_tooling",
+        "runtime-profile",
+        "tiny",
+        iterations,
+        elapsed,
+        0U,
+        iterations) ? 0 : 1;
 }
 
 static int bench_golden_replay(PerfResult* results, size_t* result_count, size_t iterations)
@@ -1159,6 +1462,9 @@ int main(void)
     size_t syscall_iterations = read_budget("AIVM_PERF_SYSCALL_ITERATIONS", 10000U * multiplier, 10000000U);
     size_t worker_iterations = read_budget("AIVM_PERF_WORKER_ITERATIONS", 10000U * multiplier, 10000000U);
     size_t async_iterations = read_budget("AIVM_PERF_ASYNC_ITERATIONS", 20U * multiplier, 10000U);
+    size_t parallel_iterations = read_budget("AIVM_PERF_PARALLEL_ITERATIONS", 10U * multiplier, 10000U);
+    size_t queue_iterations = read_budget("AIVM_PERF_QUEUE_ITERATIONS", 10U * multiplier, 10000U);
+    size_t profile_iterations = read_budget("AIVM_PERF_PROFILE_ITERATIONS", 10000U * multiplier, 10000000U);
     size_t golden_iterations = read_budget("AIVM_PERF_GOLDEN_ITERATIONS", 1000U * multiplier, 1000000U);
 
     memset(results, 0, sizeof(results));
@@ -1178,9 +1484,13 @@ int main(void)
         bench_syscall(results, &result_count, syscall_iterations) != 0 ||
         bench_large_payload_syscall(results, &result_count, syscall_iterations) != 0 ||
         bench_failed_syscall(results, &result_count, syscall_iterations) != 0 ||
+        bench_vm_call_sys(results, &result_count, syscall_iterations) != 0 ||
         bench_worker(results, &result_count, worker_iterations) != 0 ||
         bench_async_worker(results, &result_count, async_iterations) != 0 ||
+        bench_async_parallel_workers(results, &result_count, parallel_iterations) != 0 ||
         bench_par_join_queue(results, &result_count, worker_iterations) != 0 ||
+        bench_runtime_queue_saturation(results, &result_count, queue_iterations) != 0 ||
+        bench_runtime_profiles(results, &result_count, profile_iterations) != 0 ||
         bench_golden_replay(results, &result_count, golden_iterations) != 0) {
         return 1;
     }

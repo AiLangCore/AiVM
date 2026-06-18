@@ -104,12 +104,20 @@ they measure scalability and regression risk. PR CI runs `perf-smoke`, nightly
 CI runs `perf-full`, `perf-release` validates the baseline comparator, and the
 harness writes JSON artifacts under `artifacts/perf/`.
 
-The first harness covers decode, invalid decode rejection, evaluation,
-branching, loops, calls, tail recursion, locals, constants, strings, bytes,
-memory reset/safe-point, syscall dispatch, large syscall payloads, worker
-dispatch, async worker startup/await, par-join queue mechanics, and golden
-replay timing. Curated release baselines are staged until enough stable
-cross-platform data exists to avoid noisy gates.
+The harness covers decode, invalid decode rejection, evaluation, branching,
+loops, calls, tail recursion, locals, constants, strings, bytes, memory
+reset/safe-point, checked syscall dispatch, VM-level `CALL_SYS`, large syscall
+payloads, worker dispatch, async worker startup/await, four-worker async
+launch/await throughput, deterministic host event queue saturation, par-join
+queue mechanics, current runtime profile limit selection, and golden replay
+timing. `perf-release` also runs an opcode coverage audit that requires every
+opcode to be classified as either benchmarked or an explicit tracked gap.
+
+Host profile benchmarks for GUI, WASM, and future mobile targets are deferred
+until AiVM exposes those as runtime profile contracts. Module/dependency graph
+loading benchmarks are deferred until AiVM owns a module or bundle graph loader
+API. Curated release baselines are staged until enough stable cross-platform
+data exists to avoid noisy gates.
 
 ## Sanitizers
 

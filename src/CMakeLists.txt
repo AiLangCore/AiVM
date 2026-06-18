@@ -364,6 +364,11 @@ if (BUILD_TESTING)
         ../tests/perf/tools/perf_compare.c
     )
 
+    add_executable(aivm_perf_opcode_coverage
+        ../tests/perf/tools/perf_opcode_coverage.c
+    )
+    target_link_libraries(aivm_perf_opcode_coverage PRIVATE aivm_core)
+
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_bytes_host
             ../tests/integration/syscalls/test_bytes_host.c
@@ -524,6 +529,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime_stress PRIVATE /W4)
         target_compile_options(aivm_perf_harness PRIVATE /W4)
         target_compile_options(aivm_perf_compare PRIVATE /W4)
+        target_compile_options(aivm_perf_opcode_coverage PRIVATE /W4)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE /W4)
             target_compile_options(aivm_test_ui_image_host PRIVATE /W4)
@@ -562,6 +568,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime_stress PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_perf_harness PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_perf_compare PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_perf_opcode_coverage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
             target_compile_options(aivm_test_ui_image_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -608,6 +615,7 @@ if (BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/../tests/perf/baselines/fixture-current.json
             15
     )
+    add_test(NAME aivm_perf_opcode_coverage COMMAND aivm_perf_opcode_coverage)
     if (AIVM_BUILD_HOST_TESTS)
         add_test(NAME aivm_test_bytes_host COMMAND aivm_test_bytes_host)
         add_test(NAME aivm_test_ui_image_host COMMAND aivm_test_ui_image_host)
@@ -776,6 +784,10 @@ if (BUILD_TESTING)
     )
     set_tests_properties(
         aivm_perf_compare_fixture
+        PROPERTIES LABELS "perf;perf-release"
+    )
+    set_tests_properties(
+        aivm_perf_opcode_coverage
         PROPERTIES LABELS "perf;perf-release"
     )
     if (AIVM_BUILD_HOST_TESTS)

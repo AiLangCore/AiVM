@@ -70,6 +70,9 @@ AIVM_PERF_MEMORY_ITERATIONS=10000
 AIVM_PERF_SYSCALL_ITERATIONS=100000
 AIVM_PERF_WORKER_ITERATIONS=100000
 AIVM_PERF_ASYNC_ITERATIONS=200
+AIVM_PERF_PARALLEL_ITERATIONS=200
+AIVM_PERF_QUEUE_ITERATIONS=200
+AIVM_PERF_PROFILE_ITERATIONS=100000
 AIVM_PERF_GOLDEN_ITERATIONS=10000
 ```
 
@@ -93,11 +96,19 @@ memory   vm_reset_stack_safepoint
 syscall  syscall_checked_console_write
 syscall  syscall_checked_contract_failure
 syscall  syscall_checked_large_bytes_payload
+syscall  vm_call_sys_console_write
 worker   worker_poll_dispatch
 worker   worker_async_call_await
+worker   worker_async_parallel_four_await
 worker   worker_par_join_queue
+worker   runtime_event_queue_saturation
+runtime-profile runtime_profile_limits_production_debug_tooling
 golden   golden_add_int_replay
 ```
+
+`aivm_perf_opcode_coverage` is a separate CTest gate under `perf-release`. It
+does not emit benchmark timing JSON; it enforces that every VM opcode is either
+covered by a perf benchmark or explicitly recorded as a tracked perf gap.
 
 Baseline comparison tooling is available through:
 
@@ -110,4 +121,5 @@ validation can point `aivm_perf_compare` at a stored release baseline and a new
 `artifacts/perf/results-full.json` file once platform baselines are curated.
 
 Known gaps are tracked in `baselines/README.md`. New opcodes, runtime profiles,
-and host profiles should add benchmark coverage as they become stable.
+module loading APIs, and host profiles should add benchmark coverage as they
+become stable.
