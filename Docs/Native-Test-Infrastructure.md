@@ -8,8 +8,8 @@ tests that define observable runtime behavior.
 
 Golden tests remain authoritative for behavior:
 
-- `src/tests/parity_cases/`
-- `src/tests/parity_commands*.txt`
+- `tests/golden/parity_cases/`
+- `tests/golden/parity_commands*.txt`
 
 Native C unit tests are implementation guards. They should cover VM mechanics,
 memory ownership, bytecode loading, syscall contracts, and host-boundary
@@ -20,16 +20,17 @@ changed deliberately.
 ## Layout
 
 ```text
-src/tests/
-  vm/        VM execution, diagnostics, runtime adapter, C API, remote transport
-  memory/    reference counting, cycles, artifact budgets, memory limits
-  bytecode/  program loading, value representation, shared bridge loading
-  syscalls/  syscall dispatch, contracts, host-boundary implementations
-  stdlib/    native bridge/package manager tests and parity harness glue
+tests/
+  unit/         isolated mechanical checks for VM, memory, bytecode, syscalls
+  integration/ subsystem interaction checks and host-boundary smoke tests
+  fuzz/         deterministic fuzz-smoke targets and future libFuzzer harnesses
+  stress/       long-running and repeated-operation abuse tests
+  golden/       authoritative deterministic behavior fixtures
+  security/     hostile input and fail-safe validation checks
 ```
 
-Golden fixtures and CTest shell wrappers remain at `src/tests/` so parity
-commands keep stable paths.
+Component subdirectories under `tests/unit/` and `tests/integration/` keep the
+VM, memory, bytecode, syscall, and stdlib ownership boundaries visible.
 
 ## Labels
 
@@ -42,9 +43,29 @@ ctest --test-dir .tmp/aivm-c-build-native -L memory --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L bytecode --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L syscalls --output-on-failure
 ctest --test-dir .tmp/aivm-c-build-native -L stdlib --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L golden --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L security --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L fuzz --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L stress --output-on-failure
 ```
 
 `./test-aivm-c.sh` remains the repository-level verification entrypoint.
+
+Default local verification runs `unit|integration|golden|security`. Fuzz and
+stress labels are available locally and are intended for nightly or explicit
+long-running validation.
+
+## Sanitizers
+
+CMake exposes sanitizer toggles:
+
+- `AIVM_ENABLE_ASAN`
+- `AIVM_ENABLE_UBSAN`
+- `AIVM_ENABLE_LSAN`
+- `AIVM_ENABLE_MSAN`
+
+ASAN and UBSAN are required RC-1 CI gates. LSAN and MSAN are available where the
+host compiler and platform support them.
 
 ## Unit Framework
 

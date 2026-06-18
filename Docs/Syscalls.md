@@ -14,7 +14,7 @@ A new `sys.*` target may only be added when all of these are true:
   libraries.
 - It has an explicit contract entry in `src/sys/aivm_syscall_contracts.c`.
   The contract entry must include the syscall capability group.
-- It has contract tests in `src/tests/syscalls/test_syscall_contracts.c`.
+- It has contract tests in `tests/unit/syscalls/test_syscall_contracts.c`.
 - It is listed in this document with a host-boundary justification.
 - The change notes explain why it is a syscall instead of AiLang library code.
 

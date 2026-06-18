@@ -1,7 +1,7 @@
 #define AIRUN_ALLOW_INTERNAL_UI_FALLBACK 1
 #define AIRUN_TEST_HOST_RESOURCE_LIMIT_PROCESS_COUNT 2
 #define main airun_embedded_main_for_test
-#include "../../ailang_cli/ailang.c"
+#include "../../../src/ailang_cli/ailang.c"
 #undef main
 
 #include <stdio.h>

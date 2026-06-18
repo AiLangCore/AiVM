@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PRESET="${AIVM_CMAKE_PRESET:-aivm-native-unix}"
-TEST_LABEL="${AIVM_CTEST_LABEL:-unit}"
+TEST_LABEL="${AIVM_CTEST_LABEL:-unit|integration|golden|security}"
 
 "${ROOT_DIR}/scripts/check-syscall-contracts.sh"
 
@@ -14,5 +14,5 @@ ctest --test-dir "${ROOT_DIR}/.tmp/aivm-c-build-native" -L "${TEST_LABEL}" --out
 
 if [[ "${AIVM_RUN_DEBUG_MEMORY_SMOKE:-1}" == "1" ]]; then
   AILANG_ROOT="${AIVM_AILANG_ROOT:-${ROOT_DIR}/../AiLang}"
-  bash "${ROOT_DIR}/src/tests/ctest_debug_memory_smoke.sh" "${AILANG_ROOT}"
+  bash "${ROOT_DIR}/tests/integration/ctest_debug_memory_smoke.sh" "${AILANG_ROOT}"
 fi

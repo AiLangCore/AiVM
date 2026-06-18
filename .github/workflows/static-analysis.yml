@@ -1,0 +1,39 @@
+name: AiVM Static Analysis
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+      - "codex/**"
+
+jobs:
+  clang-tools:
+    name: clang-tidy-analyzer-cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy clang-tools cppcheck
+
+      - name: Configure
+        run: cmake --preset aivm-native-unix -S ./src
+
+      - name: clang-tidy
+        run: |
+          find src -name '*.c' \
+            ! -path 'src/ailang_cli/*' \
+            ! -path 'src/examples/*' \
+            -print0 |
+          xargs -0 clang-tidy -p .tmp/aivm-c-build-native --warnings-as-errors='*'
+
+      - name: clang static analyzer
+        run: scan-build --status-bugs cmake --build ./.tmp/aivm-c-build-native
+
+      - name: cppcheck
+        run: cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c17 --inline-suppr --suppress=missingIncludeSystem src tests

@@ -28,7 +28,7 @@ AiVM owns the native virtual machine for AiLangCore.
   compiler policy, or compatibility adapters.
 - Every syscall change must update `Docs/Syscalls.md`,
   `src/sys/aivm_syscall_contracts.c`, and
-  `src/tests/syscalls/test_syscall_contracts.c`.
+  `tests/unit/syscalls/test_syscall_contracts.c`.
 - `scripts/check-syscall-contracts.sh` must pass before a syscall change is
   complete.
 - Keep VM behavior deterministic.

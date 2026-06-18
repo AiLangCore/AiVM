@@ -58,17 +58,17 @@ run_case() {
 
 run_case \
   "await_edge_invalid" \
-  "${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_await_edge_invalid.aos" \
-  "${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_await_edge_invalid.out" \
+  "${ROOT_DIR}/tests/golden/parity_cases/vm_c_execute_src_await_edge_invalid.aos" \
+  "${ROOT_DIR}/tests/golden/parity_cases/vm_c_execute_src_await_edge_invalid.out" \
   "3"
 run_case \
   "par_join_edge_invalid" \
-  "${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos" \
-  "${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_par_join_edge_invalid.out" \
+  "${ROOT_DIR}/tests/golden/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos" \
+  "${ROOT_DIR}/tests/golden/parity_cases/vm_c_execute_src_par_join_edge_invalid.out" \
   "3"
 run_case \
   "par_cancel_edge_noop" \
-  "${ROOT_DIR}/src/tests/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos" \
+  "${ROOT_DIR}/tests/golden/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos" \
   "" \
   "0"
 

@@ -26,6 +26,10 @@ set(AIVM_BUILD_CHANNEL "local" CACHE STRING "AiVM CLI release channel")
 set(AIVM_BUILD_COMMIT "unknown" CACHE STRING "AiVM CLI source commit")
 option(AIVM_BUILD_SHARED "Build shared AiVM.C library for host bridge experiments" OFF)
 option(AIVM_BUILD_HOST_TESTS "Build AiLang host integration tests" OFF)
+option(AIVM_ENABLE_ASAN "Enable AddressSanitizer for native builds" OFF)
+option(AIVM_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for native builds" OFF)
+option(AIVM_ENABLE_LSAN "Enable LeakSanitizer for native builds where supported" OFF)
+option(AIVM_ENABLE_MSAN "Enable MemorySanitizer for native builds where supported" OFF)
 
 if (AIVM_BUILD_COMMIT STREQUAL "unknown")
     execute_process(
@@ -53,6 +57,27 @@ if (MSVC)
     # AivmVm currently owns fixed-size execution arenas. Keep Windows test and
     # CLI stacks large enough until the VM arenas move behind heap-backed storage.
     add_link_options(/STACK:16777216)
+endif()
+
+if (NOT MSVC)
+    set(AIVM_SANITIZERS "")
+    if (AIVM_ENABLE_ASAN)
+        list(APPEND AIVM_SANITIZERS "address")
+    endif()
+    if (AIVM_ENABLE_UBSAN)
+        list(APPEND AIVM_SANITIZERS "undefined")
+    endif()
+    if (AIVM_ENABLE_LSAN AND NOT APPLE)
+        list(APPEND AIVM_SANITIZERS "leak")
+    endif()
+    if (AIVM_ENABLE_MSAN)
+        list(APPEND AIVM_SANITIZERS "memory")
+    endif()
+    if (AIVM_SANITIZERS)
+        list(JOIN AIVM_SANITIZERS "," AIVM_SANITIZER_FLAGS)
+        add_compile_options(-fsanitize=${AIVM_SANITIZER_FLAGS} -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=${AIVM_SANITIZER_FLAGS})
+    endif()
 endif()
 
 set(AIVM_CORE_SOURCES
@@ -225,98 +250,113 @@ endif()
 include(CTest)
 if (BUILD_TESTING)
     add_executable(aivm_test_program_loader
-        tests/bytecode/test_program_loader.c
+        ../tests/unit/bytecode/test_program_loader.c
     )
     target_link_libraries(aivm_test_program_loader PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_core
-        tests/vm/test_vm_core.c
+        ../tests/unit/vm/test_vm_core.c
     )
     target_link_libraries(aivm_test_vm_core PRIVATE aivm_core)
 
     add_executable(aivm_test_values
-        tests/bytecode/test_values.c
+        ../tests/unit/bytecode/test_values.c
     )
     target_link_libraries(aivm_test_values PRIVATE aivm_core)
 
     add_executable(aivm_test_syscall
-        tests/syscalls/test_syscall.c
+        ../tests/integration/syscalls/test_syscall.c
     )
     target_link_libraries(aivm_test_syscall PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_diagnostics
-        tests/vm/test_vm_diagnostics.c
+        ../tests/unit/vm/test_vm_diagnostics.c
     )
     target_link_libraries(aivm_test_vm_diagnostics PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_determinism
-        tests/vm/test_vm_determinism.c
+        ../tests/unit/vm/test_vm_determinism.c
     )
     target_link_libraries(aivm_test_vm_determinism PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_stack
-        tests/vm/test_vm_stack.c
+        ../tests/unit/vm/test_vm_stack.c
     )
     target_link_libraries(aivm_test_vm_stack PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_frames_locals
-        tests/vm/test_vm_frames_locals.c
+        ../tests/unit/vm/test_vm_frames_locals.c
     )
     target_link_libraries(aivm_test_vm_frames_locals PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_ops
-        tests/vm/test_vm_ops.c
+        ../tests/unit/vm/test_vm_ops.c
     )
     target_link_libraries(aivm_test_vm_ops PRIVATE aivm_core)
 
     add_executable(aivm_test_parity
-        tests/stdlib/test_parity.c
+        ../tests/golden/test_parity.c
     )
     target_link_libraries(aivm_test_parity PRIVATE aivm_core)
 
     add_executable(aivm_test_runtime
-        tests/vm/test_runtime.c
+        ../tests/unit/vm/test_runtime.c
     )
     target_link_libraries(aivm_test_runtime PRIVATE aivm_core)
 
     add_executable(aivm_test_syscall_contracts
-        tests/syscalls/test_syscall_contracts.c
+        ../tests/unit/syscalls/test_syscall_contracts.c
     )
     target_link_libraries(aivm_test_syscall_contracts PRIVATE aivm_core)
 
     add_executable(aivm_test_c_api
-        tests/vm/test_c_api.c
+        ../tests/unit/vm/test_c_api.c
     )
     target_link_libraries(aivm_test_c_api PRIVATE aivm_core)
 
     add_executable(aivm_test_ailang_native_bridge
-        tests/stdlib/test_ailang_native_bridge.c
+        ../tests/unit/stdlib/test_ailang_native_bridge.c
     )
     target_link_libraries(aivm_test_ailang_native_bridge PRIVATE ailang_native_bridge)
 
     add_executable(aivm_test_ailang_package_manager
-        tests/stdlib/test_ailang_package_manager.c
+        ../tests/unit/stdlib/test_ailang_package_manager.c
     )
     target_link_libraries(aivm_test_ailang_package_manager PRIVATE ailang_package_manager)
 
     add_executable(aivm_test_memory_rc
-        tests/memory/test_memory_rc.c
+        ../tests/unit/memory/test_memory_rc.c
     )
     target_link_libraries(aivm_test_memory_rc PRIVATE aivm_core)
 
     add_executable(aivm_test_memory_cycle
-        tests/memory/test_memory_cycle.c
+        ../tests/unit/memory/test_memory_cycle.c
     )
     target_link_libraries(aivm_test_memory_cycle PRIVATE aivm_core)
 
     add_executable(aivm_test_debug_artifact_budget
-        tests/memory/test_debug_artifact_budget.c
+        ../tests/unit/memory/test_debug_artifact_budget.c
     )
     target_link_libraries(aivm_test_debug_artifact_budget PRIVATE aivm_core)
 
+    add_executable(aivm_test_fuzz_smoke
+        ../tests/fuzz/test_fuzz_smoke.c
+    )
+    target_link_libraries(aivm_test_fuzz_smoke PRIVATE aivm_core)
+
+    add_executable(aivm_test_security_malformed_inputs
+        ../tests/security/test_security_malformed_inputs.c
+    )
+    target_link_libraries(aivm_test_security_malformed_inputs PRIVATE aivm_core)
+
+    add_executable(aivm_test_stress_smoke
+        ../tests/stress/test_stress_smoke.c
+    )
+    target_link_libraries(aivm_test_stress_smoke PRIVATE aivm_core)
+
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_bytes_host
-            tests/syscalls/test_bytes_host.c
+            ../tests/integration/syscalls/test_bytes_host.c
         )
         target_link_libraries(aivm_test_bytes_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -324,7 +364,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_ui_image_host
-            tests/syscalls/test_ui_image_host.c
+            ../tests/integration/syscalls/test_ui_image_host.c
         )
         target_link_libraries(aivm_test_ui_image_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -332,7 +372,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_net_async_host
-            tests/syscalls/test_net_async_host.c
+            ../tests/integration/syscalls/test_net_async_host.c
         )
         target_link_libraries(aivm_test_net_async_host PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -340,7 +380,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_host_open_default
-            tests/syscalls/test_host_open_default.c
+            ../tests/integration/syscalls/test_host_open_default.c
         )
         target_link_libraries(aivm_test_host_open_default PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -348,7 +388,7 @@ if (BUILD_TESTING)
         endif()
 
         add_executable(aivm_test_host_resource_limits
-            tests/syscalls/test_host_resource_limits.c
+            ../tests/integration/syscalls/test_host_resource_limits.c
         )
         target_link_libraries(aivm_test_host_resource_limits PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -357,28 +397,28 @@ if (BUILD_TESTING)
     endif()
 
     add_executable(aivm_test_remote_channel
-        tests/vm/test_remote_channel.c
+        ../tests/unit/vm/test_remote_channel.c
     )
     target_link_libraries(aivm_test_remote_channel PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_session
-        tests/vm/test_remote_session.c
+        ../tests/unit/vm/test_remote_session.c
     )
     target_link_libraries(aivm_test_remote_session PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_transport
-        tests/vm/test_remote_transport.c
+        ../tests/unit/vm/test_remote_transport.c
     )
     target_link_libraries(aivm_test_remote_transport PRIVATE aivm_core)
 
     add_executable(aivm_test_remote_ws_frame
-        tests/vm/test_remote_ws_frame.c
+        ../tests/unit/vm/test_remote_ws_frame.c
     )
     target_link_libraries(aivm_test_remote_ws_frame PRIVATE aivm_core)
 
     if (AIVM_BUILD_HOST_TESTS)
         add_executable(aivm_test_process_lifecycle_stress
-            tests/syscalls/test_process_lifecycle_stress.c
+            ../tests/integration/syscalls/test_process_lifecycle_stress.c
         )
         target_link_libraries(aivm_test_process_lifecycle_stress PRIVATE aivm_core ailang_package_manager)
         if (WIN32)
@@ -433,7 +473,7 @@ if (BUILD_TESTING)
 
     if (AIVM_BUILD_SHARED)
         add_executable(aivm_test_shared_bridge_loader
-            tests/bytecode/test_shared_bridge_loader.c
+            ../tests/unit/bytecode/test_shared_bridge_loader.c
         )
         target_include_directories(aivm_test_shared_bridge_loader PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -469,6 +509,9 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE /W4)
+        target_compile_options(aivm_test_fuzz_smoke PRIVATE /W4)
+        target_compile_options(aivm_test_security_malformed_inputs PRIVATE /W4)
+        target_compile_options(aivm_test_stress_smoke PRIVATE /W4)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE /W4)
             target_compile_options(aivm_test_ui_image_host PRIVATE /W4)
@@ -502,6 +545,9 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_fuzz_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_security_malformed_inputs PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_stress_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
         if (AIVM_BUILD_HOST_TESTS)
             target_compile_options(aivm_test_bytes_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
             target_compile_options(aivm_test_ui_image_host PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -536,6 +582,9 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
+    add_test(NAME aivm_test_fuzz_smoke COMMAND aivm_test_fuzz_smoke)
+    add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
+    add_test(NAME aivm_test_stress_smoke COMMAND aivm_test_stress_smoke)
     if (AIVM_BUILD_HOST_TESTS)
         add_test(NAME aivm_test_bytes_host COMMAND aivm_test_bytes_host)
         add_test(NAME aivm_test_ui_image_host COMMAND aivm_test_ui_image_host)
@@ -553,54 +602,54 @@ if (BUILD_TESTING)
     add_test(
         NAME aivm_test_parity_cli
         COMMAND aivm_parity_cli
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/parity_left.txt
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/parity_right.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/parity_left.txt
+            ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/parity_right.txt
     )
     if (AIVM_BUILD_HOST_TESTS)
         if (WIN32)
             add_test(
                 NAME aivm_test_ailang_smoke
                 COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_ailang_smoke.ps1
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/integration/ctest_ailang_smoke.ps1
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
                 NAME aivm_test_task_edge_parity
                 COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_task_edge_parity.ps1
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/ctest_task_edge_parity.ps1
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
                     $<TARGET_FILE:aivm_parity_cli>
             )
             add_test(
                 NAME aivm_test_debug_memory_smoke
                 COMMAND pwsh -NoProfile -ExecutionPolicy Bypass -File
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_debug_memory_smoke.ps1
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/integration/ctest_debug_memory_smoke.ps1
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
         else()
             add_test(
                 NAME aivm_test_ailang_smoke
                 COMMAND bash
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_ailang_smoke.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/integration/ctest_ailang_smoke.sh
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
                 NAME aivm_test_task_edge_parity
                 COMMAND bash
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_task_edge_parity.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/ctest_task_edge_parity.sh
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
                     $<TARGET_FILE:aivm_parity_cli>
             )
             add_test(
                 NAME aivm_test_debug_memory_smoke
                 COMMAND bash
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_debug_memory_smoke.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/integration/ctest_debug_memory_smoke.sh
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
                 NAME aivm_test_wasm_golden
                 COMMAND bash
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/ctest_wasm_golden.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/ctest_wasm_golden.sh
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             set_tests_properties(
@@ -626,6 +675,9 @@ if (BUILD_TESTING)
     )
     set_tests_properties(
         aivm_test_syscall
+        PROPERTIES LABELS "integration;syscall;syscalls"
+    )
+    set_tests_properties(
         aivm_test_syscall_contracts
         PROPERTIES LABELS "unit;syscall;syscalls"
     )
@@ -671,18 +723,30 @@ if (BUILD_TESTING)
     set_tests_properties(
         aivm_test_parity
         aivm_test_parity_cli
-        PROPERTIES LABELS "integration;parity;stdlib"
+        PROPERTIES LABELS "golden;parity;stdlib"
+    )
+    set_tests_properties(
+        aivm_test_fuzz_smoke
+        PROPERTIES LABELS "fuzz"
+    )
+    set_tests_properties(
+        aivm_test_security_malformed_inputs
+        PROPERTIES LABELS "security"
+    )
+    set_tests_properties(
+        aivm_test_stress_smoke
+        PROPERTIES LABELS "stress"
     )
     if (AIVM_BUILD_HOST_TESTS)
         set_tests_properties(
             aivm_test_task_edge_parity
-            PROPERTIES LABELS "integration;parity"
+            PROPERTIES LABELS "golden;parity"
         )
     endif()
     if (AIVM_BUILD_HOST_TESTS AND NOT WIN32)
         set_tests_properties(
             aivm_test_wasm_golden
-            PROPERTIES LABELS "integration;parity;wasm"
+            PROPERTIES LABELS "golden;parity;wasm"
         )
     endif()
 endif()

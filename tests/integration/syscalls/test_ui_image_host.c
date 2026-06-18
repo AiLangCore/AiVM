@@ -1,7 +1,7 @@
 #define AIRUN_UI_HOST_EXTERNAL 1
 #define AIRUN_TEST_HOST_RESOURCE_LIMIT_UI_WINDOW_COUNT 2
 #define main airun_embedded_main_for_test
-#include "../../ailang_cli/ailang.c"
+#include "../../../src/ailang_cli/ailang.c"
 #undef main
 
 #include <string.h>

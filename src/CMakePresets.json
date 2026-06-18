@@ -22,6 +22,47 @@
       "generator": "Unix Makefiles"
     },
     {
+      "name": "aivm-native-asan-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-asan",
+      "cacheVariables": {
+        "AIVM_ENABLE_ASAN": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "aivm-native-ubsan-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-ubsan",
+      "cacheVariables": {
+        "AIVM_ENABLE_UBSAN": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "aivm-native-lsan-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-lsan",
+      "cacheVariables": {
+        "AIVM_ENABLE_ASAN": "ON",
+        "AIVM_ENABLE_LSAN": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "aivm-native-msan-unix",
+      "inherits": "aivm-native-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../.tmp/aivm-c-build-msan",
+      "cacheVariables": {
+        "AIVM_ENABLE_MSAN": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "aivm-native-windows",
       "inherits": "aivm-native-base",
       "generator": "Visual Studio 17 2022",
@@ -67,6 +108,22 @@
       "configuration": "Debug"
     },
     {
+      "name": "aivm-native-asan-unix-build",
+      "configurePreset": "aivm-native-asan-unix"
+    },
+    {
+      "name": "aivm-native-ubsan-unix-build",
+      "configurePreset": "aivm-native-ubsan-unix"
+    },
+    {
+      "name": "aivm-native-lsan-unix-build",
+      "configurePreset": "aivm-native-lsan-unix"
+    },
+    {
+      "name": "aivm-native-msan-unix-build",
+      "configurePreset": "aivm-native-msan-unix"
+    },
+    {
       "name": "aivm-native-shared-unix-build",
       "configurePreset": "aivm-native-shared-unix"
     },
@@ -94,6 +151,15 @@
       }
     },
     {
+      "name": "aivm-native-unix-test-rc",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "unit|integration|golden|security"
+        }
+      }
+    },
+    {
       "name": "aivm-native-unix-test-integration",
       "inherits": "aivm-native-unix-test",
       "filter": {
@@ -108,6 +174,42 @@
       "filter": {
         "include": {
           "label": "parity"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-golden",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "golden"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-security",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "security"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-fuzz",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "fuzz"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-unix-test-stress",
+      "inherits": "aivm-native-unix-test",
+      "filter": {
+        "include": {
+          "label": "stress"
         }
       }
     },
@@ -147,6 +249,15 @@
       }
     },
     {
+      "name": "aivm-native-windows-test-rc",
+      "inherits": "aivm-native-windows-test",
+      "filter": {
+        "include": {
+          "label": "unit|integration|golden|security"
+        }
+      }
+    },
+    {
       "name": "aivm-native-windows-test-integration",
       "inherits": "aivm-native-windows-test",
       "filter": {
@@ -161,6 +272,30 @@
       "filter": {
         "include": {
           "label": "parity"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-asan-unix-test-rc",
+      "configurePreset": "aivm-native-asan-unix",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "unit|integration|golden|security"
+        }
+      }
+    },
+    {
+      "name": "aivm-native-ubsan-unix-test-rc",
+      "configurePreset": "aivm-native-ubsan-unix",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "unit|integration|golden|security"
         }
       }
     },

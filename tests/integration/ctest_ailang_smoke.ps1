@@ -15,7 +15,7 @@ $tmp = Join-Path $RepoRoot '.tmp/ctest-ailang-smoke-win'
 if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
-$casePath = Join-Path $RepoRoot 'src/tests/parity_cases/vm_c_execute_src_main_params.aos'
+$casePath = Join-Path $RepoRoot 'tests/golden/parity_cases/vm_c_execute_src_main_params.aos'
 & $ailang run $casePath --vm=c | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'ailang smoke: vm=c run failed' }
 

@@ -43,7 +43,7 @@ Source layout:
 ```text
 src/
 src/include/
-src/tests/
+tests/
 src/examples/
 scripts/
 src/CMakeLists.txt

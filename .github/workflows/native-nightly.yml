@@ -1,0 +1,48 @@
+name: AiVM Native Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 7 * * *"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  extended-native:
+    name: fuzz-stress-security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure native
+        run: cmake --preset aivm-native-unix -S ./src
+
+      - name: Build native
+        run: cmake --build ./.tmp/aivm-c-build-native
+
+      - name: Fuzz smoke
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L fuzz --output-on-failure
+
+      - name: Stress smoke
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L stress --output-on-failure
+
+      - name: Security
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L security --output-on-failure
+
+  leak-sanitizer:
+    name: lsan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure LSAN
+        run: cmake --preset aivm-native-lsan-unix -S ./src
+
+      - name: Build LSAN
+        run: cmake --build ./.tmp/aivm-c-build-lsan
+
+      - name: Test LSAN
+        run: ctest --test-dir ./.tmp/aivm-c-build-lsan -L "unit|integration|golden|security" --output-on-failure

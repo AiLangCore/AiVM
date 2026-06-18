@@ -35,9 +35,9 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --build ./.tmp/aivm-c-build-native
 
-      - name: Test native
+      - name: Test native RC gate
         if: runner.os != 'Windows'
-        run: ctest --test-dir ./.tmp/aivm-c-build-native -L unit --output-on-failure
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L "unit|integration|golden|security" --output-on-failure
 
       - name: Configure native (Windows)
         if: runner.os == 'Windows'
@@ -47,6 +47,33 @@ jobs:
         if: runner.os == 'Windows'
         run: cmake --build ./.tmp/aivm-c-build-native --config Debug
 
-      - name: Test native (Windows)
+      - name: Test native RC gate (Windows)
         if: runner.os == 'Windows'
-        run: ctest --test-dir ./.tmp/aivm-c-build-native -L unit -C Debug --output-on-failure
+        run: ctest --test-dir ./.tmp/aivm-c-build-native -L "unit|integration|golden|security" -C Debug --output-on-failure
+
+  sanitizers:
+    name: sanitizer-${{ matrix.sanitizer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: asan
+            preset: aivm-native-asan-unix
+            build_dir: ./.tmp/aivm-c-build-asan
+          - sanitizer: ubsan
+            preset: aivm-native-ubsan-unix
+            build_dir: ./.tmp/aivm-c-build-ubsan
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure ${{ matrix.sanitizer }}
+        run: cmake --preset ${{ matrix.preset }} -S ./src
+
+      - name: Build ${{ matrix.sanitizer }}
+        run: cmake --build ${{ matrix.build_dir }}
+
+      - name: Test ${{ matrix.sanitizer }}
+        run: ctest --test-dir ${{ matrix.build_dir }} -L "unit|integration|golden|security" --output-on-failure
