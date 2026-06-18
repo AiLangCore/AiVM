@@ -1599,8 +1599,12 @@ static int test_str_substring_reuses_interned_results(void)
         return 1;
     }
     if (expect(vm.string_arena_used == baseline_arena_used) != 0) {
+        aivm_dispose(&baseline_vm);
+        aivm_dispose(&vm);
         return 1;
     }
+    aivm_dispose(&baseline_vm);
+    aivm_dispose(&vm);
     return 0;
 }
 
