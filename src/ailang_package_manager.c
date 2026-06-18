@@ -1840,7 +1840,7 @@ int ailang_package_manager_restore(
         char configured_package_dir[PATH_MAX];
         char conflict[256];
         AilangPackageRecord record;
-        AilangPackageSourceMetadata source_metadata;
+        AilangPackageSourceMetadata source_metadata = {0};
         int use_configured_package = 0;
         if (!pm_load_record(registry, include_name, include_version, &record, error, error_len)) {
             free(manifest);

@@ -81,6 +81,8 @@ static AivmRemoteCodecStatus write_string(
     write_u16_le(&out[index], (uint16_t)len);
     index += 2U;
     if (len > 0U) {
+        // Bounds checked above (line 78); memcpy_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memcpy(&out[index], text, len);
         index += len;
     }
@@ -117,6 +119,8 @@ static AivmRemoteCodecStatus read_string(
         return AIVM_REMOTE_CODEC_ERR_SHORT;
     }
     if (len > 0U) {
+        // Bounds checked above (line 116); memcpy_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memcpy(out_text, &in[index], len);
         index += (size_t)len;
     }

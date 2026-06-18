@@ -7040,6 +7040,8 @@ void aivm_step(AivmVm* vm)
                     attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
                     free(new_children);
                     free(attrs);
+                    new_children = NULL;
+                    attrs = NULL;
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD attr slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -7047,8 +7049,12 @@ void aivm_step(AivmVm* vm)
                 attrs[i] = vm->node_attrs[attr_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
-                free(new_children);
-                free(attrs);
+                if (new_children != NULL) {
+                    free(new_children);
+                }
+                if (attrs != NULL) {
+                    free(attrs);
+                }
                 break;
             }
             for (i = 0U; i < base_node->child_count; i += 1U) {
@@ -7057,6 +7063,8 @@ void aivm_step(AivmVm* vm)
                     child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
                     free(new_children);
                     free(attrs);
+                    new_children = NULL;
+                    attrs = NULL;
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD child slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -7064,8 +7072,12 @@ void aivm_step(AivmVm* vm)
                 new_children[i] = vm->node_children[child_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
-                free(new_children);
-                free(attrs);
+                if (new_children != NULL) {
+                    free(new_children);
+                }
+                if (attrs != NULL) {
+                    free(attrs);
+                }
                 break;
             }
             new_children[base_node->child_count] = child_handle;
@@ -7156,6 +7168,8 @@ void aivm_step(AivmVm* vm)
                     child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
                     free(attrs);
                     free(children);
+                    attrs = NULL;
+                    children = NULL;
                     set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR child slot was invalid.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
@@ -7163,8 +7177,12 @@ void aivm_step(AivmVm* vm)
                 children[i] = vm->node_children[child_slot];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
-                free(attrs);
-                free(children);
+                if (attrs != NULL) {
+                    free(attrs);
+                }
+                if (children != NULL) {
+                    free(children);
+                }
                 break;
             }
             if (!create_node_record(
