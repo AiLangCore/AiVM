@@ -41,9 +41,13 @@ static AivmRemoteSessionStatus encode_error_frame(
 {
     AivmRemoteError error_msg;
     AivmRemoteCodecStatus status;
+    // Operating on known struct size; memset_s is not portable across platforms
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(&error_msg, 0, sizeof(error_msg));
     error_msg.error_code = error_code;
     if (message != NULL) {
+        // Bounds checked by sizeof; snprintf_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         (void)snprintf(error_msg.message, sizeof(error_msg.message), "%s", message);
     }
     status = aivm_remote_encode_error(id, &error_msg, out_bytes, out_capacity, out_length);
@@ -55,6 +59,8 @@ void aivm_remote_server_session_init(AivmRemoteServerSession* session)
     if (session == NULL) {
         return;
     }
+    // Operating on known struct size; memset_s is not portable across platforms
+    // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
     memset(session, 0, sizeof(*session));
 }
 
@@ -85,16 +91,22 @@ AivmRemoteSessionStatus aivm_remote_server_process_frame(
         AivmRemoteWelcome welcome;
         AivmRemoteCodecStatus codec_status;
         uint32_t i;
+        // Operating on known struct size; memset_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memset(&hello, 0, sizeof(hello));
         codec_status = aivm_remote_decode_hello(input, input_length, &id, &hello);
         if (codec_status != AIVM_REMOTE_CODEC_OK) {
             return AIVM_REMOTE_SESSION_ERR_CODEC;
         }
+        // Operating on known struct size; memset_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memset(&welcome, 0, sizeof(welcome));
         welcome.proto_version = config->proto_version;
         for (i = 0U; i < hello.requested_caps_count; i += 1U) {
             if (cap_allowed(config, hello.requested_caps[i]) &&
                 welcome.granted_caps_count < AIVM_REMOTE_MAX_CAPS) {
+                // Bounds checked by sizeof; snprintf_s is not portable across platforms
+                // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
                 (void)snprintf(
                     welcome.granted_caps[welcome.granted_caps_count],
                     sizeof(welcome.granted_caps[welcome.granted_caps_count]),
@@ -107,6 +119,8 @@ AivmRemoteSessionStatus aivm_remote_server_process_frame(
         session->negotiated_proto_version = welcome.proto_version;
         session->granted_caps_count = welcome.granted_caps_count;
         for (i = 0U; i < welcome.granted_caps_count; i += 1U) {
+            // Bounds checked by sizeof; snprintf_s is not portable across platforms
+            // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
             (void)snprintf(
                 session->granted_caps[i],
                 sizeof(session->granted_caps[i]),
@@ -121,6 +135,8 @@ AivmRemoteSessionStatus aivm_remote_server_process_frame(
         AivmRemoteCall call;
         AivmRemoteResult result;
         AivmRemoteCodecStatus codec_status;
+        // Operating on known struct size; memset_s is not portable across platforms
+        // NOLINTNEXTLINE(clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling)
         memset(&call, 0, sizeof(call));
         codec_status = aivm_remote_decode_call(input, input_length, &id, &call);
         if (codec_status != AIVM_REMOTE_CODEC_OK) {
