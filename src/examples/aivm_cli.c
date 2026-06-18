@@ -41,6 +41,7 @@
 #endif
 
 #include "aivm_c_api.h"
+#include "aivm_debugger.h"
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 #include "sys/aivm_syscall.h"
@@ -763,6 +764,7 @@ static void print_usage(FILE* stream)
     fprintf(stream, "       %s profile <program.aibc1> [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s benchmark [--iterations <n>] <program.aibc1> [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s debug capture run <program.aibc1> [--out <dir>] [--profile <production|debug|tooling>] [--allow <capability>] [--deny <capability>] [args...]\n", AIVM_CLI_NAME);
+    fprintf(stream, "       %s debug session <program.aibc1> --commands <file> [--out <dir>] [args...]\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s explain <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s suggest <debug-run-dir>\n", AIVM_CLI_NAME);
     fprintf(stream, "       %s inspect <stack|memory|profile|syscalls> <debug-run-dir>\n", AIVM_CLI_NAME);
@@ -1958,6 +1960,323 @@ static int run_program(const char* path, const char* const* process_argv, size_t
 }
 
 #if defined(AIVM_DEBUG_RUNTIME)
+static char* debug_trim_line(char* line)
+{
+    char* end;
+    while (*line == ' ' || *line == '\t' || *line == '\r' || *line == '\n') {
+        line += 1;
+    }
+    end = line + strlen(line);
+    while (end > line &&
+           (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) {
+        end -= 1;
+    }
+    *end = '\0';
+    return line;
+}
+
+static int debug_parse_size(const char* text, size_t* out_value)
+{
+    char* end;
+    unsigned long value;
+    if (text == NULL || out_value == NULL) {
+        return 0;
+    }
+    errno = 0;
+    value = strtoul(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return 0;
+    }
+    *out_value = (size_t)value;
+    return 1;
+}
+
+static AivmDebuggerInspectKind debug_inspect_kind_from_name(const char* name)
+{
+    if (strcmp(name, "stack") == 0) {
+        return AIVM_DEBUGGER_INSPECT_STACK;
+    }
+    if (strcmp(name, "locals") == 0) {
+        return AIVM_DEBUGGER_INSPECT_LOCALS;
+    }
+    if (strcmp(name, "frame") == 0) {
+        return AIVM_DEBUGGER_INSPECT_FRAME;
+    }
+    if (strcmp(name, "tasks") == 0) {
+        return AIVM_DEBUGGER_INSPECT_TASKS;
+    }
+    if (strcmp(name, "queue") == 0) {
+        return AIVM_DEBUGGER_INSPECT_QUEUE;
+    }
+    return (AivmDebuggerInspectKind)99;
+}
+
+static void write_debugger_event(
+    FILE* file,
+    size_t event_index,
+    const char* command,
+    AivmDebuggerStatus status,
+    const AivmDebuggerSnapshot* snapshot)
+{
+    fprintf(file, "  { index = %zu, command = ", event_index);
+    write_toml_string(file, command);
+    fprintf(file, ", status = ");
+    write_toml_string(file, aivm_debugger_status_name(status));
+    if (snapshot != NULL) {
+        fprintf(
+            file,
+            ", pc = %zu, opcode = %d, state = ",
+            snapshot->pc,
+            snapshot->opcode);
+        write_toml_string(file, aivm_debugger_state_name(snapshot->debugger_state));
+        fprintf(
+            file,
+            ", stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, vm_status = %d, vm_error = %d",
+            snapshot->stack_count,
+            snapshot->locals_count,
+            snapshot->call_frame_count,
+            snapshot->completed_task_count,
+            (int)snapshot->vm_status,
+            (int)snapshot->vm_error);
+    }
+    fputs(" },\n", file);
+}
+
+static int debug_session_run(int argc, char** argv)
+{
+    const char* program_path;
+    const char* command_path = NULL;
+    const char* artifact_dir = ".tmp/aivm-debug-session";
+    const char* const* process_argv = NULL;
+    size_t process_argv_count = 0U;
+    uint8_t* program_bytes = NULL;
+    size_t program_byte_count = 0U;
+    uint8_t* command_bytes = NULL;
+    size_t command_byte_count = 0U;
+    char* commands = NULL;
+    char* line;
+    char* next_line;
+    char artifact_path[PATH_MAX];
+    FILE* artifact_file;
+    AivmProgram program;
+    AivmProgramLoadResult load_result;
+    static AivmVm vm;
+    AivmDebugger debugger;
+    AivmDebuggerSnapshot snapshot;
+    size_t event_index = 0U;
+    int result_code = 0;
+    int i;
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.stdout.writeLine", aivm_cli_stdout_write_line },
+        { "io.print", aivm_cli_stdout_write_line },
+        { "io.write", aivm_cli_stdout_write_line },
+        { "sys.process.exit", native_syscall_process_exit },
+        { "sys.process.args", native_syscall_process_argv },
+        { "sys.process.cwd", native_syscall_process_cwd },
+        { "sys.process.env.get", native_syscall_process_env_get },
+        { "sys.process.spawn", native_syscall_process_spawn },
+        { "sys.process.wait", native_syscall_process_wait },
+        { "sys.process.kill", native_syscall_process_kill },
+        { "sys.process.stdout.read", native_syscall_process_stdout_read },
+        { "sys.process.stderr.read", native_syscall_process_stderr_read },
+        { "sys.process.poll", native_syscall_process_poll },
+        { "sys.host.openDefault", native_syscall_host_open_default },
+        { "sys.fs.path.exists", aivm_cli_path_exists },
+        { "sys.fs.dir.create", aivm_cli_dir_create },
+        { "sys.fs.dir.delete", aivm_cli_dir_delete },
+        { "sys.fs.file.delete", aivm_cli_file_delete },
+        { "sys.fs.file.write", aivm_cli_file_write },
+        { "sys.fs.file.read", aivm_cli_file_read }
+    };
+
+    if (argc < 5) {
+        print_usage(stderr);
+        return 64;
+    }
+    program_path = argv[3];
+    for (i = 4; i < argc; i += 1) {
+        if (strcmp(argv[i], "--commands") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --commands requires a file\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            command_path = argv[i + 1];
+            i += 1;
+        } else if (strncmp(argv[i], "--commands=", 11U) == 0) {
+            command_path = argv[i] + 11;
+        } else if (strcmp(argv[i], "--out") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: --out requires a directory\n", AIVM_CLI_NAME);
+                return 64;
+            }
+            artifact_dir = argv[i + 1];
+            i += 1;
+        } else if (strncmp(argv[i], "--out=", 6U) == 0) {
+            artifact_dir = argv[i] + 6;
+        } else if (strcmp(argv[i], "--") == 0) {
+            if (i + 1 < argc) {
+                process_argv = (const char* const*)&argv[i + 1];
+                process_argv_count = (size_t)(argc - i - 1);
+            }
+            break;
+        } else {
+            process_argv = (const char* const*)&argv[i];
+            process_argv_count = (size_t)(argc - i);
+            break;
+        }
+    }
+    if (command_path == NULL) {
+        fprintf(stderr, "%s: debug session requires --commands <file>\n", AIVM_CLI_NAME);
+        return 64;
+    }
+    if (!read_file(program_path, &program_bytes, &program_byte_count) ||
+        !read_file(command_path, &command_bytes, &command_byte_count)) {
+        free(program_bytes);
+        free(command_bytes);
+        return 1;
+    }
+    commands = (char*)malloc(command_byte_count + 1U);
+    if (commands == NULL) {
+        free(program_bytes);
+        free(command_bytes);
+        return 1;
+    }
+    memcpy(commands, command_bytes, command_byte_count);
+    commands[command_byte_count] = '\0';
+    free(command_bytes);
+
+    load_result = aivm_program_load_aibc1(program_bytes, program_byte_count, &program);
+    if (load_result.status != AIVM_PROGRAM_OK) {
+        fprintf(
+            stderr,
+            "aivm-debug: load failed: %s at byte %zu\n",
+            aivm_program_status_message(load_result.status),
+            load_result.error_offset);
+        free(program_bytes);
+        free(commands);
+        return 2;
+    }
+    if (!ensure_directory(artifact_dir) ||
+        !join_path(artifact_dir, "debugger.toml", artifact_path, sizeof(artifact_path))) {
+        fprintf(stderr, "%s: failed to create debug session artifact directory: %s\n", AIVM_CLI_NAME, artifact_dir);
+        free(program_bytes);
+        free(commands);
+        return 1;
+    }
+    artifact_file = fopen(artifact_path, "wb");
+    if (artifact_file == NULL) {
+        fprintf(stderr, "%s: failed to open debugger artifact: %s\n", AIVM_CLI_NAME, artifact_path);
+        free(program_bytes);
+        free(commands);
+        return 1;
+    }
+
+    aivm_init_with_syscalls_and_argv(
+        &vm,
+        &program,
+        bindings,
+        sizeof(bindings) / sizeof(bindings[0]),
+        process_argv,
+        process_argv_count);
+    aivm_set_runtime_profile(&vm, AIVM_RUNTIME_PROFILE_DEBUG);
+    aivm_debugger_init(&debugger, &vm);
+
+    fputs("format = \"aivm_debugger_session_v1\"\n", artifact_file);
+    fputs("program = ", artifact_file);
+    write_toml_string(artifact_file, program_path);
+    fputs("\ncommands = ", artifact_file);
+    write_toml_string(artifact_file, command_path);
+    fputs("\n\n[[session]]\nevents = [\n", artifact_file);
+
+    line = commands;
+    while (line != NULL && *line != '\0') {
+        char* command;
+        char word0[32];
+        char word1[32];
+        char word2[32];
+        AivmDebuggerStatus status = AIVM_DEBUGGER_OK;
+        next_line = strchr(line, '\n');
+        if (next_line != NULL) {
+            *next_line = '\0';
+            next_line += 1;
+        }
+        command = debug_trim_line(line);
+        if (command[0] != '\0' && command[0] != '#') {
+            word0[0] = '\0';
+            word1[0] = '\0';
+            word2[0] = '\0';
+            (void)sscanf(command, "%31s %31s %31s", word0, word1, word2);
+            if (strcmp(word0, "break") == 0 && strcmp(word1, "pc") == 0) {
+                size_t pc;
+                if (!debug_parse_size(word2, &pc)) {
+                    status = AIVM_DEBUGGER_ERR_INVALID;
+                } else {
+                    status = aivm_debugger_break_pc(&debugger, pc);
+                }
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            } else if (strcmp(word0, "continue") == 0) {
+                size_t max_steps = 1000000U;
+                if (word1[0] != '\0' && !debug_parse_size(word1, &max_steps)) {
+                    status = AIVM_DEBUGGER_ERR_INVALID;
+                    (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+                } else {
+                    status = aivm_debugger_continue(&debugger, max_steps, &snapshot);
+                    if (status == AIVM_DEBUGGER_ERR_HALTED) {
+                        status = AIVM_DEBUGGER_OK;
+                    }
+                }
+            } else if (strcmp(word0, "step") == 0) {
+                status = aivm_debugger_step(&debugger, &snapshot);
+                if (status == AIVM_DEBUGGER_ERR_HALTED) {
+                    status = AIVM_DEBUGGER_OK;
+                }
+            } else if (strcmp(word0, "pause") == 0) {
+                status = aivm_debugger_pause(&debugger, &snapshot);
+                if (status == AIVM_DEBUGGER_ERR_HALTED) {
+                    status = AIVM_DEBUGGER_OK;
+                }
+            } else if (strcmp(word0, "inspect") == 0 && word1[0] != '\0') {
+                status = aivm_debugger_inspect(&debugger, debug_inspect_kind_from_name(word1), &snapshot);
+            } else {
+                status = AIVM_DEBUGGER_ERR_INVALID;
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            }
+            write_debugger_event(artifact_file, event_index, command, status, &snapshot);
+            event_index += 1U;
+            if (status == AIVM_DEBUGGER_ERR_INVALID ||
+                status == AIVM_DEBUGGER_ERR_BREAKPOINT_LIMIT ||
+                status == AIVM_DEBUGGER_ERR_STEP_LIMIT ||
+                status == AIVM_DEBUGGER_ERR_VM) {
+                result_code = status == AIVM_DEBUGGER_ERR_VM ? 3 : 64;
+                break;
+            }
+        }
+        line = next_line;
+    }
+    fputs("]\n\nfinal = { state = ", artifact_file);
+    (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+    write_toml_string(artifact_file, aivm_debugger_state_name(snapshot.debugger_state));
+    fprintf(
+        artifact_file,
+        ", pc = %zu, opcode = %d, stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, vm_status = %d, vm_error = %d }\n",
+        snapshot.pc,
+        snapshot.opcode,
+        snapshot.stack_count,
+        snapshot.locals_count,
+        snapshot.call_frame_count,
+        snapshot.completed_task_count,
+        (int)snapshot.vm_status,
+        (int)snapshot.vm_error);
+    fclose(artifact_file);
+    if (vm.status == AIVM_VM_STATUS_ERROR) {
+        result_code = 3;
+    }
+    aivm_dispose(&vm);
+    free(program_bytes);
+    free(commands);
+    return result_code;
+}
+
 static int debug_capture_run(int argc, char** argv)
 {
     const char* artifact_dir = ".tmp/aivm-debug-run";
@@ -2241,6 +2560,11 @@ int main(int argc, char** argv)
         strcmp(argv[2], "capture") == 0 &&
         strcmp(argv[3], "run") == 0) {
         return debug_capture_run(argc, argv);
+    }
+    if (argc >= 4 &&
+        strcmp(argv[1], "debug") == 0 &&
+        strcmp(argv[2], "session") == 0) {
+        return debug_session_run(argc, argv);
     }
     if (argc >= 3 && strcmp(argv[1], "profile") == 0) {
         const char* const* process_argv = (argc > 3) ? (const char* const*)&argv[3] : NULL;

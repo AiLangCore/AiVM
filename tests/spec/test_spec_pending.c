@@ -15,10 +15,10 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    if (strcmp(argv[1], "debug-full-debugger") == 0) {
+    if (strcmp(argv[1], "debug-advanced-debugger") == 0) {
         return fail_pending(
             argv[1],
-            "aivm-debug does not yet implement the full debugger protocol command surface.");
+            "aivm-debug does not yet implement function/node breakpoints, step-over/out, heap inspection, or host-operation inspection.");
     }
 
     (void)fprintf(stderr, "unknown spec gap id: %s\n", argv[1]);

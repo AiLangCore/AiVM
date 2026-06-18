@@ -183,6 +183,7 @@ aivm-debug compare <left-debug-run-dir> <right-debug-run-dir>
 
 Initial native support exists for:
 
+- `aivm-debug debug session <program.aibc1> --commands <file> --out <dir>`
 - `aivm-debug explain <debug-run-dir>`
 - `aivm-debug inspect stack <debug-run-dir>`
 - `aivm-debug inspect memory <debug-run-dir>`
@@ -205,6 +206,26 @@ error, bytecode, profile, and memory fields between two captures.
 
 These commands should print concise deterministic summaries and optionally emit
 TOML/JSON for higher-level agent tools.
+
+`debug session` is the deterministic debugger control surface. It reads a
+line-oriented command file and emits `debugger.toml`. The supported beta command
+set is:
+
+```text
+break pc <bytecode-pc>
+continue [max-steps]
+pause
+step
+inspect stack
+inspect locals
+inspect frame
+inspect tasks
+inspect queue
+```
+
+The command file format is intentionally simple so agents can generate and
+replay sessions without depending on terminal control. `continue` is bounded;
+omitting `max-steps` uses the runtime default session ceiling.
 
 ## Return-To-Production-Readiness Checklist
 
@@ -241,6 +262,10 @@ Required before switching back:
 - [x] Add `aivm-debug inspect memory <debug-run-dir>`.
 - [x] Add `aivm-debug inspect profile <debug-run-dir>`.
 - [x] Add `aivm-debug inspect syscalls <debug-run-dir>`.
+- [x] Add deterministic debugger controls: break by pc, step, bounded
+  continue, pause, and inspect while paused.
+- [x] Add `aivm-debug debug session <program.aibc1> --commands <file> --out
+  <dir>` with machine-readable `debugger.toml` artifacts.
 - [x] Add debug-only instruction and opcode counters.
 - [x] Add debug-only syscall count and per-target syscall counts.
 - [x] Add debug-only syscall timing totals and per-target timings.
@@ -257,8 +282,9 @@ Optional follow-up after returning to production readiness:
 - [ ] Add source map fields: source file, source line, source node id, and
   function name.
 - [ ] Add richer frame-local summaries in `stack_trace.toml`.
-- [ ] Add interactive debugger controls: break, step, continue, inspect while
-  paused.
+- [ ] Add advanced debugger controls: break by function, break by source node,
+  step over, step out, heap/node-handle inspection, and active host operation
+  inspection.
 - [ ] Add JSON output mode for agent tools that prefer JSON over TOML.
 - [ ] Add artifact size limits and explicit truncation records.
 - [ ] Add AiVectra semantic UI capture artifacts.

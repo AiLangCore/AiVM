@@ -23,6 +23,8 @@ LOAD_FAIL_RUN="${TMP_DIR}/load-fail-run"
 TOOLING_RUN="${TMP_DIR}/tooling-run"
 PRODUCTION_LOAD_FAIL_RUN="${TMP_DIR}/production-load-fail-run"
 POLICY_LOAD_FAIL_RUN="${TMP_DIR}/policy-load-fail-run"
+SESSION_RUN="${TMP_DIR}/session-run"
+SESSION_COMMANDS="${TMP_DIR}/session.commands"
 
 printf '%b' \
   '\x41\x49\x42\x43\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00'\
@@ -70,6 +72,47 @@ set -e
 
 if [[ "${ok_rc}" -ne 42 ]]; then
   echo "expected ok capture rc=42, got ${ok_rc}" >&2
+  exit 1
+fi
+
+cat >"${SESSION_COMMANDS}" <<'EOF'
+break pc 1
+continue
+inspect stack
+step
+EOF
+set +e
+"${AIVM_DEBUG}" debug session "${OK_PROGRAM}" --commands "${SESSION_COMMANDS}" --out "${SESSION_RUN}" >"${TMP_DIR}/session.stdout" 2>"${TMP_DIR}/session.stderr"
+session_rc=$?
+set -e
+
+if [[ "${session_rc}" -ne 0 ]]; then
+  echo "expected debug session rc=0, got ${session_rc}" >&2
+  cat "${TMP_DIR}/session.stderr" >&2
+  exit 1
+fi
+if [[ ! -f "${SESSION_RUN}/debugger.toml" ]]; then
+  echo "expected debugger.toml from debug session" >&2
+  exit 1
+fi
+if ! grep -q 'format = "aivm_debugger_session_v1"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected debugger session format marker" >&2
+  exit 1
+fi
+if ! grep -q 'command = "break pc 1", status = "ok", pc = 0' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected breakpoint command event" >&2
+  exit 1
+fi
+if ! grep -q 'command = "continue", status = "ok", pc = 1' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected continue command to stop at pc=1" >&2
+  exit 1
+fi
+if ! grep -q 'command = "step", status = "ok"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected step command event" >&2
+  exit 1
+fi
+if ! grep -q 'final = { state = "halted"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected final halted state" >&2
   exit 1
 fi
 

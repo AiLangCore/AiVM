@@ -84,6 +84,7 @@ set(AIVM_CORE_SOURCES
     aivm_types.c
     aivm_vm.c
     aivm_program.c
+    aivm_debugger.c
     aivm_module_cache.c
     sys/aivm_syscall.c
     sys/aivm_syscall_contracts.c
@@ -299,6 +300,11 @@ if (BUILD_TESTING)
         ../tests/unit/vm/test_vm_ops.c
     )
     target_link_libraries(aivm_test_vm_ops PRIVATE aivm_core)
+
+    add_executable(aivm_test_debugger_protocol
+        ../tests/unit/vm/test_debugger_protocol.c
+    )
+    target_link_libraries(aivm_test_debugger_protocol PRIVATE aivm_core)
 
     add_executable(aivm_test_parity
         ../tests/golden/test_parity.c
@@ -535,6 +541,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_vm_stack PRIVATE /W4)
         target_compile_options(aivm_test_vm_frames_locals PRIVATE /W4)
         target_compile_options(aivm_test_vm_ops PRIVATE /W4)
+        target_compile_options(aivm_test_debugger_protocol PRIVATE /W4)
         target_compile_options(aivm_test_parity PRIVATE /W4)
         target_compile_options(aivm_test_runtime PRIVATE /W4)
         target_compile_options(aivm_test_syscall_contracts PRIVATE /W4)
@@ -578,6 +585,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_vm_stack PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_frames_locals PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_ops PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_debugger_protocol PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_parity PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_runtime PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_syscall_contracts PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -622,6 +630,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_vm_stack COMMAND aivm_test_vm_stack)
     add_test(NAME aivm_test_vm_frames_locals COMMAND aivm_test_vm_frames_locals)
     add_test(NAME aivm_test_vm_ops COMMAND aivm_test_vm_ops)
+    add_test(NAME aivm_test_debugger_protocol COMMAND aivm_test_debugger_protocol)
     add_test(NAME aivm_test_parity COMMAND aivm_test_parity)
     add_test(NAME aivm_test_runtime COMMAND aivm_test_runtime)
     add_test(NAME aivm_test_syscall_contracts COMMAND aivm_test_syscall_contracts)
@@ -633,7 +642,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
     add_test(NAME aivm_test_blob_storage COMMAND aivm_test_blob_storage)
     add_test(NAME aivm_test_spec_coverage COMMAND aivm_test_spec_coverage ${CMAKE_CURRENT_SOURCE_DIR}/..)
-    add_test(NAME aivm_spec_gap_full_debugger COMMAND aivm_test_spec_pending debug-full-debugger)
+    add_test(NAME aivm_spec_gap_advanced_debugger COMMAND aivm_test_spec_pending debug-advanced-debugger)
     add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
     add_test(NAME aivm_test_runtime_stress COMMAND aivm_test_runtime_stress)
@@ -732,6 +741,7 @@ if (BUILD_TESTING)
         aivm_test_vm_stack
         aivm_test_vm_frames_locals
         aivm_test_vm_ops
+        aivm_test_debugger_protocol
         aivm_test_runtime
         aivm_test_c_api
         PROPERTIES LABELS "unit;core;vm"
@@ -761,7 +771,7 @@ if (BUILD_TESTING)
         PROPERTIES LABELS "spec;coverage"
     )
     set_tests_properties(
-        aivm_spec_gap_full_debugger
+        aivm_spec_gap_advanced_debugger
         PROPERTIES LABELS "spec;gap"
     )
     set_tests_properties(
