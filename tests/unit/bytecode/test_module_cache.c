@@ -61,7 +61,7 @@ static size_t build_minimal_aibc(uint8_t* bytes, size_t capacity)
 
 static int put_get_deep_copies_program(void)
 {
-    AivmModuleCache cache;
+    static AivmModuleCache cache;
     const AivmProgram* cached = NULL;
     static AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_CONST, .operand_int = 0 },
@@ -70,7 +70,7 @@ static int put_get_deep_copies_program(void)
     static AivmValue constants[] = {
         { .type = AIVM_VAL_STRING, .string_value = NULL }
     };
-    AivmProgram program;
+    static AivmProgram program;
 
     aivm_module_cache_init(&cache);
     aivm_program_clear(&program);
@@ -105,7 +105,7 @@ static int put_get_deep_copies_program(void)
 
 static int duplicate_and_missing_are_deterministic(void)
 {
-    AivmModuleCache cache;
+    static AivmModuleCache cache;
     const AivmProgram* cached = NULL;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
@@ -130,7 +130,7 @@ static int duplicate_and_missing_are_deterministic(void)
 
 static int module_limit_is_deterministic(void)
 {
-    AivmModuleCache cache;
+    static AivmModuleCache cache;
     static const AivmInstruction instructions[] = {
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
@@ -160,7 +160,7 @@ static int module_limit_is_deterministic(void)
 
 static int load_aibc1_into_cache(void)
 {
-    AivmModuleCache cache;
+    static AivmModuleCache cache;
     uint8_t bytes[64];
     size_t byte_count = build_minimal_aibc(bytes, sizeof(bytes));
     AivmProgramLoadResult load_result;
