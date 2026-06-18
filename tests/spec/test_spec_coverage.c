@@ -63,11 +63,11 @@ static int split_tsv(char* line, CoverageRow* row)
             cursor = tab + 1;
         }
     }
-    (void)snprintf(row->id, sizeof(row->id), "%s", fields[0]);
-    (void)snprintf(row->spec, sizeof(row->spec), "%s", fields[1]);
-    (void)snprintf(row->status, sizeof(row->status), "%s", fields[2]);
-    (void)snprintf(row->verification, sizeof(row->verification), "%s", fields[3]);
-    (void)snprintf(row->notes, sizeof(row->notes), "%s", fields[4]);
+    (void)snprintf(row->id, sizeof(row->id), "%.*s", (int)(sizeof(row->id) - 1), fields[0]);
+    (void)snprintf(row->spec, sizeof(row->spec), "%.*s", (int)(sizeof(row->spec) - 1), fields[1]);
+    (void)snprintf(row->status, sizeof(row->status), "%.*s", (int)(sizeof(row->status) - 1), fields[2]);
+    (void)snprintf(row->verification, sizeof(row->verification), "%.*s", (int)(sizeof(row->verification) - 1), fields[3]);
+    (void)snprintf(row->notes, sizeof(row->notes), "%.*s", (int)(sizeof(row->notes) - 1), fields[4]);
     trim_newline(row->notes);
     return 1;
 }
