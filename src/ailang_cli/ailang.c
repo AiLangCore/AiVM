@@ -3584,6 +3584,7 @@ static uint8_t g_native_process_read_scratch[NATIVE_PROCESS_READ_CHUNK];
 
 #include "airun_net_host.inc"
 #include "airun_fs_host.inc"
+#include "airun_storage_host.inc"
 #include "airun_time_host.inc"
 #include "airun_process_host.inc"
 #include "airun_worker_host.inc"
@@ -4332,7 +4333,7 @@ static int run_native_compiled_program(
     size_t process_argv_count,
     const NativeDebugOptions* debug_options)
 {
-    AivmSyscallBinding bindings[112] = { 0 };
+    AivmSyscallBinding bindings[128] = { 0 };
     size_t binding_count;
     static AivmVm vm;
     int ok;
@@ -4570,7 +4571,27 @@ static int run_native_compiled_program(
     bindings[106].handler = native_syscall_fs_file_open_write;
     bindings[107].target = "sys.fs.file.writeChunk";
     bindings[107].handler = native_syscall_fs_file_write_chunk;
-    binding_count = 108U;
+    bindings[109].target = "sys.storage.local.available";
+    bindings[109].handler = native_syscall_storage_local_available;
+    bindings[110].target = "sys.storage.local.get";
+    bindings[110].handler = native_syscall_storage_local_get;
+    bindings[111].target = "sys.storage.local.set";
+    bindings[111].handler = native_syscall_storage_local_set;
+    bindings[112].target = "sys.storage.local.delete";
+    bindings[112].handler = native_syscall_storage_local_delete;
+    bindings[113].target = "sys.storage.local.exists";
+    bindings[113].handler = native_syscall_storage_local_exists;
+    bindings[114].target = "sys.storage.secure.available";
+    bindings[114].handler = native_syscall_storage_secure_available;
+    bindings[115].target = "sys.storage.secure.get";
+    bindings[115].handler = native_syscall_storage_secure_get;
+    bindings[116].target = "sys.storage.secure.set";
+    bindings[116].handler = native_syscall_storage_secure_bool_false;
+    bindings[117].target = "sys.storage.secure.delete";
+    bindings[117].handler = native_syscall_storage_secure_bool_false;
+    bindings[118].target = "sys.storage.secure.exists";
+    bindings[118].handler = native_syscall_storage_secure_bool_false;
+    binding_count = 119U;
     if (debug_options != NULL) {
         bindings[binding_count].target = "sys.debug.mode";
         bindings[binding_count].handler = native_syscall_debug_mode;
