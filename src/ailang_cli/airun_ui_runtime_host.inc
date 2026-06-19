@@ -203,11 +203,13 @@ enum {
     NATIVE_UI_EVENT_ATTR_TYPE = 0,
     NATIVE_UI_EVENT_ATTR_X = 1,
     NATIVE_UI_EVENT_ATTR_Y = 2,
-    NATIVE_UI_EVENT_ATTR_KEY = 3,
-    NATIVE_UI_EVENT_ATTR_TEXT = 4,
-    NATIVE_UI_EVENT_ATTR_TARGET_ID = 5,
-    NATIVE_UI_EVENT_ATTR_MODIFIERS = 6,
-    NATIVE_UI_EVENT_ATTR_REPEAT = 7
+    NATIVE_UI_EVENT_ATTR_DX = 3,
+    NATIVE_UI_EVENT_ATTR_DY = 4,
+    NATIVE_UI_EVENT_ATTR_KEY = 5,
+    NATIVE_UI_EVENT_ATTR_TEXT = 6,
+    NATIVE_UI_EVENT_ATTR_TARGET_ID = 7,
+    NATIVE_UI_EVENT_ATTR_MODIFIERS = 8,
+    NATIVE_UI_EVENT_ATTR_REPEAT = 9
 };
 
 static int native_vm_append_host_node(
@@ -341,7 +343,7 @@ static void native_ui_runtime_unregister_handle(int64_t handle)
 
 static int native_ui_ensure_event_node(AivmVm* vm, int64_t* out_handle)
 {
-    AivmNodeAttr attrs[8];
+    AivmNodeAttr attrs[10];
     if (out_handle == NULL) {
         return 0;
     }
@@ -359,22 +361,28 @@ static int native_ui_ensure_event_node(AivmVm* vm, int64_t* out_handle)
     attrs[2].key = "y";
     attrs[2].kind = AIVM_NODE_ATTR_INT;
     attrs[2].int_value = 0;
-    attrs[3].key = "key";
-    attrs[3].kind = AIVM_NODE_ATTR_STRING;
-    attrs[3].string_value = g_native_ui_event_key;
-    attrs[4].key = "text";
-    attrs[4].kind = AIVM_NODE_ATTR_STRING;
-    attrs[4].string_value = g_native_ui_event_text;
-    attrs[5].key = "targetId";
+    attrs[3].key = "dx";
+    attrs[3].kind = AIVM_NODE_ATTR_INT;
+    attrs[3].int_value = 0;
+    attrs[4].key = "dy";
+    attrs[4].kind = AIVM_NODE_ATTR_INT;
+    attrs[4].int_value = 0;
+    attrs[5].key = "key";
     attrs[5].kind = AIVM_NODE_ATTR_STRING;
-    attrs[5].string_value = g_native_ui_event_target_id;
-    attrs[6].key = "modifiers";
-    attrs[6].kind = AIVM_NODE_ATTR_INT;
-    attrs[6].int_value = 0;
-    attrs[7].key = "repeat";
-    attrs[7].kind = AIVM_NODE_ATTR_BOOL;
-    attrs[7].bool_value = 0;
-    if (!native_vm_append_host_node(vm, "Map", "ui_event", attrs, 8U, &vm->ui_empty_event_node_handle)) {
+    attrs[5].string_value = g_native_ui_event_key;
+    attrs[6].key = "text";
+    attrs[6].kind = AIVM_NODE_ATTR_STRING;
+    attrs[6].string_value = g_native_ui_event_text;
+    attrs[7].key = "targetId";
+    attrs[7].kind = AIVM_NODE_ATTR_STRING;
+    attrs[7].string_value = g_native_ui_event_target_id;
+    attrs[8].key = "modifiers";
+    attrs[8].kind = AIVM_NODE_ATTR_INT;
+    attrs[8].int_value = 0;
+    attrs[9].key = "repeat";
+    attrs[9].kind = AIVM_NODE_ATTR_BOOL;
+    attrs[9].bool_value = 0;
+    if (!native_vm_append_host_node(vm, "Map", "ui_event", attrs, 10U, &vm->ui_empty_event_node_handle)) {
         return 0;
     }
     *out_handle = vm->ui_empty_event_node_handle;
@@ -434,13 +442,15 @@ static void native_ui_update_event_node(AivmVm* vm, const NativeHostUiEvent* eve
     (void)snprintf(g_native_ui_event_text, sizeof(g_native_ui_event_text), "%s", event->text);
     (void)snprintf(g_native_ui_event_target_id, sizeof(g_native_ui_event_target_id), "%s", event->target_id);
     node = &vm->nodes[(size_t)(vm->ui_empty_event_node_handle - 1)];
-    if (node->attr_count < 8U || node->attr_start + 7U >= vm->node_attr_count) {
+    if (node->attr_count < 10U || node->attr_start + 9U >= vm->node_attr_count) {
         return;
     }
     base = node->attr_start;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_TYPE].string_value = g_native_ui_event_type;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_X].int_value = event->x;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_Y].int_value = event->y;
+    vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_DX].int_value = event->dx;
+    vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_DY].int_value = event->dy;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_KEY].string_value = g_native_ui_event_key;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_TEXT].string_value = g_native_ui_event_text;
     vm->node_attrs[base + NATIVE_UI_EVENT_ATTR_TARGET_ID].string_value = g_native_ui_event_target_id;

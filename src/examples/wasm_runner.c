@@ -629,6 +629,20 @@ EM_JS(int, aivm_web_ui_poll_event_y, (int window_id), {
     return globalThis.__aivmUiPollEventY(window_id) | 0;
 });
 
+EM_JS(int, aivm_web_ui_poll_event_dx, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventDx !== 'function') {
+        return 0;
+    }
+    return globalThis.__aivmUiPollEventDx(window_id) | 0;
+});
+
+EM_JS(int, aivm_web_ui_poll_event_dy, (int window_id), {
+    if (typeof globalThis.__aivmUiPollEventDy !== 'function') {
+        return 0;
+    }
+    return globalThis.__aivmUiPollEventDy(window_id) | 0;
+});
+
 EM_JS(int, aivm_web_ui_poll_event_target_id, (int window_id, char* out_ptr, int out_len), {
     if (typeof globalThis.__aivmUiPollEventTargetId !== 'function') {
         return -1;
@@ -761,7 +775,7 @@ static int ui_ensure_window_size_node(AivmVm* vm)
 
 static int ui_ensure_event_node(AivmVm* vm)
 {
-    AivmNodeAttr attrs[8];
+    AivmNodeAttr attrs[10];
     if (vm == NULL) {
         return 0;
     }
@@ -782,17 +796,23 @@ static int ui_ensure_event_node(AivmVm* vm)
     attrs[3].key = "y";
     attrs[3].kind = AIVM_NODE_ATTR_INT;
     attrs[3].int_value = -1;
-    attrs[4].key = "key";
-    attrs[4].kind = AIVM_NODE_ATTR_STRING;
-    attrs[4].string_value = "";
-    attrs[5].key = "text";
-    attrs[5].kind = AIVM_NODE_ATTR_STRING;
-    attrs[5].string_value = "";
-    attrs[6].key = "modifiers";
+    attrs[4].key = "dx";
+    attrs[4].kind = AIVM_NODE_ATTR_INT;
+    attrs[4].int_value = 0;
+    attrs[5].key = "dy";
+    attrs[5].kind = AIVM_NODE_ATTR_INT;
+    attrs[5].int_value = 0;
+    attrs[6].key = "key";
     attrs[6].kind = AIVM_NODE_ATTR_STRING;
     attrs[6].string_value = "";
-    attrs[7].key = "repeat";
-    attrs[7].kind = AIVM_NODE_ATTR_BOOL;
+    attrs[7].key = "text";
+    attrs[7].kind = AIVM_NODE_ATTR_STRING;
+    attrs[7].string_value = "";
+    attrs[8].key = "modifiers";
+    attrs[8].kind = AIVM_NODE_ATTR_STRING;
+    attrs[8].string_value = "";
+    attrs[9].key = "repeat";
+    attrs[9].kind = AIVM_NODE_ATTR_BOOL;
     return ui_append_host_node(
         vm,
         "ui_event",
@@ -899,6 +919,8 @@ static int ui_update_event_node(
     const char* target_id,
     int x,
     int y,
+    int dx,
+    int dy,
     const char* key,
     const char* text,
     const char* modifiers,
@@ -914,6 +936,8 @@ static int ui_update_event_node(
     const char* modifiers_text = normalize_modifiers((modifiers != NULL) ? modifiers : "");
     int normalized_x = x;
     int normalized_y = y;
+    int normalized_dx = dx;
+    int normalized_dy = dy;
     int normalized_repeat = (repeat_flag != 0) ? 1 : 0;
     if (vm == NULL || vm->ui_empty_event_node_handle <= 0) {
         return 0;
@@ -936,9 +960,23 @@ static int ui_update_event_node(
         type_text = "key";
         normalized_x = -1;
         normalized_y = -1;
+    } else if (event_type == 4) {
+        type_text = "wheel";
+        key_text = "";
+        input_text = "";
+        modifiers_text = "";
+        normalized_repeat = 0;
+    } else if (event_type == 5) {
+        type_text = "drag";
+        key_text = "";
+        input_text = "";
+        modifiers_text = "";
+        normalized_repeat = 0;
     } else {
         normalized_x = -1;
         normalized_y = -1;
+        normalized_dx = 0;
+        normalized_dy = 0;
         target_text = "";
         key_text = "";
         input_text = "";
@@ -963,6 +1001,10 @@ static int ui_update_event_node(
             attr->int_value = normalized_x;
         } else if (strcmp(attr->key, "y") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
             attr->int_value = normalized_y;
+        } else if (strcmp(attr->key, "dx") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
+            attr->int_value = normalized_dx;
+        } else if (strcmp(attr->key, "dy") == 0 && attr->kind == AIVM_NODE_ATTR_INT) {
+            attr->int_value = normalized_dy;
         } else if (strcmp(attr->key, "key") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
             attr->string_value = key_text;
         } else if (strcmp(attr->key, "text") == 0 && attr->kind == AIVM_NODE_ATTR_STRING) {
@@ -1403,6 +1445,8 @@ static int native_syscall_ui_poll_event(
         int event_type = aivm_web_ui_poll_event_type((int)args[0].int_value);
         int event_x = aivm_web_ui_poll_event_x((int)args[0].int_value);
         int event_y = aivm_web_ui_poll_event_y((int)args[0].int_value);
+        int event_dx = aivm_web_ui_poll_event_dx((int)args[0].int_value);
+        int event_dy = aivm_web_ui_poll_event_dy((int)args[0].int_value);
         int event_repeat;
         if (event_type < 0 || event_x < -1 || event_y < -1 ||
             aivm_web_ui_poll_event_target_id((int)args[0].int_value, g_ui_event_target_id, (int)sizeof(g_ui_event_target_id)) != 0 ||
@@ -1424,6 +1468,8 @@ static int native_syscall_ui_poll_event(
             g_ui_event_target_id,
             event_x,
             event_y,
+            event_dx,
+            event_dy,
             g_ui_event_key,
             g_ui_event_text,
             g_ui_event_modifiers,

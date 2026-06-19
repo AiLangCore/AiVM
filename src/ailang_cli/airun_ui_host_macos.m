@@ -604,6 +604,50 @@ static int native_ui_translate_event(NativeUiWindowSlot* slot, NSEvent* event, N
             native_ui_set_string(out_event->type, sizeof(out_event->type), "click");
             return 1;
         }
+        case NSEventTypeLeftMouseDragged: {
+            NSWindow* source_window = [event window];
+            NSPoint location = [event locationInWindow];
+            NSRect content_bounds;
+            int y_top;
+            if (source_window == nil) {
+                source_window = slot->window;
+            }
+            if (canvas != nil) {
+                content_bounds = [canvas bounds];
+            } else {
+                content_bounds = [[source_window contentView] bounds];
+            }
+            y_top = (int)llround(content_bounds.size.height - location.y);
+            out_event->x = (int)llround(location.x);
+            out_event->y = y_top < 0 ? 0 : y_top;
+            out_event->dx = (int)llround([event deltaX]);
+            out_event->dy = (int)llround([event deltaY]);
+            native_ui_set_string(out_event->type, sizeof(out_event->type), "drag");
+            *out_forward_to_appkit = 0;
+            return 1;
+        }
+        case NSEventTypeScrollWheel: {
+            NSWindow* source_window = [event window];
+            NSPoint location = [event locationInWindow];
+            NSRect content_bounds;
+            int y_top;
+            if (source_window == nil) {
+                source_window = slot->window;
+            }
+            if (canvas != nil) {
+                content_bounds = [canvas bounds];
+            } else {
+                content_bounds = [[source_window contentView] bounds];
+            }
+            y_top = (int)llround(content_bounds.size.height - location.y);
+            out_event->x = (int)llround(location.x);
+            out_event->y = y_top < 0 ? 0 : y_top;
+            out_event->dx = (int)llround([event scrollingDeltaX]);
+            out_event->dy = (int)llround([event scrollingDeltaY]);
+            native_ui_set_string(out_event->type, sizeof(out_event->type), "wheel");
+            *out_forward_to_appkit = 0;
+            return 1;
+        }
         case NSEventTypeKeyDown: {
             NSUInteger flags = [event modifierFlags];
             const char* key_name = native_ui_normalize_key(event);

@@ -13,6 +13,8 @@ typedef struct {
     char text[128];
     int x;
     int y;
+    int dx;
+    int dy;
     int modifiers;
     int repeat;
 } NativeHostUiEvent;
