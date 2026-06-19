@@ -213,19 +213,30 @@ set is:
 
 ```text
 break pc <bytecode-pc>
+map function <name> <bytecode-pc>
+map node <source-node-id> <bytecode-pc>
+break function <name>
+break node <source-node-id>
 continue [max-steps]
 pause
 step
+step over
+step out
 inspect stack
 inspect locals
 inspect frame
 inspect tasks
 inspect queue
+inspect heap
+inspect host-ops
 ```
 
 The command file format is intentionally simple so agents can generate and
 replay sessions without depending on terminal control. `continue` is bounded;
-omitting `max-steps` uses the runtime default session ceiling.
+omitting `max-steps` uses the runtime default session ceiling. Function and
+node breakpoints use debugger-owned source mappings registered by `map`
+commands; compilers and higher-level tools can replace those commands with
+source-map derived registrations when source maps are emitted.
 
 ## Return-To-Production-Readiness Checklist
 
@@ -262,10 +273,12 @@ Required before switching back:
 - [x] Add `aivm-debug inspect memory <debug-run-dir>`.
 - [x] Add `aivm-debug inspect profile <debug-run-dir>`.
 - [x] Add `aivm-debug inspect syscalls <debug-run-dir>`.
-- [x] Add deterministic debugger controls: break by pc, step, bounded
-  continue, pause, and inspect while paused.
+- [x] Add deterministic debugger controls: break by pc/function/source node,
+  step, step over, step out, bounded continue, pause, and inspect while paused.
 - [x] Add `aivm-debug debug session <program.aibc1> --commands <file> --out
   <dir>` with machine-readable `debugger.toml` artifacts.
+- [x] Add heap/node-handle and host-operation inspection summary fields to
+  debugger snapshots.
 - [x] Add debug-only instruction and opcode counters.
 - [x] Add debug-only syscall count and per-target syscall counts.
 - [x] Add debug-only syscall timing totals and per-target timings.
@@ -282,9 +295,6 @@ Optional follow-up after returning to production readiness:
 - [ ] Add source map fields: source file, source line, source node id, and
   function name.
 - [ ] Add richer frame-local summaries in `stack_trace.toml`.
-- [ ] Add advanced debugger controls: break by function, break by source node,
-  step over, step out, heap/node-handle inspection, and active host operation
-  inspection.
 - [ ] Add JSON output mode for agent tools that prefer JSON over TOML.
 - [ ] Add artifact size limits and explicit truncation records.
 - [ ] Add AiVectra semantic UI capture artifacts.

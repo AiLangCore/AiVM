@@ -175,6 +175,103 @@ static int inspect_rejects_unknown_kind(void)
     return 0;
 }
 
+static int source_mapped_breakpoints_and_step_controls(void)
+{
+    AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CALL, .operand_int = 3 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 5 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 },
+        { .opcode = AIVM_OP_PUSH_INT, .operand_int = 37 },
+        { .opcode = AIVM_OP_RET, .operand_int = 0 }
+    };
+    AivmProgram program;
+    AivmVm vm;
+    AivmDebugger debugger;
+    AivmDebuggerSnapshot snapshot;
+
+    init_program(&program, instructions, sizeof(instructions) / sizeof(instructions[0]));
+    aivm_init(&vm, &program);
+    aivm_debugger_init(&debugger, &vm);
+
+    if (expect(aivm_debugger_register_function(&debugger, "worker", 3U) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_register_node(&debugger, "call-node", 0U) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_break_function(&debugger, "worker") == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_break_node(&debugger, "call-node") == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_break_function(&debugger, "missing") == AIVM_DEBUGGER_ERR_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_debugger_continue(&debugger, 8U, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.pc == 0U) != 0 ||
+        expect(snapshot.debugger_state == AIVM_DEBUGGER_STATE_PAUSED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_debugger_clear_breakpoints(&debugger) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_break_function(&debugger, "worker") == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_continue(&debugger, 8U, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.pc == 3U) != 0 ||
+        expect(snapshot.call_frame_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_debugger_step_out(&debugger, 8U, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.pc == 1U) != 0 ||
+        expect(snapshot.call_frame_count == 0U) != 0 ||
+        expect(snapshot.stack_count == 1U) != 0) {
+        return 1;
+    }
+    aivm_dispose(&vm);
+
+    aivm_init(&vm, &program);
+    aivm_debugger_init(&debugger, &vm);
+    if (expect(aivm_debugger_step_over(&debugger, 8U, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.pc == 1U) != 0 ||
+        expect(snapshot.call_frame_count == 0U) != 0 ||
+        expect(snapshot.stack_count == 1U) != 0) {
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
+static int heap_and_host_operation_inspection_reports_counts(void)
+{
+    AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    AivmValue constants[] = {
+        aivm_value_string("debug-node")
+    };
+    AivmProgram program;
+    AivmVm vm;
+    AivmDebugger debugger;
+    AivmDebuggerSnapshot snapshot;
+
+    aivm_program_init(&program, instructions, sizeof(instructions) / sizeof(instructions[0]));
+    program.constants = constants;
+    program.constant_count = sizeof(constants) / sizeof(constants[0]);
+    aivm_init(&vm, &program);
+    aivm_debugger_init(&debugger, &vm);
+    if (expect(aivm_debugger_step(&debugger, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_step(&debugger, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_HEAP, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.node_count > 0U) != 0 ||
+        expect(snapshot.node_attr_count == 0U) != 0 ||
+        expect(snapshot.node_child_count == 0U) != 0 ||
+        expect(snapshot.blob_count == 0U) != 0) {
+        return 1;
+    }
+    aivm_debugger_set_active_host_operation_count(&debugger, 3U);
+    if (expect(aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_HOST_OPS, &snapshot) == AIVM_DEBUGGER_OK) != 0 ||
+        expect(snapshot.active_host_operation_count == 3U) != 0 ||
+        expect(snapshot.syscall_binding_count == 0U) != 0 ||
+        expect(snapshot.process_argv_count == 0U) != 0) {
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
 int main(void)
 {
     if (run_test("breakpoint_continue_and_step", breakpoint_continue_and_step) != 0) {
@@ -187,6 +284,12 @@ int main(void)
         return 1;
     }
     if (run_test("inspect_rejects_unknown_kind", inspect_rejects_unknown_kind) != 0) {
+        return 1;
+    }
+    if (run_test("source_mapped_breakpoints_and_step_controls", source_mapped_breakpoints_and_step_controls) != 0) {
+        return 1;
+    }
+    if (run_test("heap_and_host_operation_inspection_reports_counts", heap_and_host_operation_inspection_reports_counts) != 0) {
         return 1;
     }
     return 0;

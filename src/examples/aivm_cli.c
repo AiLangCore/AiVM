@@ -2008,7 +2008,25 @@ static AivmDebuggerInspectKind debug_inspect_kind_from_name(const char* name)
     if (strcmp(name, "queue") == 0) {
         return AIVM_DEBUGGER_INSPECT_QUEUE;
     }
+    if (strcmp(name, "heap") == 0) {
+        return AIVM_DEBUGGER_INSPECT_HEAP;
+    }
+    if (strcmp(name, "host-ops") == 0 || strcmp(name, "host_ops") == 0) {
+        return AIVM_DEBUGGER_INSPECT_HOST_OPS;
+    }
     return (AivmDebuggerInspectKind)99;
+}
+
+static size_t debug_active_host_operation_count(void)
+{
+    size_t index;
+    size_t count = 0U;
+    for (index = 0U; index < NATIVE_PROCESS_CAPACITY; index += 1U) {
+        if (g_native_processes[index].used && !g_native_processes[index].finished) {
+            count += 1U;
+        }
+    }
+    return count;
 }
 
 static void write_debugger_event(
@@ -2031,11 +2049,18 @@ static void write_debugger_event(
         write_toml_string(file, aivm_debugger_state_name(snapshot->debugger_state));
         fprintf(
             file,
-            ", stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, vm_status = %d, vm_error = %d",
+            ", stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, node_count = %zu, node_attr_count = %zu, node_child_count = %zu, blob_count = %zu, syscall_binding_count = %zu, process_argv_count = %zu, active_host_operation_count = %zu, vm_status = %d, vm_error = %d",
             snapshot->stack_count,
             snapshot->locals_count,
             snapshot->call_frame_count,
             snapshot->completed_task_count,
+            snapshot->node_count,
+            snapshot->node_attr_count,
+            snapshot->node_child_count,
+            snapshot->blob_count,
+            snapshot->syscall_binding_count,
+            snapshot->process_argv_count,
+            snapshot->active_host_operation_count,
             (int)snapshot->vm_status,
             (int)snapshot->vm_error);
     }
@@ -2214,6 +2239,38 @@ static int debug_session_run(int argc, char** argv)
                     status = aivm_debugger_break_pc(&debugger, pc);
                 }
                 (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            } else if (strcmp(word0, "break") == 0 && strcmp(word1, "function") == 0) {
+                status = aivm_debugger_break_function(&debugger, word2);
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            } else if (strcmp(word0, "break") == 0 && strcmp(word1, "node") == 0) {
+                status = aivm_debugger_break_node(&debugger, word2);
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            } else if (strcmp(word0, "map") == 0 && strcmp(word1, "function") == 0) {
+                char name[32];
+                char pc_text[32];
+                size_t pc;
+                name[0] = '\0';
+                pc_text[0] = '\0';
+                (void)sscanf(command, "%31s %31s %31s %31s", word0, word1, name, pc_text);
+                if (name[0] == '\0' || !debug_parse_size(pc_text, &pc)) {
+                    status = AIVM_DEBUGGER_ERR_INVALID;
+                } else {
+                    status = aivm_debugger_register_function(&debugger, name, pc);
+                }
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
+            } else if (strcmp(word0, "map") == 0 && strcmp(word1, "node") == 0) {
+                char node_id[32];
+                char pc_text[32];
+                size_t pc;
+                node_id[0] = '\0';
+                pc_text[0] = '\0';
+                (void)sscanf(command, "%31s %31s %31s %31s", word0, word1, node_id, pc_text);
+                if (node_id[0] == '\0' || !debug_parse_size(pc_text, &pc)) {
+                    status = AIVM_DEBUGGER_ERR_INVALID;
+                } else {
+                    status = aivm_debugger_register_node(&debugger, node_id, pc);
+                }
+                (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
             } else if (strcmp(word0, "continue") == 0) {
                 size_t max_steps = 1000000U;
                 if (word1[0] != '\0' && !debug_parse_size(word1, &max_steps)) {
@@ -2226,7 +2283,13 @@ static int debug_session_run(int argc, char** argv)
                     }
                 }
             } else if (strcmp(word0, "step") == 0) {
-                status = aivm_debugger_step(&debugger, &snapshot);
+                if (strcmp(word1, "over") == 0) {
+                    status = aivm_debugger_step_over(&debugger, 1000000U, &snapshot);
+                } else if (strcmp(word1, "out") == 0) {
+                    status = aivm_debugger_step_out(&debugger, 1000000U, &snapshot);
+                } else {
+                    status = aivm_debugger_step(&debugger, &snapshot);
+                }
                 if (status == AIVM_DEBUGGER_ERR_HALTED) {
                     status = AIVM_DEBUGGER_OK;
                 }
@@ -2236,6 +2299,7 @@ static int debug_session_run(int argc, char** argv)
                     status = AIVM_DEBUGGER_OK;
                 }
             } else if (strcmp(word0, "inspect") == 0 && word1[0] != '\0') {
+                aivm_debugger_set_active_host_operation_count(&debugger, debug_active_host_operation_count());
                 status = aivm_debugger_inspect(&debugger, debug_inspect_kind_from_name(word1), &snapshot);
             } else {
                 status = AIVM_DEBUGGER_ERR_INVALID;
@@ -2254,17 +2318,25 @@ static int debug_session_run(int argc, char** argv)
         line = next_line;
     }
     fputs("]\n\nfinal = { state = ", artifact_file);
+    aivm_debugger_set_active_host_operation_count(&debugger, debug_active_host_operation_count());
     (void)aivm_debugger_inspect(&debugger, AIVM_DEBUGGER_INSPECT_STACK, &snapshot);
     write_toml_string(artifact_file, aivm_debugger_state_name(snapshot.debugger_state));
     fprintf(
         artifact_file,
-        ", pc = %zu, opcode = %d, stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, vm_status = %d, vm_error = %d }\n",
+        ", pc = %zu, opcode = %d, stack_count = %zu, locals_count = %zu, frame_count = %zu, task_count = %zu, node_count = %zu, node_attr_count = %zu, node_child_count = %zu, blob_count = %zu, syscall_binding_count = %zu, process_argv_count = %zu, active_host_operation_count = %zu, vm_status = %d, vm_error = %d }\n",
         snapshot.pc,
         snapshot.opcode,
         snapshot.stack_count,
         snapshot.locals_count,
         snapshot.call_frame_count,
         snapshot.completed_task_count,
+        snapshot.node_count,
+        snapshot.node_attr_count,
+        snapshot.node_child_count,
+        snapshot.blob_count,
+        snapshot.syscall_binding_count,
+        snapshot.process_argv_count,
+        snapshot.active_host_operation_count,
         (int)snapshot.vm_status,
         (int)snapshot.vm_error);
     fclose(artifact_file);

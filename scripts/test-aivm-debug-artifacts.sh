@@ -76,10 +76,16 @@ if [[ "${ok_rc}" -ne 42 ]]; then
 fi
 
 cat >"${SESSION_COMMANDS}" <<'EOF'
+map function halt 1
+map node halt-node 1
+break function halt
+break node halt-node
 break pc 1
 continue
+inspect heap
+inspect host-ops
 inspect stack
-step
+step over
 EOF
 set +e
 "${AIVM_DEBUG}" debug session "${OK_PROGRAM}" --commands "${SESSION_COMMANDS}" --out "${SESSION_RUN}" >"${TMP_DIR}/session.stdout" 2>"${TMP_DIR}/session.stderr"
@@ -107,8 +113,16 @@ if ! grep -q 'command = "continue", status = "ok", pc = 1' "${SESSION_RUN}/debug
   echo "expected continue command to stop at pc=1" >&2
   exit 1
 fi
-if ! grep -q 'command = "step", status = "ok"' "${SESSION_RUN}/debugger.toml"; then
-  echo "expected step command event" >&2
+if ! grep -q 'command = "inspect heap", status = "ok"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected heap inspect command event" >&2
+  exit 1
+fi
+if ! grep -q 'command = "inspect host-ops", status = "ok"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected host-op inspect command event" >&2
+  exit 1
+fi
+if ! grep -q 'command = "step over", status = "ok"' "${SESSION_RUN}/debugger.toml"; then
+  echo "expected step-over command event" >&2
   exit 1
 fi
 if ! grep -q 'final = { state = "halted"' "${SESSION_RUN}/debugger.toml"; then

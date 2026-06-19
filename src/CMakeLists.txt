@@ -360,10 +360,6 @@ if (BUILD_TESTING)
         ../tests/spec/test_spec_coverage.c
     )
 
-    add_executable(aivm_test_spec_pending
-        ../tests/spec/test_spec_pending.c
-    )
-
     add_executable(aivm_test_loader_fuzz
         ../tests/fuzz/test_loader_fuzz.c
     )
@@ -553,7 +549,6 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE /W4)
         target_compile_options(aivm_test_blob_storage PRIVATE /W4)
         target_compile_options(aivm_test_spec_coverage PRIVATE /W4)
-        target_compile_options(aivm_test_spec_pending PRIVATE /W4)
         target_compile_options(aivm_test_loader_fuzz PRIVATE /W4)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE /W4)
         target_compile_options(aivm_test_runtime_stress PRIVATE /W4)
@@ -597,7 +592,6 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_blob_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_spec_coverage PRIVATE -Wall -Wextra -Wpedantic -Werror)
-        target_compile_options(aivm_test_spec_pending PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_loader_fuzz PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_runtime_stress PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -642,7 +636,6 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
     add_test(NAME aivm_test_blob_storage COMMAND aivm_test_blob_storage)
     add_test(NAME aivm_test_spec_coverage COMMAND aivm_test_spec_coverage ${CMAKE_CURRENT_SOURCE_DIR}/..)
-    add_test(NAME aivm_spec_gap_advanced_debugger COMMAND aivm_test_spec_pending debug-advanced-debugger)
     add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
     add_test(NAME aivm_test_runtime_stress COMMAND aivm_test_runtime_stress)
@@ -769,10 +762,6 @@ if (BUILD_TESTING)
     set_tests_properties(
         aivm_test_spec_coverage
         PROPERTIES LABELS "spec;coverage"
-    )
-    set_tests_properties(
-        aivm_spec_gap_advanced_debugger
-        PROPERTIES LABELS "spec;gap"
     )
     set_tests_properties(
         aivm_test_remote_channel
