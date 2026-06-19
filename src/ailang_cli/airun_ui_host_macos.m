@@ -1079,6 +1079,7 @@ int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
         out_event->y = -1;
         if (slot->close_pending != 0) {
             native_ui_set_string(out_event->type, sizeof(out_event->type), "closed");
+            (void)snprintf(out_event->target_id, sizeof(out_event->target_id), "%lld", (long long)slot->handle);
             slot->close_pending = 0;
             return 1;
         }
@@ -1088,6 +1089,7 @@ int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
         native_ui_pump_events(slot);
         if (slot->close_pending != 0) {
             native_ui_set_string(out_event->type, sizeof(out_event->type), "closed");
+            (void)snprintf(out_event->target_id, sizeof(out_event->target_id), "%lld", (long long)slot->handle);
             slot->close_pending = 0;
             return 1;
         }
