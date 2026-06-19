@@ -642,8 +642,8 @@ static int native_ui_translate_event(NativeUiWindowSlot* slot, NSEvent* event, N
             y_top = (int)llround(content_bounds.size.height - location.y);
             out_event->x = (int)llround(location.x);
             out_event->y = y_top < 0 ? 0 : y_top;
-            out_event->dx = (int)llround([event scrollingDeltaX]);
-            out_event->dy = (int)llround([event scrollingDeltaY]);
+            out_event->dx = -(int)llround([event scrollingDeltaX]);
+            out_event->dy = -(int)llround([event scrollingDeltaY]);
             native_ui_set_string(out_event->type, sizeof(out_event->type), "wheel");
             *out_forward_to_appkit = 0;
             return 1;
