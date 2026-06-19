@@ -37,6 +37,8 @@ int main(void)
     AivmValue bytes_range_args[3];
     AivmValue process_spawn_args[4];
     AivmValue image_decode_args[2];
+    AivmValue storage_key_args[2];
+    AivmValue storage_set_args[3];
     const uint8_t raw_bytes[3] = { 0x01U, 0x02U, 0x03U };
 
     draw_rect_args[0] = aivm_value_int(0);
@@ -240,6 +242,102 @@ int main(void)
         return 1;
     }
     if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+
+    storage_key_args[0] = aivm_value_string("com.example.app");
+    storage_key_args[1] = aivm_value_string("weather.units");
+    storage_set_args[0] = aivm_value_string("com.example.app");
+    storage_set_args[1] = aivm_value_string("weather.units");
+    storage_set_args[2] = aivm_value_string("fahrenheit");
+    if (expect(aivm_syscall_contract_validate("sys.storage.local.available", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(132U, NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.local.get", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(133U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.local.set", storage_set_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(134U, storage_set_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.local.delete", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(135U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.local.exists", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(136U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.secure.available", NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(137U, NULL, 0U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.secure.get", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(138U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_STRING) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.secure.set", storage_set_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(139U, storage_set_args, 3U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.secure.delete", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(140U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.storage.secure.exists", storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(141U, storage_key_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(return_type == AIVM_VAL_BOOL) != 0) {
         return 1;
     }
     int_arg[0] = aivm_value_int(1);
@@ -690,6 +788,9 @@ int main(void)
     if (expect(aivm_syscall_contract_capability("sys.fs.file.openRead") == AIVM_SYSCALL_CAPABILITY_FILESYSTEM) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_capability("sys.storage.local.get") == AIVM_SYSCALL_CAPABILITY_STORAGE) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_capability("sys.unknown") == AIVM_SYSCALL_CAPABILITY_NONE) != 0) {
         return 1;
     }
@@ -708,6 +809,15 @@ int main(void)
     if (expect(capability == AIVM_SYSCALL_CAPABILITY_PROCESS) != 0) {
         return 1;
     }
+    if (expect(aivm_value_equals(aivm_value_string(aivm_syscall_capability_name(AIVM_SYSCALL_CAPABILITY_STORAGE)), aivm_value_string("storage")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_capability_from_name("storage", &capability) == 1) != 0) {
+        return 1;
+    }
+    if (expect(capability == AIVM_SYSCALL_CAPABILITY_STORAGE) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_capability_from_name("missing", &capability) == 0) != 0) {
         return 1;
     }
@@ -715,6 +825,9 @@ int main(void)
         return 1;
     }
     if (expect(aivm_syscall_contract_should_bind_in_production("sys.process.spawn") == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_should_bind_in_production("sys.storage.local.get") == 1) != 0) {
         return 1;
     }
     if (expect(aivm_syscall_contract_should_bind_in_production("sys.unknown") == 0) != 0) {

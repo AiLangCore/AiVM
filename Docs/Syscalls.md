@@ -74,6 +74,7 @@ Current groups are:
 - `remote`: host remote bridge calls.
 - `host`: host-default handlers outside the VM.
 - `image`: host image decoding.
+- `storage`: host app storage and host secure storage/keychain adapters.
 - `debug`: debug/profiling/capture artifacts, bound only by `aivm-debug` and
   debug command surfaces.
 
@@ -105,6 +106,16 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.remote.call` | `remote` | Crosses to a host remote bridge. |
 | `sys.host.openDefault` | `host.open` | Opens a host-default handler outside the VM. |
 | `sys.image.decodeToRgbaBase64` | `image.decode` | Uses host image decoding for external resource bytes. |
+| `sys.storage.local.available` | `storage.local` | Reports whether host local app storage is available. |
+| `sys.storage.local.get` | `storage.local` | Reads non-secret host app settings/storage. |
+| `sys.storage.local.set` | `storage.local` | Writes non-secret host app settings/storage. |
+| `sys.storage.local.delete` | `storage.local` | Deletes non-secret host app settings/storage. |
+| `sys.storage.local.exists` | `storage.local` | Observes non-secret host app settings/storage state. |
+| `sys.storage.secure.available` | `storage.secure` | Reports whether host secure storage is available. |
+| `sys.storage.secure.get` | `storage.secure` | Reads host secure storage such as keychain, credential manager, or keystore. |
+| `sys.storage.secure.set` | `storage.secure` | Writes host secure storage such as keychain, credential manager, or keystore. |
+| `sys.storage.secure.delete` | `storage.secure` | Deletes host secure storage entries. |
+| `sys.storage.secure.exists` | `storage.secure` | Observes host secure storage entry state. |
 | `sys.platform` | `host.info` | Reads host platform identity. |
 | `sys.arch` | `host.info` | Reads host architecture identity. |
 | `sys.os.version` | `host.info` | Reads host OS version. |
@@ -270,6 +281,16 @@ baseline.
 | 127 | `sys.fs.file.openWrite` | 1 | `int` |
 | 128 | `sys.fs.file.writeChunk` | 2 | `int` |
 | 42 | `sys.crypto.randomBytes` | 1 | `bytes` |
+| 132 | `sys.storage.local.available` | 0 | `bool` |
+| 133 | `sys.storage.local.get` | 2 | `string` |
+| 134 | `sys.storage.local.set` | 3 | `bool` |
+| 135 | `sys.storage.local.delete` | 2 | `bool` |
+| 136 | `sys.storage.local.exists` | 2 | `bool` |
+| 137 | `sys.storage.secure.available` | 0 | `bool` |
+| 138 | `sys.storage.secure.get` | 2 | `string` |
+| 139 | `sys.storage.secure.set` | 3 | `bool` |
+| 140 | `sys.storage.secure.delete` | 2 | `bool` |
+| 141 | `sys.storage.secure.exists` | 2 | `bool` |
 | 27 | `sys.net.tcp.connect` | 2 | `int` |
 | 32 | `sys.net.tcp.listen` | 2 | `int` |
 | 33 | `sys.net.tcp.listenTls` | 4 | `int` |
