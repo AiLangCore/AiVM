@@ -58,13 +58,14 @@ static int write_string_constant(
     const uint8_t* bytes,
     size_t length)
 {
-    size_t base_offset = program->string_storage_used;
+    size_t base_offset;
     size_t needed_storage = 0U;
     size_t i;
 
     if (program == NULL || bytes == NULL) {
         return 0;
     }
+    base_offset = program->string_storage_used;
     if (!size_add_checked(base_offset, length, &needed_storage) ||
         !size_add_checked(needed_storage, 1U, &needed_storage) ||
         needed_storage > AIVM_PROGRAM_MAX_STRING_BYTES) {
@@ -87,13 +88,14 @@ static int write_bytes_constant(
     const uint8_t* bytes,
     size_t length)
 {
-    size_t base_offset = program->bytes_storage_used;
+    size_t base_offset;
     size_t needed_storage = 0U;
     size_t i;
 
     if (program == NULL || (length > 0U && bytes == NULL)) {
         return 0;
     }
+    base_offset = program->bytes_storage_used;
     if (!size_add_checked(base_offset, length, &needed_storage) ||
         needed_storage > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
         return 0;

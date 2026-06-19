@@ -128,7 +128,7 @@ void aivm_parity_line_col_for_index(
         return;
     }
 
-    while (text[i] != '\0' && i < index) {
+    while (i < index && text[i] != '\0') {
         if (text[i] == '\n') {
             line += 1U;
             col = 1U;

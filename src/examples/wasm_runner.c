@@ -1758,6 +1758,7 @@ EM_JS(int, aivm_web_net_write_start, (int connection_id, const unsigned char* by
         op.intValue = bytes_len | 0;
         op.status = 1;
     }).catch((error) => {
+        /* cppcheck-suppress syntaxError */
         op.error = `write_failed:${String(error?.message || error || 'fetch failed')}`;
         op.status = -1;
     });
