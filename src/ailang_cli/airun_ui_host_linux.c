@@ -675,6 +675,19 @@ int native_host_ui_draw_path(
     return 1;
 }
 
+int native_host_ui_push_clip_path(int64_t handle, const char* path)
+{
+    (void)handle;
+    (void)path;
+    return 1;
+}
+
+int native_host_ui_pop_clip_path(int64_t handle)
+{
+    (void)handle;
+    return 1;
+}
+
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
 {
     NativeUiLinuxWindowSlot* wanted_slot = native_ui_linux_find_slot(handle);

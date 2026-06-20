@@ -1649,6 +1649,21 @@ static int join_path(const char* left, const char* right, char* out, size_t out_
     return n >= 0 && (size_t)n < out_len;
 }
 
+static int canonical_existing_path(const char* path, char* out, size_t out_len)
+{
+    char resolved[PATH_MAX];
+    int n;
+    if (path == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    if (realpath(path, resolved) != NULL) {
+        n = snprintf(out, out_len, "%s", resolved);
+        return n >= 0 && (size_t)n < out_len;
+    }
+    n = snprintf(out, out_len, "%s", path);
+    return n >= 0 && (size_t)n < out_len;
+}
+
 static int replace_ext(const char* path, const char* from_ext, const char* to_ext, char* out, size_t out_len)
 {
     size_t path_len;
@@ -3228,13 +3243,16 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  if (!win || win.closed) return -1;\n"
             "  win.frameParts = [];\n"
             "  win.nextElementId = 1;\n"
+            "  win.nextClipId = 1;\n"
+            "  win.clipStack = [];\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiDrawRect = (windowId, x, y, w, h, color) => {\n"
             "  const win = uiState.windows.get(windowId);\n"
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
-            "  win.frameParts.push(`<rect data-aivm-id=\"${id}\" x=\"${x|0}\" y=\"${y|0}\" width=\"${w|0}\" height=\"${h|0}\" fill=\"${xmlEscape(color)}\"/>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<rect data-aivm-id=\"${id}\"${clip} x=\"${x|0}\" y=\"${y|0}\" width=\"${w|0}\" height=\"${h|0}\" fill=\"${xmlEscape(color)}\"/>`);\n"
             "  return 0;\n"
             "};\n";
         const char* main_js_mid =
@@ -3243,7 +3261,8 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
             "  const textEscaped = xmlEscape(text);\n"
-            "  win.frameParts.push(`<text data-aivm-id=\"${id}\" x=\"${x|0}\" y=\"${y|0}\" fill=\"${xmlEscape(color)}\" font-size=\"${size|0}\" font-family=\"system-ui, sans-serif\" dominant-baseline=\"text-before-edge\">${textEscaped}</text>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<text data-aivm-id=\"${id}\"${clip} x=\"${x|0}\" y=\"${y|0}\" fill=\"${xmlEscape(color)}\" font-size=\"${size|0}\" font-family=\"system-ui, sans-serif\" dominant-baseline=\"text-before-edge\">${textEscaped}</text>`);\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiMeasureText = (windowId, text, size) => {\n"
@@ -3256,7 +3275,8 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  const win = uiState.windows.get(windowId);\n"
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
-            "  win.frameParts.push(`<line data-aivm-id=\"${id}\" x1=\"${x1|0}\" y1=\"${y1|0}\" x2=\"${x2|0}\" y2=\"${y2|0}\" stroke=\"${xmlEscape(color)}\" stroke-width=\"${width|0}\"/>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<line data-aivm-id=\"${id}\"${clip} x1=\"${x1|0}\" y1=\"${y1|0}\" x2=\"${x2|0}\" y2=\"${y2|0}\" stroke=\"${xmlEscape(color)}\" stroke-width=\"${width|0}\"/>`);\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiDrawEllipse = (windowId, x, y, w, h, color) => {\n"
@@ -3267,7 +3287,8 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  const ry = (h|0) / 2;\n"
             "  const cx = (x|0) + rx;\n"
             "  const cy = (y|0) + ry;\n"
-            "  win.frameParts.push(`<ellipse data-aivm-id=\"${id}\" cx=\"${cx}\" cy=\"${cy}\" rx=\"${rx}\" ry=\"${ry}\" fill=\"${xmlEscape(color)}\"/>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<ellipse data-aivm-id=\"${id}\"${clip} cx=\"${cx}\" cy=\"${cy}\" rx=\"${rx}\" ry=\"${ry}\" fill=\"${xmlEscape(color)}\"/>`);\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiDrawPath = (windowId, path, fillColor, strokeColor, strokeWidth) => {\n"
@@ -3280,14 +3301,31 @@ static int emit_wasm_spa_files(const char* out_dir)
             "  const stroke = String(strokeColor ?? '');\n"
             "  const fillAttr = fill.length > 0 && fill !== 'none' ? xmlEscape(fill) : 'none';\n"
             "  const strokeAttr = sw > 0 && stroke.length > 0 && stroke !== 'none' ? ` stroke=\"${xmlEscape(stroke)}\" stroke-width=\"${sw}\"` : '';\n"
-            "  win.frameParts.push(`<path data-aivm-id=\"${id}\" d=\"${safePath}\" fill=\"${fillAttr}\"${strokeAttr}/>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<path data-aivm-id=\"${id}\"${clip} d=\"${safePath}\" fill=\"${fillAttr}\"${strokeAttr}/>`);\n"
+            "  return 0;\n"
+            "};\n"
+            "globalThis.__aivmUiPushClipPath = (windowId, path) => {\n"
+            "  const win = uiState.windows.get(windowId);\n"
+            "  if (!win || win.closed) return -1;\n"
+            "  const id = `clip${windowId}_${win.nextClipId++}`;\n"
+            "  win.frameParts.push(`<defs><clipPath id=\"${id}\"><path d=\"${xmlEscape(path)}\"/></clipPath></defs>`);\n"
+            "  if (!Array.isArray(win.clipStack)) win.clipStack = [];\n"
+            "  win.clipStack.push(id);\n"
+            "  return 0;\n"
+            "};\n"
+            "globalThis.__aivmUiPopClipPath = (windowId) => {\n"
+            "  const win = uiState.windows.get(windowId);\n"
+            "  if (!win || win.closed || !Array.isArray(win.clipStack) || win.clipStack.length < 1) return -1;\n"
+            "  win.clipStack.pop();\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiDrawImage = (windowId, x, y, w, h, src) => {\n"
             "  const win = uiState.windows.get(windowId);\n"
             "  if (!win || win.closed) return -1;\n"
             "  const id = `n${win.nextElementId++}`;\n"
-            "  win.frameParts.push(`<image data-aivm-id=\"${id}\" x=\"${x|0}\" y=\"${y|0}\" width=\"${w|0}\" height=\"${h|0}\" href=\"${xmlEscape(src)}\"/>`);\n"
+            "  const clip = win.clipStack?.length ? ` clip-path=\"url(#${win.clipStack[win.clipStack.length - 1]})\"` : '';\n"
+            "  win.frameParts.push(`<image data-aivm-id=\"${id}\"${clip} x=\"${x|0}\" y=\"${y|0}\" width=\"${w|0}\" height=\"${h|0}\" href=\"${xmlEscape(src)}\"/>`);\n"
             "  return 0;\n"
             "};\n"
             "globalThis.__aivmUiEndFrame = (windowId) => {\n"
@@ -4640,7 +4678,11 @@ static int run_native_compiled_program(
     bindings[117].handler = native_syscall_storage_secure_bool_false;
     bindings[118].target = "sys.storage.secure.exists";
     bindings[118].handler = native_syscall_storage_secure_bool_false;
-    binding_count = 119U;
+    bindings[119].target = "sys.ui.pushClipPath";
+    bindings[119].handler = native_syscall_ui_push_clip_path;
+    bindings[120].target = "sys.ui.popClipPath";
+    bindings[120].handler = native_syscall_ui_void_1;
+    binding_count = 121U;
     if (debug_options != NULL) {
         bindings[binding_count].target = "sys.debug.mode";
         bindings[binding_count].handler = native_syscall_debug_mode;
@@ -5832,7 +5874,7 @@ static int parse_simple_program_aos_to_program_file(const char* aos_path, AivmPr
     return parse_simple_program_graph_to_program_file(aos_path, out_program);
 }
 
-#define SIMPLE_MAX_SOURCES 64
+#define SIMPLE_MAX_SOURCES 256
 #define SIMPLE_MAX_FUNCS 1024
 #define SIMPLE_MAX_FIXUPS 2048
 #define SIMPLE_MAX_LOCALS 1024
@@ -6109,19 +6151,20 @@ static int simple_add_fixup(SimpleCompileContext* ctx, size_t instruction_index,
 static int simple_resolve_path(const char* base_file, const char* import_path, char* out_path, size_t out_path_len)
 {
     char base_dir[PATH_MAX];
+    char joined[PATH_MAX];
     if (base_file == NULL || import_path == NULL || out_path == NULL || out_path_len == 0U) {
         return 0;
     }
     if (import_path[0] == '/') {
-        return snprintf(out_path, out_path_len, "%s", import_path) < (int)out_path_len;
+        return canonical_existing_path(import_path, out_path, out_path_len);
     }
     if (!dirname_of(base_file, base_dir, sizeof(base_dir))) {
         return 0;
     }
-    if (!join_path(base_dir, import_path, out_path, out_path_len)) {
+    if (!join_path(base_dir, import_path, joined, sizeof(joined))) {
         return 0;
     }
-    return 1;
+    return canonical_existing_path(joined, out_path, out_path_len);
 }
 
 static int simple_resolve_sdk_root(const char* base_file, char* out_root, size_t out_len)
@@ -6177,7 +6220,7 @@ static int simple_resolve_sdk_import_path(
         return 0;
     }
     if (file_exists(candidate)) {
-        return snprintf(out_path, out_path_len, "%s", candidate) >= 0 && strlen(candidate) < out_path_len;
+        return canonical_existing_path(candidate, out_path, out_path_len);
     }
 
     if (starts_with(import_path, "std/") || starts_with(import_path, "compiler/")) {
@@ -6185,7 +6228,7 @@ static int simple_resolve_sdk_import_path(
         if (join_path("src", import_path, src_path, sizeof(src_path)) &&
             join_path(sdk_root, src_path, src_candidate, sizeof(src_candidate)) &&
             file_exists(src_candidate)) {
-            return snprintf(out_path, out_path_len, "%s", src_candidate) >= 0 && strlen(src_candidate) < out_path_len;
+            return canonical_existing_path(src_candidate, out_path, out_path_len);
         }
     }
 
@@ -6321,9 +6364,15 @@ static int simple_resolve_project_local_path(
         return 0;
     }
     if (simple_is_absolute_path(configured_path)) {
-        return snprintf(out, out_len, "%s", configured_path) >= 0 && strlen(configured_path) < out_len;
+        return canonical_existing_path(configured_path, out, out_len);
     }
-    return join_path(project_dir, configured_path, out, out_len);
+    {
+        char joined[PATH_MAX];
+        if (!join_path(project_dir, configured_path, joined, sizeof(joined))) {
+            return 0;
+        }
+        return canonical_existing_path(joined, out, out_len);
+    }
 }
 
 static int simple_lock_resolve_package(
@@ -6359,13 +6408,15 @@ static int simple_lock_resolve_package(
         char name[128];
         char package_path[PATH_MAX];
         char package_root[PATH_MAX];
+        char package_root_dir[PATH_MAX];
         char local_path[PATH_MAX];
         if (simple_toml_get_from_section(p, "name", name, sizeof(name)) &&
             strcmp(name, package_name) == 0 &&
             simple_toml_get_from_section(p, "path", package_path, sizeof(package_path)) &&
             simple_toml_get_from_section(p, "packageRoot", package_root, sizeof(package_root)) &&
             simple_resolve_project_local_path(project_dir, package_path, local_path, sizeof(local_path)) &&
-            join_path(local_path, package_root, out_package_dir, out_len)) {
+            join_path(local_path, package_root, package_root_dir, sizeof(package_root_dir)) &&
+            canonical_existing_path(package_root_dir, out_package_dir, out_len)) {
             free(text);
             return 1;
         }
@@ -6397,7 +6448,13 @@ static int simple_resolve_import_path(const char* base_file, const char* attrs, 
             !simple_lock_resolve_package(project_dir, package_name, package_root, sizeof(package_root))) {
             return 0;
         }
-        return join_path(package_root, import_path, out_path, out_path_len);
+        {
+            char joined[PATH_MAX];
+            if (!join_path(package_root, import_path, joined, sizeof(joined))) {
+                return 0;
+            }
+            return canonical_existing_path(joined, out_path, out_path_len);
+        }
     }
 }
 

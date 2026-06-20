@@ -558,6 +558,21 @@ EM_JS(int, aivm_web_ui_draw_path, (int window_id, const char* path_ptr, const ch
     return globalThis.__aivmUiDrawPath(window_id, path, fillColor, strokeColor, stroke_width) | 0;
 });
 
+EM_JS(int, aivm_web_ui_push_clip_path, (int window_id, const char* path_ptr), {
+    if (typeof globalThis.__aivmUiPushClipPath !== 'function') {
+        return -1;
+    }
+    const path = UTF8ToString(path_ptr);
+    return globalThis.__aivmUiPushClipPath(window_id, path) | 0;
+});
+
+EM_JS(int, aivm_web_ui_pop_clip_path, (int window_id), {
+    if (typeof globalThis.__aivmUiPopClipPath !== 'function') {
+        return -1;
+    }
+    return globalThis.__aivmUiPopClipPath(window_id) | 0;
+});
+
 EM_JS(int, aivm_web_ui_draw_image, (int window_id, int x, int y, int w, int h, const char* src_ptr), {
     if (typeof globalThis.__aivmUiDrawImage !== 'function') {
         return -1;
@@ -1303,6 +1318,59 @@ static int native_syscall_ui_draw_path(
             args[2].string_value,
             args[3].string_value,
             (int)args[4].int_value) != 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_push_clip_path(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 2U || args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[1].string_value == NULL) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    if (aivm_web_ui_push_clip_path((int)args[0].int_value, args[1].string_value) != 0) {
+        return ui_fail_not_available(result);
+    }
+#else
+    return ui_fail_not_available(result);
+#endif
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_pop_clip_path(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_INT) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+#ifdef AIVM_WASM_WEB
+    if (aivm_web_ui_pop_clip_path((int)args[0].int_value) != 0) {
         return ui_fail_not_available(result);
     }
 #else
@@ -2298,6 +2366,10 @@ int main(int argc, char** argv)
             bindings[binding_count].handler = native_syscall_ui_draw_ellipse;
         } else if (strcmp(contract->target, "sys.ui.drawPath") == 0) {
             bindings[binding_count].handler = native_syscall_ui_draw_path;
+        } else if (strcmp(contract->target, "sys.ui.pushClipPath") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_push_clip_path;
+        } else if (strcmp(contract->target, "sys.ui.popClipPath") == 0) {
+            bindings[binding_count].handler = native_syscall_ui_pop_clip_path;
         } else if (strcmp(contract->target, "sys.ui.drawImage") == 0) {
             bindings[binding_count].handler = native_syscall_ui_draw_image;
         } else if (strcmp(contract->target, "sys.ui.endFrame") == 0) {

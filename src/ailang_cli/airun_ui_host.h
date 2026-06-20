@@ -51,6 +51,8 @@ int native_host_ui_draw_path(
     const char* fill_color,
     const char* stroke_color,
     int stroke_width);
+int native_host_ui_push_clip_path(int64_t handle, const char* path);
+int native_host_ui_pop_clip_path(int64_t handle);
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event);
 int native_host_ui_get_window_size(int64_t handle, int* out_width, int* out_height);
 

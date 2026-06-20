@@ -111,6 +111,19 @@ int native_host_ui_draw_path(
     return 0;
 }
 
+int native_host_ui_push_clip_path(int64_t handle, const char* path)
+{
+    (void)handle;
+    (void)path;
+    return 0;
+}
+
+int native_host_ui_pop_clip_path(int64_t handle)
+{
+    (void)handle;
+    return 0;
+}
+
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
 {
     (void)handle;

@@ -174,6 +174,8 @@ now: these operations run with the OS/process permissions of the host process.
 | `sys.ui.drawLine` | `ui` | Draws through host UI backend. |
 | `sys.ui.drawEllipse` | `ui` | Draws through host UI backend. |
 | `sys.ui.drawPath` | `ui` | Draws a host UI path as `handle, path, fillColor, strokeColor, strokeWidth`; non-closed paths ignore fill. Empty color or `none` disables that paint. |
+| `sys.ui.pushClipPath` | `ui` | Pushes a host drawing clip path as `handle, path`; AiVectra owns clip semantics and the host applies the path mechanically to subsequent draw calls. |
+| `sys.ui.popClipPath` | `ui` | Pops the active host drawing clip path for a window. |
 | `sys.ui.drawImage` | `ui` | Draws through host UI backend. |
 | `sys.ui.getWindowSize` | `ui` | Reads host UI state. |
 | `sys.ui.waitFrame` | `ui` | Waits on host UI frame timing. |
@@ -325,6 +327,8 @@ baseline.
 | 57 | `sys.ui.drawImage` | 6 | `void` |
 | 58 | `sys.ui.getWindowSize` | 1 | `node` |
 | 129 | `sys.ui.measureText` | 3 | `int` |
+| 142 | `sys.ui.pushClipPath` | 2 | `void` |
+| 143 | `sys.ui.popClipPath` | 1 | `void` |
 | 130 | `sys.runtime.platform` | 0 | `string` |
 | 131 | `sys.runtime.target` | 0 | `string` |
 | 72 | `sys.ui.waitFrame` | 1 | `void` |

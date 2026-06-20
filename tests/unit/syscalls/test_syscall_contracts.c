@@ -995,6 +995,18 @@ int main(void)
     if (expect(aivm_syscall_contract_validate_id(56U, draw_path_args, 5U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }
+    if (expect(aivm_syscall_contract_validate("sys.ui.pushClipPath", draw_path_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(142U, draw_path_args, 2U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate("sys.ui.popClipPath", ui_window_id_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_syscall_contract_validate_id(143U, ui_window_id_arg, 1U, &return_type) == AIVM_CONTRACT_OK) != 0) {
+        return 1;
+    }
     if (expect(aivm_syscall_contract_validate("sys.ui.drawImage", draw_rect_args, 6U, &return_type) == AIVM_CONTRACT_OK) != 0) {
         return 1;
     }

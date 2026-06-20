@@ -559,6 +559,12 @@ static int native_syscall_ui_void_1(
             return AIVM_SYSCALL_ERR_INVALID;
         }
         airun_log_message(AIRUN_LOG_TRACE, "ui", "present handle=%lld", (long long)args[0].int_value);
+    } else if (strcmp(target, "sys.ui.popClipPath") == 0) {
+        if (!native_host_ui_pop_clip_path(args[0].int_value)) {
+            result->type = AIVM_VAL_VOID;
+            return AIVM_SYSCALL_ERR_INVALID;
+        }
+        airun_log_message(AIRUN_LOG_TRACE, "ui", "pop-clip-path handle=%lld", (long long)args[0].int_value);
     } else {
         result->type = AIVM_VAL_VOID;
         return AIVM_SYSCALL_ERR_INVALID;
@@ -935,6 +941,48 @@ static int native_syscall_ui_draw_path(
         args[2].string_value,
         args[3].string_value,
         (int)args[4].int_value,
+        "",
+        args[1].string_value,
+        0,
+        0,
+        0,
+        0,
+        0);
+    *result = aivm_value_void();
+    return AIVM_SYSCALL_OK;
+}
+
+static int native_syscall_ui_push_clip_path(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (target == NULL || strcmp(target, "sys.ui.pushClipPath") != 0) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_NOT_FOUND;
+    }
+    if (args == NULL || arg_count != 2U ||
+        args[0].type != AIVM_VAL_INT || args[1].type != AIVM_VAL_STRING) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_CONTRACT;
+    }
+    if (!native_ui_runtime_is_active_handle(args[0].int_value)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (!native_host_ui_push_clip_path(args[0].int_value, args[1].string_value)) {
+        result->type = AIVM_VAL_VOID;
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    native_scene_capture_emit_node(
+        "ClipPath",
+        "",
+        "",
+        0,
         "",
         args[1].string_value,
         0,

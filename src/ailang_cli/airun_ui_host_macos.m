@@ -15,6 +15,8 @@ typedef struct {
     id delegate_ref;
     id canvas_ref;
     int close_pending;
+    char clip_paths[8][512];
+    size_t clip_path_count;
 } NativeUiWindowSlot;
 
 static NativeUiWindowSlot g_native_ui_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
@@ -333,6 +335,91 @@ static int native_ui_draw_svg_path(
         [parsed_color setStroke];
         [bezier setLineWidth:(CGFloat)stroke_width];
         [bezier stroke];
+    }
+    return 1;
+}
+
+static int native_ui_append_svg_path(NSRect bounds, const char* path_text, NSBezierPath* bezier)
+{
+    const char* cursor;
+    char cmd = '\0';
+    double x = 0.0;
+    double y = 0.0;
+    if (path_text == NULL || bezier == nil) {
+        return 0;
+    }
+    cursor = path_text;
+    while (cursor != NULL && *cursor != '\0') {
+        double a = 0.0;
+        double b = 0.0;
+        cursor = native_ui_path_skip_separators(cursor);
+        if (*cursor == '\0') {
+            break;
+        }
+        if (isalpha((unsigned char)*cursor)) {
+            cmd = *cursor;
+            cursor += 1;
+            if (cmd == 'Z' || cmd == 'z') {
+                [bezier closePath];
+                cmd = '\0';
+            }
+            continue;
+        }
+        if (cmd == '\0') {
+            return 0;
+        }
+        if (cmd == 'M' || cmd == 'm' || cmd == 'L' || cmd == 'l') {
+            if (!native_ui_path_parse_number(&cursor, &a) || !native_ui_path_parse_number(&cursor, &b)) {
+                return 0;
+            }
+            if (cmd == 'm' || cmd == 'l') {
+                x += a;
+                y += b;
+            } else {
+                x = a;
+                y = b;
+            }
+            if (cmd == 'M' || cmd == 'm') {
+                [bezier moveToPoint:NSMakePoint((CGFloat)x, native_ui_y_to_cocoa(bounds, (int)lround(y)))];
+                cmd = (cmd == 'm') ? 'l' : 'L';
+            } else {
+                [bezier lineToPoint:NSMakePoint((CGFloat)x, native_ui_y_to_cocoa(bounds, (int)lround(y)))];
+            }
+            continue;
+        }
+        if (cmd == 'H' || cmd == 'h') {
+            if (!native_ui_path_parse_number(&cursor, &a)) {
+                return 0;
+            }
+            x = (cmd == 'h') ? (x + a) : a;
+            [bezier lineToPoint:NSMakePoint((CGFloat)x, native_ui_y_to_cocoa(bounds, (int)lround(y)))];
+            continue;
+        }
+        if (cmd == 'V' || cmd == 'v') {
+            if (!native_ui_path_parse_number(&cursor, &a)) {
+                return 0;
+            }
+            y = (cmd == 'v') ? (y + a) : a;
+            [bezier lineToPoint:NSMakePoint((CGFloat)x, native_ui_y_to_cocoa(bounds, (int)lround(y)))];
+            continue;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+static int native_ui_apply_clip_stack(NativeUiWindowSlot* slot, NSRect bounds)
+{
+    size_t i;
+    if (slot == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < slot->clip_path_count; i += 1U) {
+        NSBezierPath* path = [NSBezierPath bezierPath];
+        if (!native_ui_append_svg_path(bounds, slot->clip_paths[i], path)) {
+            return 0;
+        }
+        [path addClip];
     }
     return 1;
 }
@@ -710,6 +797,7 @@ void native_host_ui_reset(void)
         g_native_ui_windows[i].delegate_ref = nil;
         g_native_ui_windows[i].canvas_ref = nil;
         g_native_ui_windows[i].close_pending = 0;
+        g_native_ui_windows[i].clip_path_count = 0U;
     }
     g_native_ui_next_handle = 1;
     native_ui_queue_reset();
@@ -726,6 +814,7 @@ void native_host_ui_shutdown(void)
             g_native_ui_windows[i].canvas_ref = nil;
             g_native_ui_windows[i].handle = 0;
             g_native_ui_windows[i].close_pending = 0;
+            g_native_ui_windows[i].clip_path_count = 0U;
         }
     }
     native_ui_queue_reset();
@@ -779,6 +868,7 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
         slot->delegate_ref = delegate;
         slot->canvas_ref = canvas;
         slot->close_pending = 0;
+        slot->clip_path_count = 0U;
         *out_handle = slot->handle;
         return 1;
     }
@@ -795,6 +885,7 @@ int native_host_ui_close_window(int64_t handle)
     slot->delegate_ref = nil;
     slot->canvas_ref = nil;
     slot->close_pending = 1;
+    slot->clip_path_count = 0U;
     return 1;
 }
 
@@ -809,6 +900,7 @@ int native_host_ui_begin_frame(int64_t handle)
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
+        slot->clip_path_count = 0U;
         [[NSColor whiteColor] setFill];
         NSRectFill(bounds);
         native_ui_unlock_focus(slot);
@@ -870,6 +962,10 @@ int native_host_ui_draw_rect(int64_t handle, int x, int y, int width, int height
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
+            return 0;
+        }
         rect = NSMakeRect((CGFloat)x, native_ui_y_to_cocoa(bounds, y + height), (CGFloat)width, (CGFloat)height);
         [native_ui_parse_color(color, [NSColor blackColor]) setFill];
         NSRectFill(rect);
@@ -892,6 +988,10 @@ int native_host_ui_draw_ellipse(int64_t handle, int x, int y, int width, int hei
             return 1;
         }
         if (!native_ui_lock_focus(slot, &bounds)) {
+            return 0;
+        }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
             return 0;
         }
         rect = NSMakeRect((CGFloat)x, native_ui_y_to_cocoa(bounds, y + height), (CGFloat)width, (CGFloat)height);
@@ -929,6 +1029,10 @@ int native_host_ui_draw_image(
             return 0;
         }
         if (!native_ui_lock_focus(slot, &bounds)) {
+            return 0;
+        }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
             return 0;
         }
         bitmap = [[NSBitmapImageRep alloc]
@@ -983,6 +1087,10 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
+            return 0;
+        }
         ns_text = [NSString stringWithUTF8String:text];
         if (ns_text == nil) {
             native_ui_unlock_focus(slot);
@@ -1032,6 +1140,10 @@ int native_host_ui_draw_line(int64_t handle, int x1, int y1, int x2, int y2, con
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
+            return 0;
+        }
         path = [NSBezierPath bezierPath];
         [path moveToPoint:NSMakePoint((CGFloat)x1, native_ui_y_to_cocoa(bounds, y1))];
         [path lineToPoint:NSMakePoint((CGFloat)x2, native_ui_y_to_cocoa(bounds, y2))];
@@ -1060,10 +1172,39 @@ int native_host_ui_draw_path(
         if (!native_ui_lock_focus(slot, &bounds)) {
             return 0;
         }
+        if (!native_ui_apply_clip_stack(slot, bounds)) {
+            native_ui_unlock_focus(slot);
+            return 0;
+        }
         ok = native_ui_draw_svg_path(bounds, path, fill_color, stroke_color, stroke_width);
         native_ui_unlock_focus(slot);
         return ok;
     }
+}
+
+int native_host_ui_push_clip_path(int64_t handle, const char* path)
+{
+    NativeUiWindowSlot* slot = native_ui_find_slot(handle);
+    if (slot == NULL || path == NULL || path[0] == '\0') {
+        return 0;
+    }
+    if (slot->clip_path_count >= (sizeof(slot->clip_paths) / sizeof(slot->clip_paths[0]))) {
+        return 0;
+    }
+    (void)snprintf(slot->clip_paths[slot->clip_path_count], sizeof(slot->clip_paths[slot->clip_path_count]), "%s", path);
+    slot->clip_path_count += 1U;
+    return 1;
+}
+
+int native_host_ui_pop_clip_path(int64_t handle)
+{
+    NativeUiWindowSlot* slot = native_ui_find_slot(handle);
+    if (slot == NULL || slot->clip_path_count == 0U) {
+        return 0;
+    }
+    slot->clip_path_count -= 1U;
+    slot->clip_paths[slot->clip_path_count][0] = '\0';
+    return 1;
 }
 
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
