@@ -202,6 +202,8 @@ static int write_native_debug_bundle(
     int exit_code,
     int has_exit_code,
     const char* diagnostics_line);
+#define AILANG_CLI_MAX_TARGET_OPTIONS 64
+
 typedef struct {
     int enabled;
     int consumed;
@@ -8298,13 +8300,21 @@ typedef struct {
     int use_cache;
     const char* log_level;
     const char* target;
+    const char* runner;
+    const char* artifact_type;
+    const char* target_version;
     const char* ui_platform;
     const char* wasm_profile;
     const char* out_dir;
     int port;
     int port_explicit;
     int open_browser;
+    int target_option_count;
+    char* target_options[AILANG_CLI_MAX_TARGET_OPTIONS];
 } RunTarget;
+
+static int package_target_option_takes_value(const char* arg);
+static int package_target_option_is_inline(const char* arg);
 
 static int derive_build_out_dir(const char* program_input, char* out_dir, size_t out_dir_len);
 static int build_input_to_aibc1(
@@ -8365,6 +8375,479 @@ static int run_target_is_native_host(const char* target)
 #else
     return strcmp(target, "linux") == 0;
 #endif
+}
+
+typedef struct {
+    char package_name[128];
+    char id[128];
+    char default_runner[128];
+    char artifact_types[512];
+    char options[512];
+    char run_tools[512];
+    char publish_tools[512];
+} PackageTargetLockRecord;
+
+static const char* skip_toml_ws(const char* p)
+{
+    while (p != NULL && (*p == ' ' || *p == '\t')) {
+        p += 1;
+    }
+    return p;
+}
+
+static int toml_extract_quoted_value(const char* value, char* out, size_t out_len)
+{
+    const char* start;
+    const char* end;
+    size_t n;
+    if (value == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    value = skip_toml_ws(value);
+    if (value == NULL || *value != '"') {
+        return 0;
+    }
+    start = value + 1;
+    end = start;
+    while (*end != '\0' && *end != '"' && *end != '\n' && *end != '\r') {
+        end += 1;
+    }
+    if (*end != '"') {
+        return 0;
+    }
+    n = (size_t)(end - start);
+    if (n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return 1;
+}
+
+static int toml_extract_raw_value(const char* value, char* out, size_t out_len)
+{
+    const char* end;
+    size_t n;
+    if (value == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    value = skip_toml_ws(value);
+    if (value == NULL) {
+        return 0;
+    }
+    end = value;
+    while (*end != '\0' && *end != '\n' && *end != '\r' && *end != '#') {
+        end += 1;
+    }
+    while (end > value && (end[-1] == ' ' || end[-1] == '\t')) {
+        end -= 1;
+    }
+    n = (size_t)(end - value);
+    if (n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, value, n);
+    out[n] = '\0';
+    return n > 0U;
+}
+
+static int toml_section_get_value(
+    const char* section_start,
+    const char* section_end,
+    const char* key,
+    int quoted,
+    char* out,
+    size_t out_len)
+{
+    const char* line;
+    size_t key_len;
+    if (section_start == NULL || section_end == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    out[0] = '\0';
+    key_len = strlen(key);
+    line = section_start;
+    while (line < section_end && *line != '\0') {
+        const char* p = skip_toml_ws(line);
+        const char* value;
+        const char* newline = strchr(line, '\n');
+        if (newline == NULL || newline > section_end) {
+            newline = section_end;
+        }
+        if (p != NULL &&
+            p + key_len < newline &&
+            memcmp(p, key, key_len) == 0) {
+            p += key_len;
+            p = skip_toml_ws(p);
+            if (p != NULL && p < newline && *p == '=') {
+                value = p + 1;
+                return quoted
+                    ? toml_extract_quoted_value(value, out, out_len)
+                    : toml_extract_raw_value(value, out, out_len);
+            }
+        }
+        if (newline >= section_end || *newline == '\0') {
+            break;
+        }
+        line = newline + 1;
+    }
+    return 0;
+}
+
+static int toml_array_contains_quoted(const char* raw_array, const char* value)
+{
+    const char* p;
+    size_t value_len;
+    if (raw_array == NULL || value == NULL || value[0] == '\0') {
+        return 0;
+    }
+    value_len = strlen(value);
+    p = raw_array;
+    while ((p = strchr(p, '"')) != NULL) {
+        const char* start = p + 1;
+        const char* end = strchr(start, '"');
+        if (end == NULL) {
+            return 0;
+        }
+        if ((size_t)(end - start) == value_len && memcmp(start, value, value_len) == 0) {
+            return 1;
+        }
+        p = end + 1;
+    }
+    return 0;
+}
+
+static int toml_array_first_quoted(const char* raw_array, char* out, size_t out_len)
+{
+    const char* start;
+    const char* end;
+    size_t n;
+    if (raw_array == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    out[0] = '\0';
+    start = strchr(raw_array, '"');
+    if (start == NULL) {
+        return 0;
+    }
+    start += 1;
+    end = strchr(start, '"');
+    if (end == NULL) {
+        return 0;
+    }
+    n = (size_t)(end - start);
+    if (n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return n > 0U;
+}
+
+static int find_package_target_in_lock(
+    const char* project_dir,
+    const char* target_id,
+    PackageTargetLockRecord* out_record)
+{
+    char lock_path[PATH_MAX];
+    char* lock_text = NULL;
+    const char* section;
+    if (project_dir == NULL || target_id == NULL || target_id[0] == '\0' || out_record == NULL) {
+        return 0;
+    }
+    memset(out_record, 0, sizeof(*out_record));
+    if (!join_path(project_dir, "ailang.lock.toml", lock_path, sizeof(lock_path)) ||
+        !read_text_file_alloc(lock_path, &lock_text)) {
+        return 0;
+    }
+    section = lock_text;
+    while ((section = strstr(section, "[[target]]")) != NULL) {
+        const char* section_end = strstr(section + 10, "[[target]]");
+        char id[128];
+        char aliases[512];
+        if (section_end == NULL) {
+            section_end = lock_text + strlen(lock_text);
+        }
+        id[0] = '\0';
+        aliases[0] = '\0';
+        (void)toml_section_get_value(section, section_end, "id", 1, id, sizeof(id));
+        (void)toml_section_get_value(section, section_end, "aliases", 0, aliases, sizeof(aliases));
+        if (strcmp(id, target_id) == 0 || toml_array_contains_quoted(aliases, target_id)) {
+            (void)snprintf(out_record->id, sizeof(out_record->id), "%s", id);
+            (void)toml_section_get_value(section, section_end, "package", 1, out_record->package_name, sizeof(out_record->package_name));
+            (void)toml_section_get_value(section, section_end, "defaultRunner", 1, out_record->default_runner, sizeof(out_record->default_runner));
+            (void)toml_section_get_value(section, section_end, "artifactTypes", 0, out_record->artifact_types, sizeof(out_record->artifact_types));
+            (void)toml_section_get_value(section, section_end, "options", 0, out_record->options, sizeof(out_record->options));
+            (void)toml_section_get_value(section, section_end, "runTools", 0, out_record->run_tools, sizeof(out_record->run_tools));
+            (void)toml_section_get_value(section, section_end, "publishTools", 0, out_record->publish_tools, sizeof(out_record->publish_tools));
+            free(lock_text);
+            return out_record->id[0] != '\0';
+        }
+        section = section_end;
+    }
+    free(lock_text);
+    return 0;
+}
+
+static int validate_required_commands(const char* target_id, const char* operation, const char* raw_tools)
+{
+    const char* p;
+    char found[PATH_MAX];
+    if (raw_tools == NULL || raw_tools[0] == '\0') {
+        return 1;
+    }
+    p = raw_tools;
+    while ((p = strchr(p, '"')) != NULL) {
+        const char* start = p + 1;
+        const char* end = strchr(start, '"');
+        char command[128];
+        size_t n;
+        if (end == NULL) {
+            return 0;
+        }
+        n = (size_t)(end - start);
+        if (n > 0U) {
+            if (n + 1U > sizeof(command)) {
+                fprintf(stderr,
+                    "Err#err1(code=PKG001 message=\"Target requirement command name is too long.\" nodeId=target)\n");
+                return 0;
+            }
+            memcpy(command, start, n);
+            command[n] = '\0';
+            if (!find_executable_on_path(command, found, sizeof(found))) {
+                fprintf(stderr,
+                    "Err#err1(code=PKG001 message=\"AILANG-PKG-REQ001: %s requires %s for %s. Missing command: %s\" nodeId=target)\n",
+                    target_id,
+                    command,
+                    operation,
+                    command);
+                return 0;
+            }
+        }
+        p = end + 1;
+    }
+    return 1;
+}
+
+static int package_target_option_name_from_flag(const char* arg, char* out, size_t out_len)
+{
+    const char* start;
+    const char* end;
+    size_t n;
+    if (arg == NULL || out == NULL || out_len == 0U || !starts_with(arg, "--")) {
+        return 0;
+    }
+    if (strcmp(arg, "--target-option") == 0 || starts_with(arg, "--target-option=")) {
+        return 0;
+    }
+    start = arg + 2;
+    end = strchr(start, '=');
+    if (end == NULL) {
+        end = start + strlen(start);
+    }
+    n = (size_t)(end - start);
+    if (n == 0U || n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, start, n);
+    out[n] = '\0';
+    return 1;
+}
+
+static int package_target_option_name_from_assignment(const char* text, char* out, size_t out_len)
+{
+    const char* end;
+    size_t n;
+    if (text == NULL || out == NULL || out_len == 0U || text[0] == '\0') {
+        return 0;
+    }
+    end = strchr(text, '=');
+    if (end == NULL) {
+        end = text + strlen(text);
+    }
+    n = (size_t)(end - text);
+    if (n == 0U || n + 1U > out_len) {
+        return 0;
+    }
+    memcpy(out, text, n);
+    out[n] = '\0';
+    return 1;
+}
+
+static int validate_package_target_options(
+    const PackageTargetLockRecord* record,
+    int target_option_count,
+    char** target_options)
+{
+    int i;
+    if (record == NULL || target_option_count <= 0 || target_options == NULL) {
+        return 1;
+    }
+    for (i = 0; i < target_option_count; i += 1) {
+        char option_name[128];
+        option_name[0] = '\0';
+        if (strcmp(target_options[i], "--target-option") == 0) {
+            if (i + 1 >= target_option_count ||
+                !package_target_option_name_from_assignment(target_options[i + 1], option_name, sizeof(option_name))) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Invalid --target-option value. Expected name=value.\" nodeId=target)\n");
+                return 0;
+            }
+            i += 1;
+        } else if (starts_with(target_options[i], "--target-option=")) {
+            if (!package_target_option_name_from_assignment(target_options[i] + 16, option_name, sizeof(option_name))) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Invalid --target-option value. Expected name=value.\" nodeId=target)\n");
+                return 0;
+            }
+        } else if (!package_target_option_name_from_flag(target_options[i], option_name, sizeof(option_name))) {
+            continue;
+        }
+
+        if (record->options[0] != '\0' && !toml_array_contains_quoted(record->options, option_name)) {
+            fprintf(stderr,
+                "Err#err1(code=RUN001 message=\"Package target does not declare requested option: %s\" nodeId=target)\n",
+                option_name);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int delegate_package_target_operation(
+    const char* operation,
+    const char* program_path,
+    const char* target_id,
+    const char* explicit_runner,
+    const char* explicit_artifact_type,
+    const char* explicit_target_version,
+    const char* out_dir,
+    int target_option_count,
+    char** target_options,
+    int app_arg_count,
+    char** app_args)
+{
+    char project_dir[PATH_MAX];
+    char error[512];
+    char artifact_type[64];
+    const char* runner;
+    char** tool_args = NULL;
+    int tool_arg_count;
+    int tool_exit = 0;
+    int index = 0;
+    int i;
+    PackageTargetLockRecord record;
+    AilangPackageManagerOptions package_options;
+
+    if (operation == NULL || program_path == NULL || target_id == NULL || target_id[0] == '\0') {
+        return -1;
+    }
+    if (!resolve_project_dir_for_cache(program_path, project_dir, sizeof(project_dir))) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Could not resolve project directory for package target.\" nodeId=target)\n");
+        return 2;
+    }
+    if (!find_package_target_in_lock(project_dir, target_id, &record)) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Unknown package target. Run 'ailang package restore' after adding the target package.\" nodeId=target)\n");
+        return 2;
+    }
+
+    runner = (explicit_runner != NULL && explicit_runner[0] != '\0') ? explicit_runner : record.default_runner;
+    if (runner == NULL || runner[0] == '\0') {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Package target has no runner. Pass --runner or set defaultRunner.\" nodeId=runner)\n");
+        return 2;
+    }
+
+    artifact_type[0] = '\0';
+    if (explicit_artifact_type != NULL && explicit_artifact_type[0] != '\0') {
+        if (!toml_array_contains_quoted(record.artifact_types, explicit_artifact_type)) {
+            fprintf(stderr,
+                "Err#err1(code=RUN001 message=\"Package target does not support requested artifact type.\" nodeId=target)\n");
+            return 2;
+        }
+        (void)snprintf(artifact_type, sizeof(artifact_type), "%s", explicit_artifact_type);
+    } else if (!toml_array_first_quoted(record.artifact_types, artifact_type, sizeof(artifact_type))) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Package target has no supported artifact types.\" nodeId=target)\n");
+        return 2;
+    }
+
+    if (!validate_required_commands(
+            record.id,
+            operation,
+            strcmp(operation, "run") == 0 ? record.run_tools : record.publish_tools)) {
+        return 2;
+    }
+    if (!validate_package_target_options(&record, target_option_count, target_options)) {
+        return 2;
+    }
+
+    tool_arg_count = 8 +
+        ((explicit_target_version != NULL && explicit_target_version[0] != '\0') ? 2 : 0) +
+        ((out_dir != NULL && out_dir[0] != '\0') ? 2 : 0) +
+        target_option_count +
+        app_arg_count;
+    tool_args = (char**)calloc((size_t)tool_arg_count, sizeof(char*));
+    if (tool_args == NULL) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Package target argument allocation failed.\" nodeId=target)\n");
+        return 2;
+    }
+    tool_args[index++] = (char*)operation;
+    tool_args[index++] = (char*)program_path;
+    tool_args[index++] = "--target";
+    tool_args[index++] = (char*)record.id;
+    tool_args[index++] = "--artifact-type";
+    tool_args[index++] = artifact_type;
+    if (explicit_target_version != NULL && explicit_target_version[0] != '\0') {
+        tool_args[index++] = "--target-version";
+        tool_args[index++] = (char*)explicit_target_version;
+    }
+    if (out_dir != NULL && out_dir[0] != '\0') {
+        tool_args[index++] = "--out";
+        tool_args[index++] = (char*)out_dir;
+    }
+    for (i = 0; i < target_option_count; i += 1) {
+        tool_args[index++] = target_options[i];
+    }
+    tool_args[index++] = "--package-target";
+    tool_args[index++] = "--";
+    for (i = 0; i < app_arg_count; i += 1) {
+        tool_args[index++] = app_args[i];
+    }
+
+    memset(&package_options, 0, sizeof(package_options));
+    package_options.project_dir = project_dir;
+    if (g_airun_runtime_exe_path[0] != '\0') {
+#ifdef _WIN32
+        (void)_putenv_s("AILANG_BIN", g_airun_runtime_exe_path);
+#else
+        (void)setenv("AILANG_BIN", g_airun_runtime_exe_path, 1);
+#endif
+    }
+    error[0] = '\0';
+    if (!ailang_package_manager_try_run_interactive_tool(
+            &package_options,
+            runner,
+            index,
+            tool_args,
+            &tool_exit,
+            error,
+            sizeof(error))) {
+        free(tool_args);
+        if (error[0] != '\0') {
+            fprintf(stderr, "Err#err1(code=PKG001 message=\"%s\" nodeId=target)\n", error);
+        } else {
+            fprintf(stderr,
+                "Err#err1(code=PKG001 message=\"Package target runner is not installed: %s\" nodeId=target)\n",
+                runner);
+        }
+        return 2;
+    }
+    free(tool_args);
+    return tool_exit;
 }
 
 static const char* derive_ui_platform_from_target(const char* target)
@@ -8494,12 +8977,17 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     int use_cache = 1;
     const char* log_level = NULL;
     const char* target = NULL;
+    const char* runner = NULL;
+    const char* artifact_type = NULL;
+    const char* target_version = NULL;
     const char* ui_platform = NULL;
     const char* wasm_profile = "spa";
     const char* out_dir = "dist-wasm";
     int port = 8768;
     int port_explicit = 0;
     int open_browser = 1;
+    int target_option_count = 0;
+    char* target_options[AILANG_CLI_MAX_TARGET_OPTIONS];
 
     if (out_target == NULL) {
         return 2;
@@ -8526,6 +9014,46 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
         }
         if (starts_with(arg, "--target=") && app_arg_start < 0) {
             target = arg + 9;
+            continue;
+        }
+        if (strcmp(arg, "--runner") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --runner value.\" nodeId=argv)\n");
+                return 2;
+            }
+            runner = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--runner=") && app_arg_start < 0) {
+            runner = arg + 9;
+            continue;
+        }
+        if ((strcmp(arg, "--type") == 0 || strcmp(arg, "--artifact-type") == 0) && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing artifact type value.\" nodeId=argv)\n");
+                return 2;
+            }
+            artifact_type = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--type=") && app_arg_start < 0) {
+            artifact_type = arg + 7;
+            continue;
+        }
+        if (starts_with(arg, "--artifact-type=") && app_arg_start < 0) {
+            artifact_type = arg + 16;
+            continue;
+        }
+        if (strcmp(arg, "--target-version") == 0 && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing --target-version value.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_version = argv[++i];
+            continue;
+        }
+        if (starts_with(arg, "--target-version=") && app_arg_start < 0) {
+            target_version = arg + 17;
             continue;
         }
         if (strcmp(arg, "--platform") == 0 && app_arg_start < 0) {
@@ -8585,6 +9113,27 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
             open_browser = 0;
             continue;
         }
+        if (package_target_option_takes_value(arg) && app_arg_start < 0) {
+            if ((i + 1) >= argc) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Missing package target option value.\" nodeId=argv)\n");
+                return 2;
+            }
+            if (target_option_count + 2 > AILANG_CLI_MAX_TARGET_OPTIONS) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Too many package target options.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_options[target_option_count++] = argv[i];
+            target_options[target_option_count++] = argv[++i];
+            continue;
+        }
+        if (package_target_option_is_inline(arg) && app_arg_start < 0) {
+            if (target_option_count + 1 > AILANG_CLI_MAX_TARGET_OPTIONS) {
+                fprintf(stderr, "Err#err1(code=RUN001 message=\"Too many package target options.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_options[target_option_count++] = argv[i];
+            continue;
+        }
         if (strcmp(arg, "--log-level") == 0 && app_arg_start < 0) {
             if ((i + 1) >= argc) {
                 fprintf(stderr,
@@ -8633,12 +9182,19 @@ static int parse_run_target(int argc, char** argv, int start_index, RunTarget* o
     out_target->use_cache = use_cache;
     out_target->log_level = log_level;
     out_target->target = target;
+    out_target->runner = runner;
+    out_target->artifact_type = artifact_type;
+    out_target->target_version = target_version;
     out_target->ui_platform = ui_platform;
     out_target->wasm_profile = wasm_profile;
     out_target->out_dir = out_dir;
     out_target->port = port;
     out_target->port_explicit = port_explicit;
     out_target->open_browser = open_browser;
+    out_target->target_option_count = target_option_count;
+    for (i = 0; i < target_option_count; i += 1) {
+        out_target->target_options[i] = target_options[i];
+    }
     return 0;
 }
 
@@ -8652,6 +9208,30 @@ static int absolute_existing_path(const char* path, char* output, size_t output_
 #else
     return realpath(path, output) != NULL;
 #endif
+}
+
+static int package_target_option_takes_value(const char* arg)
+{
+    return strcmp(arg, "--arch") == 0 ||
+           strcmp(arg, "--boot") == 0 ||
+           strcmp(arg, "--image") == 0 ||
+           strcmp(arg, "--partition") == 0 ||
+           strcmp(arg, "--feature") == 0 ||
+           strcmp(arg, "--splash-background") == 0 ||
+           strcmp(arg, "--splash-foreground") == 0 ||
+           strcmp(arg, "--target-option") == 0;
+}
+
+static int package_target_option_is_inline(const char* arg)
+{
+    return starts_with(arg, "--arch=") ||
+           starts_with(arg, "--boot=") ||
+           starts_with(arg, "--image=") ||
+           starts_with(arg, "--partition=") ||
+           starts_with(arg, "--feature=") ||
+           starts_with(arg, "--splash-background=") ||
+           starts_with(arg, "--splash-foreground=") ||
+           starts_with(arg, "--target-option=");
 }
 
 static void sleep_milliseconds(int milliseconds)
@@ -8992,8 +9572,18 @@ static int handle_run(int argc, char** argv)
     }
 
     if (!run_target_is_native_host(target.target)) {
-        fprintf(stderr, "Err#err1(code=RUN001 message=\"run --target currently supports wasm32 or the current native host target.\" nodeId=target)\n");
-        return 2;
+        return delegate_package_target_operation(
+            "run",
+            target.program_path,
+            target.target,
+            target.runner,
+            target.artifact_type,
+            target.target_version,
+            target.out_dir,
+            target.target_option_count,
+            target.target_options,
+            target.app_arg_count,
+            argc > target.app_arg_start ? &argv[target.app_arg_start] : NULL);
     }
 
     {
@@ -10576,10 +11166,15 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
 {
     const char* program_input = NULL;
     const char* target = NULL;
+    const char* runner = NULL;
+    const char* artifact_type = NULL;
+    const char* target_version = NULL;
     const char* out_dir = "dist";
     const char* wasm_profile = "spa";
     const char* wasm_fullstack_host_target_arg = NULL;
     int wasm_profile_explicit = 0;
+    int target_option_count = 0;
+    char* target_options[AILANG_CLI_MAX_TARGET_OPTIONS];
     char resolved_program[PATH_MAX];
     char source_aos[PATH_MAX];
     char artifact_dir[PATH_MAX];
@@ -10623,6 +11218,33 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
             out_dir = argv[++i];
             continue;
         }
+        if (strcmp(argv[i], "--runner") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Missing --runner value.\" nodeId=argv)\n");
+                return 2;
+            }
+            runner = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--type") == 0 || strcmp(argv[i], "--artifact-type") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Missing artifact type value.\" nodeId=argv)\n");
+                return 2;
+            }
+            artifact_type = argv[++i];
+            continue;
+        }
+        if (strcmp(argv[i], "--target-version") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Missing --target-version value.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_version = argv[++i];
+            continue;
+        }
         if (strcmp(argv[i], "--wasm-profile") == 0) {
             if (i + 1 >= argc) {
                 fprintf(stderr,
@@ -10640,6 +11262,30 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
                 return 2;
             }
             wasm_fullstack_host_target_arg = argv[++i];
+            continue;
+        }
+        if (package_target_option_takes_value(argv[i])) {
+            if (i + 1 >= argc) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Missing package target option value.\" nodeId=argv)\n");
+                return 2;
+            }
+            if (target_option_count + 2 > AILANG_CLI_MAX_TARGET_OPTIONS) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Too many package target options.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_options[target_option_count++] = argv[i];
+            target_options[target_option_count++] = argv[++i];
+            continue;
+        }
+        if (package_target_option_is_inline(argv[i])) {
+            if (target_option_count + 1 > AILANG_CLI_MAX_TARGET_OPTIONS) {
+                fprintf(stderr,
+                    "Err#err1(code=RUN001 message=\"Too many package target options.\" nodeId=argv)\n");
+                return 2;
+            }
+            target_options[target_option_count++] = argv[i];
             continue;
         }
         if (program_input == NULL && argv[i][0] != '-') {
@@ -10751,9 +11397,18 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
     }
 
     if (!parse_target_to_artifact(target, artifact_dir, sizeof(artifact_dir), runtime_bin, sizeof(runtime_bin))) {
-        fprintf(stderr,
-            "Err#err1(code=RUN001 message=\"Unsupported publish target RID.\" nodeId=target)\n");
-        return 2;
+        return delegate_package_target_operation(
+            "publish",
+            program_input,
+            target,
+            runner,
+            artifact_type,
+            target_version,
+            out_dir,
+            target_option_count,
+            target_options,
+            0,
+            NULL);
     }
     if (!resolve_runtime_artifact_dir(artifact_dir, artifact_dir, sizeof(artifact_dir))) {
         fprintf(stderr,

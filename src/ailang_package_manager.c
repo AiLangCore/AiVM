@@ -35,10 +35,11 @@
 #endif
 
 #define AILANG_PM_TEXT_LIMIT 262144U
-#define AILANG_PM_LOCK_LIMIT 131072U
+#define AILANG_PM_LOCK_LIMIT 262144U
 #define AILANG_PM_TOOL_TIMEOUT_SECONDS 30
 #define AILANG_PM_TOOL_TIMEOUT_MAX_SECONDS 3600
 #define AILANG_PM_MAX_DEPENDENCIES 64
+#define AILANG_PM_MAX_TARGETS 32
 #define AILANG_PM_LOCAL_INCLUDE_MAX_DEPTH 8
 
 typedef struct AilangPackageRecord {
@@ -56,10 +57,22 @@ typedef struct AilangPackageDependency {
     char version[64];
 } AilangPackageDependency;
 
+typedef struct AilangPackageTargetMetadata {
+    char id[128];
+    char aliases[512];
+    char default_runner[128];
+    char artifact_types[512];
+    char options[512];
+    char run_tools[512];
+    char publish_tools[512];
+} AilangPackageTargetMetadata;
+
 typedef struct AilangPackageSourceMetadata {
     char namespaces[512];
     AilangPackageDependency dependencies[AILANG_PM_MAX_DEPENDENCIES];
     size_t dependency_count;
+    AilangPackageTargetMetadata targets[AILANG_PM_MAX_TARGETS];
+    size_t target_count;
 } AilangPackageSourceMetadata;
 
 typedef struct AilangPackageRestoreQueue {
@@ -528,13 +541,20 @@ static int pm_project_config_get_package_path(
         char* text = NULL;
         char section[192];
         char value[PATH_MAX];
-        if (snprintf(section, sizeof(section), "packages.%s", package_name) >= (int)sizeof(section) ||
-            !pm_join_path(project_dir, files[i], path, sizeof(path)) ||
+        if (!pm_join_path(project_dir, files[i], path, sizeof(path)) ||
             !pm_file_exists(path) ||
             !pm_read_text_limited(path, &text)) {
             continue;
         }
+        if (snprintf(section, sizeof(section), "packages.%s", package_name) >= (int)sizeof(section)) {
+            free(text);
+            continue;
+        }
         if (pm_toml_get_section_string(text, section, "path", value, sizeof(value))) {
+            (void)snprintf(out, out_len, "%s", value);
+            found = 1;
+        } else if (snprintf(section, sizeof(section), "packages.\"%s\"", package_name) < (int)sizeof(section) &&
+                   pm_toml_get_section_string(text, section, "path", value, sizeof(value))) {
             (void)snprintf(out, out_len, "%s", value);
             found = 1;
         }
@@ -604,6 +624,323 @@ static int pm_is_package_name(const char* text)
         }
     }
     return !expect_segment_start;
+}
+
+static int pm_is_target_id(const char* text)
+{
+    size_t i;
+    if (text == NULL || text[0] == '\0') {
+        return 0;
+    }
+    for (i = 0U; text[i] != '\0'; i += 1U) {
+        unsigned char c = (unsigned char)text[i];
+        if (!isalnum(c) && c != '-' && c != '_' && c != '.') {
+            return 0;
+        }
+    }
+    return strstr(text, "..") == NULL && strchr(text, '/') == NULL && strchr(text, '\\') == NULL;
+}
+
+static int pm_is_tool_ref(const char* text)
+{
+    size_t i;
+    if (text == NULL || text[0] == '\0') {
+        return 0;
+    }
+    for (i = 0U; text[i] != '\0'; i += 1U) {
+        unsigned char c = (unsigned char)text[i];
+        if (!isalnum(c) && c != '-' && c != '_' && c != '.') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int pm_parse_targets_section_header(const char* line, char* out_id, size_t out_id_len, int* out_tools)
+{
+    const char* start;
+    const char* end;
+    const char* rest;
+    const char* id_start;
+    const char* id_end;
+    size_t n;
+    if (line == NULL || out_id == NULL || out_id_len == 0U || out_tools == NULL) {
+        return 0;
+    }
+    out_id[0] = '\0';
+    *out_tools = 0;
+    start = line;
+    while (*start != '\0' && isspace((unsigned char)*start)) {
+        start += 1;
+    }
+    if (strncmp(start, "[targets.", 9U) != 0) {
+        return 0;
+    }
+    end = strchr(start, ']');
+    if (end == NULL) {
+        return 0;
+    }
+    rest = start + 9U;
+    if (rest >= end) {
+        return 0;
+    }
+    if (*rest == '"') {
+        id_start = rest + 1;
+        id_end = memchr(id_start, '"', (size_t)(end - id_start));
+        if (id_end == NULL) {
+            return 0;
+        }
+        rest = id_end + 1;
+    } else {
+        id_start = rest;
+        id_end = rest;
+        while (id_end < end && *id_end != '.') {
+            id_end += 1;
+        }
+        rest = id_end;
+    }
+    if (rest < end) {
+        if ((size_t)(end - rest) != strlen(".tools") || strncmp(rest, ".tools", strlen(".tools")) != 0) {
+            return 0;
+        }
+        *out_tools = 1;
+    }
+    n = (size_t)(id_end - id_start);
+    if (n == 0U || n + 1U > out_id_len) {
+        return 0;
+    }
+    memcpy(out_id, id_start, n);
+    out_id[n] = '\0';
+    return pm_is_target_id(out_id);
+}
+
+static int pm_target_index(AilangPackageSourceMetadata* metadata, const char* id)
+{
+    size_t i;
+    if (metadata == NULL || id == NULL) {
+        return -1;
+    }
+    for (i = 0U; i < metadata->target_count; i += 1U) {
+        if (strcmp(metadata->targets[i].id, id) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static int pm_get_or_add_target(
+    AilangPackageSourceMetadata* metadata,
+    const char* id,
+    char* error,
+    size_t error_len)
+{
+    int existing = pm_target_index(metadata, id);
+    if (existing >= 0) {
+        return existing;
+    }
+    if (metadata == NULL || id == NULL || !pm_is_target_id(id)) {
+        (void)pm_set_error(error, error_len, "invalid package target id");
+        return -1;
+    }
+    if (metadata->target_count >= AILANG_PM_MAX_TARGETS) {
+        (void)pm_set_error(error, error_len, "too many package targets");
+        return -1;
+    }
+    memset(&metadata->targets[metadata->target_count], 0, sizeof(metadata->targets[metadata->target_count]));
+    (void)snprintf(metadata->targets[metadata->target_count].id, sizeof(metadata->targets[metadata->target_count].id), "%s", id);
+    metadata->target_count += 1U;
+    return (int)(metadata->target_count - 1U);
+}
+
+static int pm_array_or_string_from_line(
+    const char* line,
+    const char* key,
+    char* out,
+    size_t out_len,
+    int validate_tools,
+    char* error,
+    size_t error_len)
+{
+    char string_value[128];
+    const char* cursor;
+    const char* start;
+    const char* end;
+    if (line == NULL || key == NULL || out == NULL || out_len == 0U) {
+        return 0;
+    }
+    {
+        const char* trim = line;
+        size_t key_len = strlen(key);
+        while (*trim != '\0' && isspace((unsigned char)*trim)) {
+            trim += 1;
+        }
+        if (strncmp(trim, key, key_len) != 0 ||
+            (trim[key_len] != ' ' && trim[key_len] != '=' && trim[key_len] != '\t')) {
+            return 0;
+        }
+    }
+    if (pm_toml_get_array(line, key, out, out_len)) {
+        if (out[0] == '\0') {
+            return strstr(line, key) != NULL;
+        }
+        if (validate_tools) {
+            cursor = out;
+            while ((start = strchr(cursor, '"')) != NULL) {
+                size_t n;
+                char tool[128];
+                start += 1;
+                end = strchr(start, '"');
+                if (end == NULL) {
+                    return pm_set_error(error, error_len, "invalid tool requirement array");
+                }
+                n = (size_t)(end - start);
+                if (n == 0U || n + 1U > sizeof(tool)) {
+                    return pm_set_error(error, error_len, "tool requirement is too long");
+                }
+                memcpy(tool, start, n);
+                tool[n] = '\0';
+                if (!pm_is_tool_ref(tool)) {
+                    return pm_set_error(error, error_len, "invalid tool requirement: %s", tool);
+                }
+                cursor = end + 1;
+            }
+        }
+        return 1;
+    }
+    if (pm_toml_get_string(line, key, string_value, sizeof(string_value))) {
+        if (validate_tools && !pm_is_tool_ref(string_value)) {
+            return pm_set_error(error, error_len, "invalid tool requirement: %s", string_value);
+        }
+        return snprintf(out, out_len, "\"%s\"", string_value) > 0 && strlen(out) < out_len;
+    }
+    return 0;
+}
+
+static int pm_collect_source_targets(
+    const char* descriptor,
+    AilangPackageSourceMetadata* metadata,
+    char* error,
+    size_t error_len)
+{
+    const char* cursor;
+    int current_target = -1;
+    int in_tools = 0;
+    if (descriptor == NULL || metadata == NULL) {
+        return pm_set_error(error, error_len, "invalid package target metadata request");
+    }
+    metadata->target_count = 0U;
+    cursor = descriptor;
+    while (*cursor != '\0') {
+        const char* line_start = cursor;
+        const char* line_end = strchr(line_start, '\n');
+        char line[1024];
+        size_t n;
+        if (line_end == NULL) {
+            line_end = line_start + strlen(line_start);
+        }
+        cursor = *line_end == '\n' ? line_end + 1 : line_end;
+        n = (size_t)(line_end - line_start);
+        if (n >= sizeof(line)) {
+            return pm_set_error(error, error_len, "package descriptor line is too long");
+        }
+        memcpy(line, line_start, n);
+        line[n] = '\0';
+        {
+            char id[128];
+            int tools = 0;
+            char* trim = line;
+            while (*trim != '\0' && isspace((unsigned char)*trim)) {
+                trim += 1;
+            }
+            if (*trim == '\0' || *trim == '#') {
+                continue;
+            }
+            if (*trim == '[') {
+                if (pm_parse_targets_section_header(trim, id, sizeof(id), &tools)) {
+                    current_target = pm_get_or_add_target(metadata, id, error, error_len);
+                    if (current_target < 0) {
+                        return 0;
+                    }
+                    in_tools = tools;
+                } else {
+                    current_target = -1;
+                    in_tools = 0;
+                }
+                continue;
+            }
+            if (current_target < 0) {
+                continue;
+            }
+            if (!in_tools) {
+                if (pm_array_or_string_from_line(
+                        trim,
+                        "aliases",
+                        metadata->targets[current_target].aliases,
+                        sizeof(metadata->targets[current_target].aliases),
+                        0,
+                        error,
+                        error_len)) {
+                    continue;
+                }
+                if (pm_toml_get_string(
+                        trim,
+                        "defaultRunner",
+                        metadata->targets[current_target].default_runner,
+                        sizeof(metadata->targets[current_target].default_runner))) {
+                    if (!pm_is_tool_ref(metadata->targets[current_target].default_runner)) {
+                        return pm_set_error(
+                            error,
+                            error_len,
+                            "invalid package target default runner: %s",
+                            metadata->targets[current_target].default_runner);
+                    }
+                    continue;
+                }
+                if (pm_array_or_string_from_line(
+                        trim,
+                        "artifactTypes",
+                        metadata->targets[current_target].artifact_types,
+                        sizeof(metadata->targets[current_target].artifact_types),
+                        0,
+                        error,
+                        error_len)) {
+                    continue;
+                }
+                if (pm_array_or_string_from_line(
+                        trim,
+                        "options",
+                        metadata->targets[current_target].options,
+                        sizeof(metadata->targets[current_target].options),
+                        0,
+                        error,
+                        error_len)) {
+                    continue;
+                }
+            } else {
+                if (pm_array_or_string_from_line(
+                        trim,
+                        "run",
+                        metadata->targets[current_target].run_tools,
+                        sizeof(metadata->targets[current_target].run_tools),
+                        1,
+                        error,
+                        error_len)) {
+                    continue;
+                }
+                if (pm_array_or_string_from_line(
+                        trim,
+                        "publish",
+                        metadata->targets[current_target].publish_tools,
+                        sizeof(metadata->targets[current_target].publish_tools),
+                        1,
+                        error,
+                        error_len)) {
+                    continue;
+                }
+            }
+        }
+    }
+    return 1;
 }
 
 static int pm_collect_source_dependencies(
@@ -719,6 +1056,7 @@ static int pm_collect_source_namespaces(
     }
     metadata->namespaces[0] = '\0';
     metadata->dependency_count = 0U;
+    metadata->target_count = 0U;
     cursor = descriptor;
     while ((cursor = strstr(cursor, "entry = \"")) != NULL) {
         entry_count += 1U;
@@ -760,7 +1098,8 @@ static int pm_collect_source_namespaces(
     if (entry_count > 0U && namespace_count != entry_count) {
         return pm_set_error(error, error_len, "package library entries must declare namespaces");
     }
-    return pm_collect_source_dependencies(descriptor, metadata, error, error_len);
+    return pm_collect_source_dependencies(descriptor, metadata, error, error_len) &&
+           pm_collect_source_targets(descriptor, metadata, error, error_len);
 }
 
 static int pm_load_package_source_metadata(
@@ -1876,9 +2215,14 @@ int ailang_package_manager_restore(
             return pm_set_error(error, error_len, "package tool conflicts with %s", conflict);
         }
         if (use_configured_package) {
+            char configured_descriptor[PATH_MAX];
             if (!pm_directory_exists(configured_package_dir)) {
                 free(manifest);
                 return pm_set_error(error, error_len, "local package override not found: %s", record.name);
+            }
+            if (pm_join_path(configured_package_dir, "package.toml", configured_descriptor, sizeof(configured_descriptor)) &&
+                pm_file_exists(configured_descriptor)) {
+                (void)snprintf(record.package_root, sizeof(record.package_root), ".");
             }
             if (snprintf(package_dir, sizeof(package_dir), "%s", configured_package_dir) >= (int)sizeof(package_dir) ||
                 snprintf(lock_package_path, sizeof(lock_package_path), "%s", configured_package_path) >= (int)sizeof(lock_package_path)) {
@@ -1959,6 +2303,39 @@ int ailang_package_manager_restore(
             !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "namespaces = [%s]\n\n", source_metadata.namespaces)) {
             free(manifest);
             return pm_set_error(error, error_len, "lockfile output overflow");
+        }
+        {
+            size_t target_index;
+            for (target_index = 0U; target_index < source_metadata.target_count; target_index += 1U) {
+                const AilangPackageTargetMetadata* target_metadata = &source_metadata.targets[target_index];
+                if (!pm_append(&lock_text[0], sizeof(lock_text), &lock_used, "[[target]]\n") ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "package = \"%s\"\n", record.name) ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "id = \"%s\"\n", target_metadata->id) ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "aliases = [%s]\n", target_metadata->aliases) ||
+                    !pm_appendf(
+                        &lock_text[0],
+                        sizeof(lock_text),
+                        &lock_used,
+                        "defaultRunner = \"%s\"\n",
+                        target_metadata->default_runner) ||
+                    !pm_appendf(
+                        &lock_text[0],
+                        sizeof(lock_text),
+                        &lock_used,
+                        "artifactTypes = [%s]\n",
+                        target_metadata->artifact_types) ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "options = [%s]\n", target_metadata->options) ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "runTools = [%s]\n", target_metadata->run_tools) ||
+                    !pm_appendf(
+                        &lock_text[0],
+                        sizeof(lock_text),
+                        &lock_used,
+                        "publishTools = [%s]\n\n",
+                        target_metadata->publish_tools)) {
+                    free(manifest);
+                    return pm_set_error(error, error_len, "lockfile output overflow");
+                }
+            }
         }
         restored += 1;
     }

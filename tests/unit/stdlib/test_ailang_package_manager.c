@@ -142,7 +142,17 @@ int main(void)
             "[libraries.demo]\n"
             "namespace = \"demo.tool\"\n"
             "entry = \"src/lib.aos\"\n"
-            "exports = []\n") ||
+            "exports = []\n"
+            "\n"
+            "[targets.fixture-service]\n"
+            "aliases = [\"fixture-svc\"]\n"
+            "defaultRunner = \"demo\"\n"
+            "artifactTypes = [\"aibc1\", \"img\"]\n"
+            "options = [\"arch\", \"boot\", \"image\", \"partition\", \"feature\"]\n"
+            "\n"
+            "[targets.fixture-service.tools]\n"
+            "run = [\"sh\"]\n"
+            "publish = [\"tar\"]\n") ||
         !write_file(
             ".tmp/pkg-manager-test/package-src/pkg/tools/demo",
             "#!/bin/sh\n"
@@ -280,7 +290,15 @@ int main(void)
         strstr(output, "Ok#ok1(type=int value=2)") == NULL ||
         !read_file(".tmp/pkg-manager-test/project/ailang.lock.toml", output, sizeof(output)) ||
         strstr(output, "name = \"demo\"") == NULL ||
-        strstr(output, "path = \"../package-src\"") == NULL) {
+        strstr(output, "path = \"../package-src\"") == NULL ||
+        strstr(output, "[[target]]") == NULL ||
+        strstr(output, "id = \"fixture-service\"") == NULL ||
+        strstr(output, "aliases = [\"fixture-svc\"]") == NULL ||
+        strstr(output, "defaultRunner = \"demo\"") == NULL ||
+        strstr(output, "artifactTypes = [\"aibc1\", \"img\"]") == NULL ||
+        strstr(output, "options = [\"arch\", \"boot\", \"image\", \"partition\", \"feature\"]") == NULL ||
+        strstr(output, "runTools = [\"sh\"]") == NULL ||
+        strstr(output, "publishTools = [\"tar\"]") == NULL) {
         return 24;
     }
     if (!read_file(".tmp/pkg-manager-test/project/project.aiproj", output, sizeof(output)) ||
