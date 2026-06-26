@@ -5,13 +5,30 @@ on:
   push:
     branches:
       - main
-      - develop
-      - "codex/**"
+    tags:
+      - "v*.*.*-*"
+  workflow_dispatch:
 
 jobs:
-  clang-tools:
-    name: clang-tidy-analyzer-cppcheck
+  cppcheck:
+    name: cppcheck-pr-smoke
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck
+
+      - name: cppcheck
+        run: cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c17 --inline-suppr --suppress=missingIncludeSystem src tests
+
+  clang-tools:
+    name: clang-tidy-analyzer
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -19,7 +36,7 @@ jobs:
       - name: Install analysis tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-tidy clang-tools cppcheck
+          sudo apt-get install -y clang-tidy clang-tools
 
       - name: Configure
         run: cmake --preset aivm-native-unix -S ./src
@@ -34,6 +51,3 @@ jobs:
 
       - name: clang static analyzer
         run: scan-build --status-bugs cmake --build ./.tmp/aivm-c-build-native
-
-      - name: cppcheck
-        run: cppcheck --enable=warning,performance,portability --error-exitcode=1 --std=c17 --inline-suppr --suppress=missingIncludeSystem src tests
