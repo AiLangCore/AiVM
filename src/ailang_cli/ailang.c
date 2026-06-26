@@ -1658,10 +1658,17 @@ static int canonical_existing_path(const char* path, char* out, size_t out_len)
     if (path == NULL || out == NULL || out_len == 0U) {
         return 0;
     }
+#ifdef _WIN32
+    if (_fullpath(resolved, path, PATH_MAX) != NULL) {
+        n = snprintf(out, out_len, "%s", resolved);
+        return n >= 0 && (size_t)n < out_len;
+    }
+#else
     if (realpath(path, resolved) != NULL) {
         n = snprintf(out, out_len, "%s", resolved);
         return n >= 0 && (size_t)n < out_len;
     }
+#endif
     n = snprintf(out, out_len, "%s", path);
     return n >= 0 && (size_t)n < out_len;
 }
