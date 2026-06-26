@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef struct {
@@ -266,7 +267,15 @@ int native_host_ui_begin_frame(int64_t handle)
 
 int native_host_ui_end_frame(int64_t handle) { return fb_find_window(handle) != NULL; }
 int native_host_ui_present(int64_t handle) { return fb_find_window(handle) != NULL; }
-int native_host_ui_wait_frame(int64_t handle) { (void)handle; usleep(16000U); return 1; }
+int native_host_ui_wait_frame(int64_t handle)
+{
+    struct timespec frame_delay;
+    (void)handle;
+    frame_delay.tv_sec = 0;
+    frame_delay.tv_nsec = 16000000L;
+    (void)nanosleep(&frame_delay, NULL);
+    return 1;
+}
 
 int native_host_ui_draw_rect(int64_t handle, int x, int y, int width, int height, const char* color)
 {
