@@ -25,6 +25,8 @@ typedef struct {
 
 static int g_fb_fd = -1;
 static uint8_t* g_fb_mem = NULL;
+static uint8_t* g_back_mem = NULL;
+static uint8_t* g_draw_mem = NULL;
 static size_t g_fb_bytes = 0U;
 static struct fb_var_screeninfo g_fb_var;
 static struct fb_fix_screeninfo g_fb_fix;
@@ -62,6 +64,17 @@ static int fb_open(void)
         g_fb_fd = -1;
         return 0;
     }
+    g_back_mem = (uint8_t*)malloc(g_fb_bytes);
+    if (g_back_mem == NULL) {
+        perror("aivectra framebuffer back buffer");
+        munmap(g_fb_mem, g_fb_bytes);
+        g_fb_mem = NULL;
+        close(g_fb_fd);
+        g_fb_fd = -1;
+        return 0;
+    }
+    memcpy(g_back_mem, g_fb_mem, g_fb_bytes);
+    g_draw_mem = g_back_mem;
     return 1;
 }
 
@@ -128,7 +141,7 @@ static void fb_put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
 {
     size_t offset;
     uint32_t pixel;
-    if (g_fb_mem == NULL || x < 0 || y < 0 || (uint32_t)x >= g_fb_var.xres || (uint32_t)y >= g_fb_var.yres) {
+    if (g_draw_mem == NULL || x < 0 || y < 0 || (uint32_t)x >= g_fb_var.xres || (uint32_t)y >= g_fb_var.yres) {
         return;
     }
     offset = (size_t)y * (size_t)g_fb_fix.line_length + (size_t)x * ((size_t)g_fb_var.bits_per_pixel / 8U);
@@ -137,13 +150,13 @@ static void fb_put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
     }
     pixel = pack_pixel(r, g, b);
     if (g_fb_var.bits_per_pixel == 16U) {
-        *(uint16_t*)(void*)(g_fb_mem + offset) = (uint16_t)pixel;
+        *(uint16_t*)(void*)(g_draw_mem + offset) = (uint16_t)pixel;
     } else if (g_fb_var.bits_per_pixel == 24U) {
-        g_fb_mem[offset] = (uint8_t)(pixel & 0xffU);
-        g_fb_mem[offset + 1U] = (uint8_t)((pixel >> 8U) & 0xffU);
-        g_fb_mem[offset + 2U] = (uint8_t)((pixel >> 16U) & 0xffU);
+        g_draw_mem[offset] = (uint8_t)(pixel & 0xffU);
+        g_draw_mem[offset + 1U] = (uint8_t)((pixel >> 8U) & 0xffU);
+        g_draw_mem[offset + 2U] = (uint8_t)((pixel >> 16U) & 0xffU);
     } else {
-        *(uint32_t*)(void*)(g_fb_mem + offset) = pixel;
+        *(uint32_t*)(void*)(g_draw_mem + offset) = pixel;
     }
 }
 
@@ -185,22 +198,89 @@ static void fb_draw_line_raw(int x0, int y0, int x1, int y1, uint8_t r, uint8_t 
     }
 }
 
+static const uint8_t* fb_glyph_rows(char c)
+{
+    static const uint8_t blank[7] = { 0, 0, 0, 0, 0, 0, 0 };
+    static const uint8_t unknown[7] = { 0x1e, 0x11, 0x01, 0x06, 0x04, 0x00, 0x04 };
+    static const uint8_t glyph_0[7] = { 0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e };
+    static const uint8_t glyph_1[7] = { 0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e };
+    static const uint8_t glyph_2[7] = { 0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f };
+    static const uint8_t glyph_3[7] = { 0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e };
+    static const uint8_t glyph_4[7] = { 0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02 };
+    static const uint8_t glyph_5[7] = { 0x1f, 0x10, 0x10, 0x1e, 0x01, 0x01, 0x1e };
+    static const uint8_t glyph_6[7] = { 0x06, 0x08, 0x10, 0x1e, 0x11, 0x11, 0x0e };
+    static const uint8_t glyph_7[7] = { 0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 };
+    static const uint8_t glyph_8[7] = { 0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e };
+    static const uint8_t glyph_9[7] = { 0x0e, 0x11, 0x11, 0x0f, 0x01, 0x02, 0x0c };
+    static const uint8_t glyph_a[7] = { 0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11 };
+    static const uint8_t glyph_b[7] = { 0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e };
+    static const uint8_t glyph_c[7] = { 0x0e, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0e };
+    static const uint8_t glyph_d[7] = { 0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e };
+    static const uint8_t glyph_e[7] = { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f };
+    static const uint8_t glyph_f[7] = { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10 };
+    static const uint8_t glyph_g[7] = { 0x0e, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0f };
+    static const uint8_t glyph_h[7] = { 0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11 };
+    static const uint8_t glyph_i[7] = { 0x0e, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0e };
+    static const uint8_t glyph_j[7] = { 0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0e };
+    static const uint8_t glyph_k[7] = { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 };
+    static const uint8_t glyph_l[7] = { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f };
+    static const uint8_t glyph_m[7] = { 0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11 };
+    static const uint8_t glyph_n[7] = { 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11 };
+    static const uint8_t glyph_o[7] = { 0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e };
+    static const uint8_t glyph_p[7] = { 0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10 };
+    static const uint8_t glyph_q[7] = { 0x0e, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0d };
+    static const uint8_t glyph_r[7] = { 0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11 };
+    static const uint8_t glyph_s[7] = { 0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e };
+    static const uint8_t glyph_t[7] = { 0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 };
+    static const uint8_t glyph_u[7] = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e };
+    static const uint8_t glyph_v[7] = { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0a, 0x04 };
+    static const uint8_t glyph_w[7] = { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0a };
+    static const uint8_t glyph_x[7] = { 0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11 };
+    static const uint8_t glyph_y[7] = { 0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04 };
+    static const uint8_t glyph_z[7] = { 0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f };
+    static const uint8_t colon[7] = { 0, 0x04, 0x04, 0, 0x04, 0x04, 0 };
+    static const uint8_t dot[7] = { 0, 0, 0, 0, 0, 0x0c, 0x0c };
+    static const uint8_t comma[7] = { 0, 0, 0, 0, 0x0c, 0x04, 0x08 };
+    static const uint8_t dash[7] = { 0, 0, 0, 0x1f, 0, 0, 0 };
+    static const uint8_t slash[7] = { 0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10 };
+    static const uint8_t percent[7] = { 0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03 };
+    static const uint8_t paren_l[7] = { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 };
+    static const uint8_t paren_r[7] = { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 };
+    if (c >= 'a' && c <= 'z') {
+        c = (char)(c - ('a' - 'A'));
+    }
+    switch (c) {
+        case ' ': return blank;
+        case '0': return glyph_0; case '1': return glyph_1; case '2': return glyph_2; case '3': return glyph_3; case '4': return glyph_4;
+        case '5': return glyph_5; case '6': return glyph_6; case '7': return glyph_7; case '8': return glyph_8; case '9': return glyph_9;
+        case 'A': return glyph_a; case 'B': return glyph_b; case 'C': return glyph_c; case 'D': return glyph_d; case 'E': return glyph_e;
+        case 'F': return glyph_f; case 'G': return glyph_g; case 'H': return glyph_h; case 'I': return glyph_i; case 'J': return glyph_j;
+        case 'K': return glyph_k; case 'L': return glyph_l; case 'M': return glyph_m; case 'N': return glyph_n; case 'O': return glyph_o;
+        case 'P': return glyph_p; case 'Q': return glyph_q; case 'R': return glyph_r; case 'S': return glyph_s; case 'T': return glyph_t;
+        case 'U': return glyph_u; case 'V': return glyph_v; case 'W': return glyph_w; case 'X': return glyph_x; case 'Y': return glyph_y; case 'Z': return glyph_z;
+        case ':': return colon; case '.': return dot; case ',': return comma; case '-': return dash; case '/': return slash; case '%': return percent;
+        case '(': return paren_l; case ')': return paren_r;
+        default: return unknown;
+    }
+}
+
+static int fb_font_scale(int font_size)
+{
+    int scale = (font_size + 5) / 8;
+    return scale > 0 ? scale : 1;
+}
+
 static void fb_draw_glyph(int x, int y, char c, uint8_t r, uint8_t g, uint8_t b, int scale)
 {
     int row;
     int col;
-    unsigned int seed = (unsigned char)c;
-    if (c == ' ') {
-        return;
-    }
+    const uint8_t* rows = fb_glyph_rows(c);
     if (scale < 1) {
         scale = 1;
     }
     for (row = 0; row < 7; row += 1) {
         for (col = 0; col < 5; col += 1) {
-            int edge = row == 0 || row == 6 || col == 0 || col == 4;
-            int bit = ((seed >> ((row + col) % 6)) & 1U) != 0U;
-            if (edge || bit) {
+            if ((rows[row] & (uint8_t)(1U << (4 - col))) != 0U) {
                 fb_fill_rect(x + col * scale, y + row * scale, scale, scale, r, g, b);
             }
         }
@@ -219,6 +299,11 @@ void native_host_ui_shutdown(void)
         munmap(g_fb_mem, g_fb_bytes);
         g_fb_mem = NULL;
     }
+    if (g_back_mem != NULL) {
+        free(g_back_mem);
+        g_back_mem = NULL;
+    }
+    g_draw_mem = NULL;
     if (g_fb_fd >= 0) {
         close(g_fb_fd);
         g_fb_fd = -1;
@@ -237,14 +322,10 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
         return 0;
     }
     window->handle = g_next_handle++;
+    (void)width;
+    (void)height;
     window->width = (int)g_fb_var.xres;
     window->height = (int)g_fb_var.yres;
-    if (width > 0 && width < window->width) {
-        window->width = width;
-    }
-    if (height > 0 && height < window->height) {
-        window->height = height;
-    }
     *out_handle = window->handle;
     return 1;
 }
@@ -265,12 +346,22 @@ int native_host_ui_begin_frame(int64_t handle)
     if (window == NULL) {
         return 0;
     }
+    g_draw_mem = g_back_mem != NULL ? g_back_mem : g_fb_mem;
     fb_fill_rect(0, 0, window->width, window->height, 255U, 255U, 255U);
     return 1;
 }
 
 int native_host_ui_end_frame(int64_t handle) { return fb_find_window(handle) != NULL; }
-int native_host_ui_present(int64_t handle) { return fb_find_window(handle) != NULL; }
+int native_host_ui_present(int64_t handle)
+{
+    if (fb_find_window(handle) == NULL) {
+        return 0;
+    }
+    if (g_fb_mem != NULL && g_back_mem != NULL) {
+        memcpy(g_fb_mem, g_back_mem, g_fb_bytes);
+    }
+    return 1;
+}
 int native_host_ui_wait_frame(int64_t handle)
 {
     struct timespec frame_delay;
@@ -341,7 +432,7 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     if (fb_find_window(handle) == NULL || text == NULL) return 0;
     parse_color(color, &r, &g, &b, &a);
     if (a == 0U) return 1;
-    scale = font_size > 18 ? 3 : (font_size > 11 ? 2 : 1);
+    scale = fb_font_scale(font_size);
     for (c = text; *c != '\0'; c += 1) {
         fb_draw_glyph(cursor_x, y - 7 * scale, *c, r, g, b, scale);
         cursor_x += 6 * scale;
@@ -353,7 +444,7 @@ int native_host_ui_measure_text(int64_t handle, const char* text, int font_size,
 {
     int scale;
     if (fb_find_window(handle) == NULL || text == NULL || out_width == NULL) return 0;
-    scale = font_size > 18 ? 3 : (font_size > 11 ? 2 : 1);
+    scale = fb_font_scale(font_size);
     *out_width = (int)strlen(text) * 6 * scale;
     return 1;
 }
