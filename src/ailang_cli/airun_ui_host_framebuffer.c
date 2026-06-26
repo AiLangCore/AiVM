@@ -263,12 +263,58 @@ static void fb_fill_rect(int x, int y, int width, int height, uint8_t r, uint8_t
 {
     int yy;
     int xx;
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+    size_t bytes_per_pixel;
+    uint32_t pixel;
     if (width <= 0 || height <= 0) {
         return;
     }
-    for (yy = y; yy < y + height; yy += 1) {
-        for (xx = x; xx < x + width; xx += 1) {
-            fb_put_pixel(xx, yy, r, g, b);
+    if (g_draw_mem == NULL) {
+        return;
+    }
+    x0 = x < 0 ? 0 : x;
+    y0 = y < 0 ? 0 : y;
+    x1 = x + width;
+    y1 = y + height;
+    if (x1 > (int)g_fb_var.xres) x1 = (int)g_fb_var.xres;
+    if (y1 > (int)g_fb_var.yres) y1 = (int)g_fb_var.yres;
+    if (x0 >= x1 || y0 >= y1) {
+        return;
+    }
+    bytes_per_pixel = (size_t)g_fb_var.bits_per_pixel / 8U;
+    if (bytes_per_pixel == 0U) {
+        return;
+    }
+    pixel = pack_pixel(r, g, b);
+    for (yy = y0; yy < y1; yy += 1) {
+        uint8_t* row = g_draw_mem + (size_t)yy * (size_t)g_fb_fix.line_length + (size_t)x0 * bytes_per_pixel;
+        if (g_fb_var.bits_per_pixel == 32U) {
+            uint32_t* out = (uint32_t*)(void*)row;
+            for (xx = x0; xx < x1; xx += 1) {
+                *out++ = pixel;
+            }
+        } else if (g_fb_var.bits_per_pixel == 16U) {
+            uint16_t* out = (uint16_t*)(void*)row;
+            for (xx = x0; xx < x1; xx += 1) {
+                *out++ = (uint16_t)pixel;
+            }
+        } else if (g_fb_var.bits_per_pixel == 24U) {
+            uint8_t p0 = (uint8_t)(pixel & 0xffU);
+            uint8_t p1 = (uint8_t)((pixel >> 8U) & 0xffU);
+            uint8_t p2 = (uint8_t)((pixel >> 16U) & 0xffU);
+            uint8_t* out = row;
+            for (xx = x0; xx < x1; xx += 1) {
+                *out++ = p0;
+                *out++ = p1;
+                *out++ = p2;
+            }
+        } else {
+            for (xx = x0; xx < x1; xx += 1) {
+                fb_put_pixel(xx, yy, r, g, b);
+            }
         }
     }
 }
