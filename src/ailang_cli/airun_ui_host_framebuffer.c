@@ -6,8 +6,10 @@
 
 #ifdef __linux__
 
+#include <errno.h>
 #include <fcntl.h>
 #include <linux/fb.h>
+#include <linux/input.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +34,22 @@ static struct fb_var_screeninfo g_fb_var;
 static struct fb_fix_screeninfo g_fb_fix;
 static int64_t g_next_handle = 1;
 static NativeUiFramebufferWindow g_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
+
+enum {
+    FB_INPUT_DEVICE_CAPACITY = 32,
+    FB_EVENT_QUEUE_CAPACITY = 128
+};
+
+static int g_input_fds[FB_INPUT_DEVICE_CAPACITY];
+static size_t g_input_fd_count = 0U;
+static int g_input_initialized = 0;
+static NativeHostUiEvent g_event_queue[FB_EVENT_QUEUE_CAPACITY];
+static size_t g_event_head = 0U;
+static size_t g_event_tail = 0U;
+static int g_cursor_x = 32;
+static int g_cursor_y = 32;
+static int g_pointer_down = 0;
+static int g_shift_down = 0;
 
 static int fb_open(void)
 {
@@ -76,6 +94,87 @@ static int fb_open(void)
     memcpy(g_back_mem, g_fb_mem, g_fb_bytes);
     g_draw_mem = g_back_mem;
     return 1;
+}
+
+static int fb_event_queue_empty(void)
+{
+    return g_event_head == g_event_tail;
+}
+
+static int fb_event_queue_full(void)
+{
+    return ((g_event_tail + 1U) % FB_EVENT_QUEUE_CAPACITY) == g_event_head;
+}
+
+static void fb_queue_event(const NativeHostUiEvent* event)
+{
+    if (event == NULL) {
+        return;
+    }
+    if (fb_event_queue_full()) {
+        g_event_head = (g_event_head + 1U) % FB_EVENT_QUEUE_CAPACITY;
+    }
+    g_event_queue[g_event_tail] = *event;
+    g_event_tail = (g_event_tail + 1U) % FB_EVENT_QUEUE_CAPACITY;
+}
+
+static int fb_pop_event(NativeHostUiEvent* out_event)
+{
+    if (out_event == NULL || fb_event_queue_empty()) {
+        return 0;
+    }
+    *out_event = g_event_queue[g_event_head];
+    g_event_head = (g_event_head + 1U) % FB_EVENT_QUEUE_CAPACITY;
+    return 1;
+}
+
+static void fb_close_input(void)
+{
+    size_t i;
+    for (i = 0U; i < g_input_fd_count; i += 1U) {
+        if (g_input_fds[i] >= 0) {
+            close(g_input_fds[i]);
+            g_input_fds[i] = -1;
+        }
+    }
+    g_input_fd_count = 0U;
+    g_input_initialized = 0;
+    g_event_head = 0U;
+    g_event_tail = 0U;
+}
+
+static void fb_open_input_path(const char* path)
+{
+    int fd;
+    if (path == NULL || path[0] == '\0' || g_input_fd_count >= FB_INPUT_DEVICE_CAPACITY) {
+        return;
+    }
+    fd = open(path, O_RDONLY | O_NONBLOCK);
+    if (fd < 0) {
+        return;
+    }
+    g_input_fds[g_input_fd_count] = fd;
+    g_input_fd_count += 1U;
+}
+
+static void fb_ensure_input_open(void)
+{
+    const char* explicit_path;
+    int i;
+    char path[64];
+    if (g_input_initialized) {
+        return;
+    }
+    g_input_initialized = 1;
+    explicit_path = getenv("AILANG_INPUTDEV");
+    if (explicit_path != NULL && explicit_path[0] != '\0') {
+        fb_open_input_path(explicit_path);
+        return;
+    }
+    for (i = 0; i < FB_INPUT_DEVICE_CAPACITY; i += 1) {
+        (void)snprintf(path, sizeof(path), "/dev/input/event%d", i);
+        fb_open_input_path(path);
+    }
 }
 
 static NativeUiFramebufferWindow* fb_find_window(int64_t handle)
@@ -270,6 +369,220 @@ static int fb_font_scale(int font_size)
     return scale > 0 ? scale : 1;
 }
 
+static void fb_set_event_base(NativeHostUiEvent* event, const char* type, int x, int y)
+{
+    memset(event, 0, sizeof(*event));
+    (void)snprintf(event->type, sizeof(event->type), "%s", type != NULL ? type : "none");
+    event->x = x;
+    event->y = y;
+}
+
+static void fb_clamp_cursor(const NativeUiFramebufferWindow* window)
+{
+    int max_x;
+    int max_y;
+    if (window == NULL) {
+        return;
+    }
+    max_x = window->width > 0 ? window->width - 1 : 0;
+    max_y = window->height > 0 ? window->height - 1 : 0;
+    if (g_cursor_x < 0) g_cursor_x = 0;
+    if (g_cursor_y < 0) g_cursor_y = 0;
+    if (g_cursor_x > max_x) g_cursor_x = max_x;
+    if (g_cursor_y > max_y) g_cursor_y = max_y;
+}
+
+static const char* fb_key_name(unsigned short code)
+{
+    switch (code) {
+        case KEY_ENTER: return "enter";
+        case KEY_BACKSPACE: return "backspace";
+        case KEY_DELETE: return "delete";
+        case KEY_ESC: return "escape";
+        case KEY_TAB: return "tab";
+        case KEY_SPACE: return "space";
+        case KEY_LEFT: return "left";
+        case KEY_RIGHT: return "right";
+        case KEY_UP: return "up";
+        case KEY_DOWN: return "down";
+        case KEY_HOME: return "home";
+        case KEY_END: return "end";
+        case KEY_PAGEUP: return "pageup";
+        case KEY_PAGEDOWN: return "pagedown";
+        case KEY_MINUS: return "-";
+        case KEY_EQUAL: return "=";
+        case KEY_LEFTBRACE: return "[";
+        case KEY_RIGHTBRACE: return "]";
+        case KEY_BACKSLASH: return "\\";
+        case KEY_SEMICOLON: return ";";
+        case KEY_APOSTROPHE: return "'";
+        case KEY_GRAVE: return "`";
+        case KEY_COMMA: return ",";
+        case KEY_DOT: return ".";
+        case KEY_SLASH: return "/";
+        default: break;
+    }
+    if (code >= KEY_A && code <= KEY_Z) {
+        static char names[26][2];
+        size_t index = (size_t)(code - KEY_A);
+        if (names[index][0] == '\0') {
+            names[index][0] = (char)('a' + index);
+            names[index][1] = '\0';
+        }
+        return names[index];
+    }
+    if (code >= KEY_1 && code <= KEY_9) {
+        static char digits[9][2];
+        size_t index = (size_t)(code - KEY_1);
+        if (digits[index][0] == '\0') {
+            digits[index][0] = (char)('1' + index);
+            digits[index][1] = '\0';
+        }
+        return digits[index];
+    }
+    if (code == KEY_0) {
+        return "0";
+    }
+    return "";
+}
+
+static char fb_key_text(unsigned short code)
+{
+    static const char unshifted_digits[] = "1234567890";
+    static const char shifted_digits[] = "!@#$%^&*()";
+    if (code >= KEY_A && code <= KEY_Z) {
+        char base = (char)('a' + (code - KEY_A));
+        return g_shift_down ? (char)(base - ('a' - 'A')) : base;
+    }
+    if (code >= KEY_1 && code <= KEY_9) {
+        size_t index = (size_t)(code - KEY_1);
+        return g_shift_down ? shifted_digits[index] : unshifted_digits[index];
+    }
+    if (code == KEY_0) {
+        return g_shift_down ? ')' : '0';
+    }
+    switch (code) {
+        case KEY_SPACE: return ' ';
+        case KEY_MINUS: return g_shift_down ? '_' : '-';
+        case KEY_EQUAL: return g_shift_down ? '+' : '=';
+        case KEY_LEFTBRACE: return g_shift_down ? '{' : '[';
+        case KEY_RIGHTBRACE: return g_shift_down ? '}' : ']';
+        case KEY_BACKSLASH: return g_shift_down ? '|' : '\\';
+        case KEY_SEMICOLON: return g_shift_down ? ':' : ';';
+        case KEY_APOSTROPHE: return g_shift_down ? '"' : '\'';
+        case KEY_GRAVE: return g_shift_down ? '~' : '`';
+        case KEY_COMMA: return g_shift_down ? '<' : ',';
+        case KEY_DOT: return g_shift_down ? '>' : '.';
+        case KEY_SLASH: return g_shift_down ? '?' : '/';
+        default: return '\0';
+    }
+}
+
+static void fb_queue_key_event(unsigned short code, int value)
+{
+    NativeHostUiEvent event;
+    const char* key;
+    char text;
+    if (code == KEY_LEFTSHIFT || code == KEY_RIGHTSHIFT) {
+        g_shift_down = value != 0;
+        return;
+    }
+    if (value == 0) {
+        return;
+    }
+    key = fb_key_name(code);
+    if (key == NULL || key[0] == '\0') {
+        return;
+    }
+    fb_set_event_base(&event, "key", -1, -1);
+    (void)snprintf(event.key, sizeof(event.key), "%s", key);
+    text = fb_key_text(code);
+    if (text != '\0') {
+        event.text[0] = text;
+        event.text[1] = '\0';
+    }
+    event.repeat = value == 2;
+    fb_queue_event(&event);
+}
+
+static void fb_queue_pointer_event(const NativeUiFramebufferWindow* window, const char* type, int dx, int dy)
+{
+    NativeHostUiEvent event;
+    size_t previous;
+    fb_clamp_cursor(window);
+    if (!fb_event_queue_empty()) {
+        previous = g_event_tail == 0U ? FB_EVENT_QUEUE_CAPACITY - 1U : g_event_tail - 1U;
+        if (strcmp(g_event_queue[previous].type, type) == 0) {
+            g_event_queue[previous].x = g_cursor_x;
+            g_event_queue[previous].y = g_cursor_y;
+            g_event_queue[previous].dx += dx;
+            g_event_queue[previous].dy += dy;
+            return;
+        }
+    }
+    fb_set_event_base(&event, type, g_cursor_x, g_cursor_y);
+    event.dx = dx;
+    event.dy = dy;
+    fb_queue_event(&event);
+}
+
+static void fb_process_input_event(const NativeUiFramebufferWindow* window, const struct input_event* ev)
+{
+    if (window == NULL || ev == NULL) {
+        return;
+    }
+    if (ev->type == EV_REL) {
+        if (ev->code == REL_X && ev->value != 0) {
+            g_cursor_x += ev->value;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", ev->value, 0);
+        } else if (ev->code == REL_Y && ev->value != 0) {
+            g_cursor_y += ev->value;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, ev->value);
+        } else if (ev->code == REL_WHEEL && ev->value != 0) {
+            fb_queue_pointer_event(window, "wheel", 0, -ev->value * 32);
+        } else if (ev->code == REL_HWHEEL && ev->value != 0) {
+            fb_queue_pointer_event(window, "wheel", ev->value * 32, 0);
+        }
+    } else if (ev->type == EV_ABS) {
+        if (ev->code == ABS_X) {
+            g_cursor_x = ev->value;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, 0);
+        } else if (ev->code == ABS_Y) {
+            g_cursor_y = ev->value;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, 0);
+        }
+    } else if (ev->type == EV_KEY) {
+        if (ev->code == BTN_LEFT) {
+            g_pointer_down = ev->value != 0;
+            fb_queue_pointer_event(window, ev->value != 0 ? "mouse_down" : "click", 0, 0);
+        } else if (ev->code == BTN_RIGHT && ev->value == 0) {
+            fb_queue_pointer_event(window, "click", 0, 0);
+        } else {
+            fb_queue_key_event(ev->code, ev->value);
+        }
+    }
+}
+
+static void fb_poll_input_devices(const NativeUiFramebufferWindow* window)
+{
+    size_t i;
+    fb_ensure_input_open();
+    for (i = 0U; i < g_input_fd_count; i += 1U) {
+        for (;;) {
+            struct input_event ev;
+            ssize_t read_result = read(g_input_fds[i], &ev, sizeof(ev));
+            if (read_result == (ssize_t)sizeof(ev)) {
+                fb_process_input_event(window, &ev);
+                continue;
+            }
+            if (read_result < 0 && (errno == EINTR)) {
+                continue;
+            }
+            break;
+        }
+    }
+}
+
 static void fb_draw_glyph(int x, int y, char c, uint8_t r, uint8_t g, uint8_t b, int scale)
 {
     int row;
@@ -287,14 +600,36 @@ static void fb_draw_glyph(int x, int y, char c, uint8_t r, uint8_t g, uint8_t b,
     }
 }
 
+static void fb_draw_cursor(void)
+{
+    uint8_t old_r = 0U;
+    uint8_t old_g = 0U;
+    uint8_t old_b = 0U;
+    uint8_t old_a = 255U;
+    (void)old_a;
+    parse_color("#ffffff", &old_r, &old_g, &old_b, &old_a);
+    fb_draw_line_raw(g_cursor_x, g_cursor_y, g_cursor_x + 13, g_cursor_y + 18, old_r, old_g, old_b, 2);
+    fb_draw_line_raw(g_cursor_x, g_cursor_y, g_cursor_x + 2, g_cursor_y + 22, old_r, old_g, old_b, 2);
+    fb_draw_line_raw(g_cursor_x + 2, g_cursor_y + 22, g_cursor_x + 7, g_cursor_y + 16, old_r, old_g, old_b, 2);
+    fb_draw_line_raw(g_cursor_x + 7, g_cursor_y + 16, g_cursor_x + 13, g_cursor_y + 18, old_r, old_g, old_b, 2);
+    fb_draw_line_raw(g_cursor_x, g_cursor_y, g_cursor_x + 13, g_cursor_y + 18, 16U, 24U, 39U, 1);
+    fb_draw_line_raw(g_cursor_x, g_cursor_y, g_cursor_x + 2, g_cursor_y + 22, 16U, 24U, 39U, 1);
+    fb_draw_line_raw(g_cursor_x + 2, g_cursor_y + 22, g_cursor_x + 7, g_cursor_y + 16, 16U, 24U, 39U, 1);
+    fb_draw_line_raw(g_cursor_x + 7, g_cursor_y + 16, g_cursor_x + 13, g_cursor_y + 18, 16U, 24U, 39U, 1);
+}
+
 void native_host_ui_reset(void)
 {
     memset(g_windows, 0, sizeof(g_windows));
     g_next_handle = 1;
+    fb_close_input();
+    g_pointer_down = 0;
+    g_shift_down = 0;
 }
 
 void native_host_ui_shutdown(void)
 {
+    fb_close_input();
     if (g_fb_mem != NULL) {
         munmap(g_fb_mem, g_fb_bytes);
         g_fb_mem = NULL;
@@ -326,6 +661,8 @@ int native_host_ui_create_window(const char* title, int width, int height, int64
     (void)height;
     window->width = (int)g_fb_var.xres;
     window->height = (int)g_fb_var.yres;
+    g_cursor_x = window->width / 2;
+    g_cursor_y = window->height / 2;
     *out_handle = window->handle;
     return 1;
 }
@@ -354,10 +691,14 @@ int native_host_ui_begin_frame(int64_t handle)
 int native_host_ui_end_frame(int64_t handle) { return fb_find_window(handle) != NULL; }
 int native_host_ui_present(int64_t handle)
 {
-    if (fb_find_window(handle) == NULL) {
+    NativeUiFramebufferWindow* window = fb_find_window(handle);
+    if (window == NULL) {
         return 0;
     }
     if (g_fb_mem != NULL && g_back_mem != NULL) {
+        g_draw_mem = g_back_mem;
+        fb_clamp_cursor(window);
+        fb_draw_cursor();
         memcpy(g_fb_mem, g_back_mem, g_fb_bytes);
     }
     return 1;
@@ -434,7 +775,7 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
     if (a == 0U) return 1;
     scale = fb_font_scale(font_size);
     for (c = text; *c != '\0'; c += 1) {
-        fb_draw_glyph(cursor_x, y - 7 * scale, *c, r, g, b, scale);
+        fb_draw_glyph(cursor_x, y, *c, r, g, b, scale);
         cursor_x += 6 * scale;
     }
     return 1;
@@ -473,7 +814,12 @@ int native_host_ui_pop_clip_path(int64_t handle) { return fb_find_window(handle)
 
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
 {
-    if (fb_find_window(handle) == NULL || out_event == NULL) return 0;
+    NativeUiFramebufferWindow* window = fb_find_window(handle);
+    if (window == NULL || out_event == NULL) return 0;
+    fb_poll_input_devices(window);
+    if (fb_pop_event(out_event)) {
+        return 1;
+    }
     memset(out_event, 0, sizeof(*out_event));
     snprintf(out_event->type, sizeof(out_event->type), "none");
     out_event->x = -1;
