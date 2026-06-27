@@ -46,8 +46,16 @@ enum {
 static int g_input_fds[FB_INPUT_DEVICE_CAPACITY];
 static char g_input_paths[FB_INPUT_DEVICE_CAPACITY][64];
 static char g_input_names[FB_INPUT_DEVICE_CAPACITY][128];
+static int g_input_has_abs_x[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_has_abs_y[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_abs_x_min[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_abs_x_max[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_abs_y_min[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_abs_y_max[FB_INPUT_DEVICE_CAPACITY];
+static int g_input_sync_lost[FB_INPUT_DEVICE_CAPACITY];
 static size_t g_input_fd_count = 0U;
 static int g_input_initialized = 0;
+static int g_abs_pointer_available = 0;
 static NativeHostUiEvent g_event_queue[FB_EVENT_QUEUE_CAPACITY];
 static size_t g_event_head = 0U;
 static size_t g_event_tail = 0U;
@@ -99,6 +107,19 @@ static int fb_evdev_trace_enabled(void)
     const char* value;
     if (!initialized) {
         value = getenv("AILANG_EVDEV_TRACE");
+        enabled = value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static int fb_evdev_deep_trace_enabled(void)
+{
+    static int initialized = 0;
+    static int enabled = 0;
+    const char* value;
+    if (!initialized) {
+        value = getenv("AILANG_EVDEV_DEEP_TRACE");
         enabled = value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
         initialized = 1;
     }
@@ -281,6 +302,35 @@ static size_t fb_event_queue_depth(void)
     return (g_event_tail + FB_EVENT_QUEUE_CAPACITY - g_event_head) % FB_EVENT_QUEUE_CAPACITY;
 }
 
+static int fb_scale_abs_value(int value, int min_value, int max_value, int target_size)
+{
+    int64_t numerator;
+    int64_t denominator;
+    int64_t scaled;
+    if (target_size <= 1) {
+        return 0;
+    }
+    if (max_value <= min_value) {
+        return value;
+    }
+    if (value < min_value) {
+        value = min_value;
+    }
+    if (value > max_value) {
+        value = max_value;
+    }
+    numerator = (int64_t)(value - min_value) * (int64_t)(target_size - 1);
+    denominator = (int64_t)(max_value - min_value);
+    scaled = (numerator + denominator / 2) / denominator;
+    if (scaled < 0) {
+        return 0;
+    }
+    if (scaled >= target_size) {
+        return target_size - 1;
+    }
+    return (int)scaled;
+}
+
 static int fb_event_queue_full(void)
 {
     return ((g_event_tail + 1U) % FB_EVENT_QUEUE_CAPACITY) == g_event_head;
@@ -318,9 +368,17 @@ static void fb_close_input(void)
         }
         g_input_paths[i][0] = '\0';
         g_input_names[i][0] = '\0';
+        g_input_has_abs_x[i] = 0;
+        g_input_has_abs_y[i] = 0;
+        g_input_abs_x_min[i] = 0;
+        g_input_abs_x_max[i] = 0;
+        g_input_abs_y_min[i] = 0;
+        g_input_abs_y_max[i] = 0;
+        g_input_sync_lost[i] = 0;
     }
     g_input_fd_count = 0U;
     g_input_initialized = 0;
+    g_abs_pointer_available = 0;
     g_event_head = 0U;
     g_event_tail = 0U;
 }
@@ -329,6 +387,8 @@ static void fb_open_input_path(const char* path)
 {
     int fd;
     size_t index;
+    struct input_absinfo abs_x;
+    struct input_absinfo abs_y;
     if (path == NULL || path[0] == '\0' || g_input_fd_count >= FB_INPUT_DEVICE_CAPACITY) {
         return;
     }
@@ -344,11 +404,34 @@ static void fb_open_input_path(const char* path)
         g_input_names[index][0] == '\0') {
         (void)snprintf(g_input_names[index], sizeof(g_input_names[index]), "unknown");
     }
+    memset(&abs_x, 0, sizeof(abs_x));
+    memset(&abs_y, 0, sizeof(abs_y));
+    g_input_has_abs_x[index] = ioctl(fd, EVIOCGABS(ABS_X), &abs_x) == 0 && abs_x.maximum > abs_x.minimum;
+    g_input_has_abs_y[index] = ioctl(fd, EVIOCGABS(ABS_Y), &abs_y) == 0 && abs_y.maximum > abs_y.minimum;
+    if (g_input_has_abs_x[index]) {
+        g_input_abs_x_min[index] = abs_x.minimum;
+        g_input_abs_x_max[index] = abs_x.maximum;
+    }
+    if (g_input_has_abs_y[index]) {
+        g_input_abs_y_min[index] = abs_y.minimum;
+        g_input_abs_y_max[index] = abs_y.maximum;
+    }
+    if (g_input_has_abs_x[index] && g_input_has_abs_y[index]) {
+        g_abs_pointer_available = 1;
+    }
+    g_input_sync_lost[index] = 0;
     if (fb_evdev_trace_enabled()) {
-        fprintf(stderr, "aivectra evdev trace: open fd=%d device=%s name=\"%s\"\n",
+        fprintf(stderr, "aivectra evdev trace: open fd=%d device=%s name=\"%s\" absX=%d range=%d..%d absY=%d range=%d..%d absPointerAvailable=%d\n",
             fd,
             g_input_paths[index],
-            g_input_names[index]);
+            g_input_names[index],
+            g_input_has_abs_x[index],
+            g_input_abs_x_min[index],
+            g_input_abs_x_max[index],
+            g_input_has_abs_y[index],
+            g_input_abs_y_min[index],
+            g_input_abs_y_max[index],
+            g_abs_pointer_available);
     }
     g_input_fd_count += 1U;
 }
@@ -774,12 +857,44 @@ static void fb_queue_pointer_event(const NativeUiFramebufferWindow* window, cons
     fb_queue_event(&event);
 }
 
-static void fb_process_input_event(const NativeUiFramebufferWindow* window, const struct input_event* ev)
+static void fb_process_input_event(const NativeUiFramebufferWindow* window, size_t device_index, const struct input_event* ev)
 {
+    int previous_x;
+    int previous_y;
+    int next_x;
+    int next_y;
     if (window == NULL || ev == NULL) {
         return;
     }
+    if (device_index >= g_input_fd_count) {
+        return;
+    }
+    if (ev->type == EV_SYN) {
+        if (ev->code == SYN_DROPPED) {
+            g_input_sync_lost[device_index] = 1;
+            if (fb_evdev_trace_enabled()) {
+                fprintf(stderr, "aivectra evdev trace: sync-dropped fd=%d device=%s queueDepth=%llu\n",
+                    g_input_fds[device_index],
+                    g_input_paths[device_index],
+                    (unsigned long long)fb_event_queue_depth());
+            }
+        } else if (ev->code == SYN_REPORT && g_input_sync_lost[device_index]) {
+            g_input_sync_lost[device_index] = 0;
+            if (fb_evdev_trace_enabled()) {
+                fprintf(stderr, "aivectra evdev trace: sync-resynced fd=%d device=%s\n",
+                    g_input_fds[device_index],
+                    g_input_paths[device_index]);
+            }
+        }
+        return;
+    }
+    if (g_input_sync_lost[device_index]) {
+        return;
+    }
     if (ev->type == EV_REL) {
+        if (g_abs_pointer_available && (ev->code == REL_X || ev->code == REL_Y)) {
+            return;
+        }
         if (ev->code == REL_X && ev->value != 0) {
             g_cursor_x += ev->value;
             fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", ev->value, 0);
@@ -792,12 +907,24 @@ static void fb_process_input_event(const NativeUiFramebufferWindow* window, cons
             fb_queue_pointer_event(window, "wheel", ev->value * 32, 0);
         }
     } else if (ev->type == EV_ABS) {
-        if (ev->code == ABS_X) {
-            g_cursor_x = ev->value;
-            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, 0);
-        } else if (ev->code == ABS_Y) {
-            g_cursor_y = ev->value;
-            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, 0);
+        if (ev->code == ABS_X && g_input_has_abs_x[device_index]) {
+            previous_x = g_cursor_x;
+            next_x = fb_scale_abs_value(
+                ev->value,
+                g_input_abs_x_min[device_index],
+                g_input_abs_x_max[device_index],
+                window->width);
+            g_cursor_x = next_x;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", next_x - previous_x, 0);
+        } else if (ev->code == ABS_Y && g_input_has_abs_y[device_index]) {
+            previous_y = g_cursor_y;
+            next_y = fb_scale_abs_value(
+                ev->value,
+                g_input_abs_y_min[device_index],
+                g_input_abs_y_max[device_index],
+                window->height);
+            g_cursor_y = next_y;
+            fb_queue_pointer_event(window, g_pointer_down ? "drag" : "mousemove", 0, next_y - previous_y);
         }
     } else if (ev->type == EV_KEY) {
         if (ev->code == BTN_LEFT) {
@@ -883,6 +1010,11 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
             ssize_t read_result;
             size_t record_count;
             size_t event_index;
+            size_t rel_count = 0U;
+            size_t abs_count = 0U;
+            size_t key_count = 0U;
+            size_t syn_count = 0U;
+            size_t syn_dropped_count = 0U;
             int batch_cursor_x = g_cursor_x;
             int batch_cursor_y = g_cursor_y;
             uint64_t read_start_ns = 0U;
@@ -896,6 +1028,17 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
             }
             if (read_result > 0) {
                 record_count = (size_t)read_result / sizeof(events[0]);
+                if (record_count == 0U) {
+                    if (fb_evdev_trace_enabled()) {
+                        fprintf(stderr,
+                            "aivectra evdev trace: partial-read fd=%d device=%s bytes=%lld ignoredTrailingBytes=%llu\n",
+                            g_input_fds[i],
+                            g_input_paths[i],
+                            (long long)read_result,
+                            (unsigned long long)((size_t)read_result % sizeof(events[0])));
+                    }
+                    break;
+                }
                 if (fb_evdev_trace_enabled()) {
                     fprintf(stderr,
                         "aivectra evdev trace: read fd=%d device=%s name=\"%s\" bytes=%lld records=%llu readStartNs=%llu readEndNs=%llu cursorBefore=%d,%d elapsedMs=%.3f\n",
@@ -914,7 +1057,19 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
                     const struct input_event* ev = &events[event_index];
                     int before_x = g_cursor_x;
                     int before_y = g_cursor_y;
-                    if (fb_evdev_trace_enabled()) {
+                    if (ev->type == EV_REL) {
+                        rel_count += 1U;
+                    } else if (ev->type == EV_ABS) {
+                        abs_count += 1U;
+                    } else if (ev->type == EV_KEY) {
+                        key_count += 1U;
+                    } else if (ev->type == EV_SYN) {
+                        syn_count += 1U;
+                        if (ev->code == SYN_DROPPED) {
+                            syn_dropped_count += 1U;
+                        }
+                    }
+                    if (fb_evdev_deep_trace_enabled()) {
                         fprintf(stderr,
                             "aivectra evdev trace: event fd=%d index=%llu type=%u(%s) code=%u(%s) value=%d syn=%s cursorBefore=%d,%d\n",
                             g_input_fds[i],
@@ -928,9 +1083,9 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
                             before_x,
                             before_y);
                     }
-                    fb_process_input_event(window, ev);
+                    fb_process_input_event(window, i, ev);
                     event_count += 1U;
-                    if (fb_evdev_trace_enabled()) {
+                    if (fb_evdev_deep_trace_enabled()) {
                         fprintf(stderr,
                             "aivectra evdev trace: event-applied fd=%d index=%llu cursorAfter=%d,%d queueDepth=%llu\n",
                             g_input_fds[i],
@@ -942,9 +1097,14 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
                 }
                 if (fb_evdev_trace_enabled()) {
                     fprintf(stderr,
-                        "aivectra evdev trace: read-applied fd=%d records=%llu cursorAfter=%d,%d queueDepth=%llu\n",
+                        "aivectra evdev trace: read-applied fd=%d records=%llu rel=%llu abs=%llu key=%llu syn=%llu synDropped=%llu cursorAfter=%d,%d queueDepth=%llu\n",
                         g_input_fds[i],
                         (unsigned long long)record_count,
+                        (unsigned long long)rel_count,
+                        (unsigned long long)abs_count,
+                        (unsigned long long)key_count,
+                        (unsigned long long)syn_count,
+                        (unsigned long long)syn_dropped_count,
                         g_cursor_x,
                         g_cursor_y,
                         (unsigned long long)fb_event_queue_depth());
