@@ -650,10 +650,9 @@ static void fb_queue_pointer_event(const NativeUiFramebufferWindow* window, cons
     if (strcmp(type, "drag") == 0 || strcmp(type, "mousemove") == 0 || strcmp(type, "wheel") == 0) {
         size_t count = (g_event_tail + FB_EVENT_QUEUE_CAPACITY - g_event_head) % FB_EVENT_QUEUE_CAPACITY;
         for (i = 0U; i < count; i += 1U) {
-            size_t reverse_offset = count - 1U - i;
-            size_t index = (g_event_head + reverse_offset) % FB_EVENT_QUEUE_CAPACITY;
+            size_t index = (g_event_head + i) % FB_EVENT_QUEUE_CAPACITY;
             if (strcmp(g_event_queue[index].type, type) != 0) {
-                break;
+                continue;
             }
             g_event_queue[index].x = g_cursor_x;
             g_event_queue[index].y = g_cursor_y;
@@ -911,7 +910,7 @@ int native_host_ui_wait_frame(int64_t handle)
     struct timespec frame_delay;
     (void)handle;
     frame_delay.tv_sec = 0;
-    frame_delay.tv_nsec = 16000000L;
+    frame_delay.tv_nsec = 4000000L;
     (void)nanosleep(&frame_delay, NULL);
     return 1;
 }
