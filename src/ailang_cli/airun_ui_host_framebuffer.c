@@ -39,10 +39,13 @@ static NativeUiFramebufferWindow g_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
 enum {
     FB_INPUT_DEVICE_CAPACITY = 32,
     FB_EVENT_QUEUE_CAPACITY = 128,
-    FB_IDLE_INPUT_WAIT_MS = 4
+    FB_IDLE_INPUT_WAIT_MS = 4,
+    FB_EVDEV_READ_EVENT_CAPACITY = 32
 };
 
 static int g_input_fds[FB_INPUT_DEVICE_CAPACITY];
+static char g_input_paths[FB_INPUT_DEVICE_CAPACITY][64];
+static char g_input_names[FB_INPUT_DEVICE_CAPACITY][128];
 static size_t g_input_fd_count = 0U;
 static int g_input_initialized = 0;
 static NativeHostUiEvent g_event_queue[FB_EVENT_QUEUE_CAPACITY];
@@ -87,6 +90,74 @@ static int fb_trace_enabled(void)
         initialized = 1;
     }
     return enabled;
+}
+
+static int fb_evdev_trace_enabled(void)
+{
+    static int initialized = 0;
+    static int enabled = 0;
+    const char* value;
+    if (!initialized) {
+        value = getenv("AILANG_EVDEV_TRACE");
+        enabled = value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static const char* fb_evdev_type_name(unsigned short type)
+{
+    switch (type) {
+        case EV_SYN: return "EV_SYN";
+        case EV_KEY: return "EV_KEY";
+        case EV_REL: return "EV_REL";
+        case EV_ABS: return "EV_ABS";
+        case EV_MSC: return "EV_MSC";
+        default: return "EV_OTHER";
+    }
+}
+
+static const char* fb_evdev_code_name(unsigned short type, unsigned short code)
+{
+    if (type == EV_SYN) {
+        switch (code) {
+            case SYN_REPORT: return "SYN_REPORT";
+            case SYN_CONFIG: return "SYN_CONFIG";
+            case SYN_MT_REPORT: return "SYN_MT_REPORT";
+            case SYN_DROPPED: return "SYN_DROPPED";
+            default: return "SYN_OTHER";
+        }
+    }
+    if (type == EV_REL) {
+        switch (code) {
+            case REL_X: return "REL_X";
+            case REL_Y: return "REL_Y";
+            case REL_WHEEL: return "REL_WHEEL";
+            case REL_HWHEEL: return "REL_HWHEEL";
+            default: return "REL_OTHER";
+        }
+    }
+    if (type == EV_ABS) {
+        switch (code) {
+            case ABS_X: return "ABS_X";
+            case ABS_Y: return "ABS_Y";
+            default: return "ABS_OTHER";
+        }
+    }
+    if (type == EV_KEY) {
+        switch (code) {
+            case BTN_LEFT: return "BTN_LEFT";
+            case BTN_RIGHT: return "BTN_RIGHT";
+            case KEY_ENTER: return "KEY_ENTER";
+            case KEY_BACKSPACE: return "KEY_BACKSPACE";
+            case KEY_DELETE: return "KEY_DELETE";
+            case KEY_ESC: return "KEY_ESC";
+            case KEY_TAB: return "KEY_TAB";
+            case KEY_SPACE: return "KEY_SPACE";
+            default: return "KEY_OTHER";
+        }
+    }
+    return "CODE_OTHER";
 }
 
 static uint64_t fb_now_ns(void)
@@ -245,6 +316,8 @@ static void fb_close_input(void)
             close(g_input_fds[i]);
             g_input_fds[i] = -1;
         }
+        g_input_paths[i][0] = '\0';
+        g_input_names[i][0] = '\0';
     }
     g_input_fd_count = 0U;
     g_input_initialized = 0;
@@ -255,6 +328,7 @@ static void fb_close_input(void)
 static void fb_open_input_path(const char* path)
 {
     int fd;
+    size_t index;
     if (path == NULL || path[0] == '\0' || g_input_fd_count >= FB_INPUT_DEVICE_CAPACITY) {
         return;
     }
@@ -262,7 +336,20 @@ static void fb_open_input_path(const char* path)
     if (fd < 0) {
         return;
     }
-    g_input_fds[g_input_fd_count] = fd;
+    index = g_input_fd_count;
+    g_input_fds[index] = fd;
+    (void)snprintf(g_input_paths[index], sizeof(g_input_paths[index]), "%s", path);
+    g_input_names[index][0] = '\0';
+    if (ioctl(fd, EVIOCGNAME(sizeof(g_input_names[index])), g_input_names[index]) < 0 ||
+        g_input_names[index][0] == '\0') {
+        (void)snprintf(g_input_names[index], sizeof(g_input_names[index]), "unknown");
+    }
+    if (fb_evdev_trace_enabled()) {
+        fprintf(stderr, "aivectra evdev trace: open fd=%d device=%s name=\"%s\"\n",
+            fd,
+            g_input_paths[index],
+            g_input_names[index]);
+    }
     g_input_fd_count += 1U;
 }
 
@@ -792,15 +879,88 @@ static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
     }
     for (i = 0U; i < g_input_fd_count; i += 1U) {
         for (;;) {
-            struct input_event ev;
-            ssize_t read_result = read(g_input_fds[i], &ev, sizeof(ev));
-            if (read_result == (ssize_t)sizeof(ev)) {
-                fb_process_input_event(window, &ev);
-                event_count += 1U;
+            struct input_event events[FB_EVDEV_READ_EVENT_CAPACITY];
+            ssize_t read_result;
+            size_t record_count;
+            size_t event_index;
+            int batch_cursor_x = g_cursor_x;
+            int batch_cursor_y = g_cursor_y;
+            uint64_t read_start_ns = 0U;
+            uint64_t read_end_ns = 0U;
+            if (fb_evdev_trace_enabled()) {
+                read_start_ns = fb_now_ns();
+            }
+            read_result = read(g_input_fds[i], events, sizeof(events));
+            if (fb_evdev_trace_enabled()) {
+                read_end_ns = fb_now_ns();
+            }
+            if (read_result > 0) {
+                record_count = (size_t)read_result / sizeof(events[0]);
+                if (fb_evdev_trace_enabled()) {
+                    fprintf(stderr,
+                        "aivectra evdev trace: read fd=%d device=%s name=\"%s\" bytes=%lld records=%llu readStartNs=%llu readEndNs=%llu cursorBefore=%d,%d elapsedMs=%.3f\n",
+                        g_input_fds[i],
+                        g_input_paths[i],
+                        g_input_names[i],
+                        (long long)read_result,
+                        (unsigned long long)record_count,
+                        (unsigned long long)read_start_ns,
+                        (unsigned long long)read_end_ns,
+                        batch_cursor_x,
+                        batch_cursor_y,
+                        (double)(read_end_ns - read_start_ns) / 1000000.0);
+                }
+                for (event_index = 0U; event_index < record_count; event_index += 1U) {
+                    const struct input_event* ev = &events[event_index];
+                    int before_x = g_cursor_x;
+                    int before_y = g_cursor_y;
+                    if (fb_evdev_trace_enabled()) {
+                        fprintf(stderr,
+                            "aivectra evdev trace: event fd=%d index=%llu type=%u(%s) code=%u(%s) value=%d syn=%s cursorBefore=%d,%d\n",
+                            g_input_fds[i],
+                            (unsigned long long)event_index,
+                            (unsigned int)ev->type,
+                            fb_evdev_type_name(ev->type),
+                            (unsigned int)ev->code,
+                            fb_evdev_code_name(ev->type, ev->code),
+                            ev->value,
+                            ev->type == EV_SYN ? "boundary" : "no",
+                            before_x,
+                            before_y);
+                    }
+                    fb_process_input_event(window, ev);
+                    event_count += 1U;
+                    if (fb_evdev_trace_enabled()) {
+                        fprintf(stderr,
+                            "aivectra evdev trace: event-applied fd=%d index=%llu cursorAfter=%d,%d queueDepth=%llu\n",
+                            g_input_fds[i],
+                            (unsigned long long)event_index,
+                            g_cursor_x,
+                            g_cursor_y,
+                            (unsigned long long)fb_event_queue_depth());
+                    }
+                }
+                if (fb_evdev_trace_enabled()) {
+                    fprintf(stderr,
+                        "aivectra evdev trace: read-applied fd=%d records=%llu cursorAfter=%d,%d queueDepth=%llu\n",
+                        g_input_fds[i],
+                        (unsigned long long)record_count,
+                        g_cursor_x,
+                        g_cursor_y,
+                        (unsigned long long)fb_event_queue_depth());
+                }
                 continue;
             }
             if (read_result < 0 && (errno == EINTR)) {
                 continue;
+            }
+            if (fb_evdev_trace_enabled() && read_result > 0) {
+                fprintf(stderr,
+                    "aivectra evdev trace: partial-read fd=%d device=%s bytes=%lld ignoredTrailingBytes=%llu\n",
+                    g_input_fds[i],
+                    g_input_paths[i],
+                    (long long)read_result,
+                    (unsigned long long)((size_t)read_result % sizeof(events[0])));
             }
             break;
         }
