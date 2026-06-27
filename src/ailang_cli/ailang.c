@@ -89,6 +89,11 @@ extern int kill(pid_t pid, int sig);
 #pragma clang diagnostic pop
 #endif
 
+#if defined(AIRUN_NATIVE_TLS_OPENSSL)
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#endif
+
 #include "aivm_c_api.h"
 #include "remote/aivm_remote_channel.h"
 #include "remote/aivm_remote_session.h"

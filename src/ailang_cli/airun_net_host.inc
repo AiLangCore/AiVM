@@ -79,6 +79,17 @@ typedef struct NativeTlsStreamState
 } NativeTlsStreamState;
 static OSStatus g_native_tls_last_status = noErr;
 #pragma clang diagnostic pop
+#elif defined(AIRUN_NATIVE_TLS_OPENSSL)
+typedef struct NativeTlsStreamState
+{
+    SSL_CTX* context;
+    SSL* stream;
+} NativeTlsStreamState;
+#define AIRUN_NATIVE_TLS_AVAILABLE 1
+#endif
+
+#ifdef __APPLE__
+#define AIRUN_NATIVE_TLS_AVAILABLE 1
 #endif
 
 static NativeNetHandleState g_native_net_handles[NATIVE_NET_HANDLE_CAPACITY];
@@ -585,6 +596,88 @@ static int native_tls_stream_handshake(NativeNetHandleState* state)
     }
 }
 #pragma clang diagnostic pop
+#elif defined(AIRUN_NATIVE_TLS_OPENSSL)
+static void native_tls_stream_destroy(NativeTlsStreamState* tls_state)
+{
+    if (tls_state == NULL) {
+        return;
+    }
+    if (tls_state->stream != NULL) {
+        SSL_shutdown(tls_state->stream);
+        SSL_free(tls_state->stream);
+        tls_state->stream = NULL;
+    }
+    if (tls_state->context != NULL) {
+        SSL_CTX_free(tls_state->context);
+        tls_state->context = NULL;
+    }
+    free(tls_state);
+}
+
+static NativeTlsStreamState* native_tls_stream_create(NativeSocket socket_fd, const char* host)
+{
+    NativeTlsStreamState* tls_state;
+    static int openssl_initialized = 0;
+    if (!openssl_initialized) {
+        OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS | OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
+        openssl_initialized = 1;
+    }
+    tls_state = (NativeTlsStreamState*)calloc(1U, sizeof(*tls_state));
+    if (tls_state == NULL) {
+        return NULL;
+    }
+    tls_state->context = SSL_CTX_new(TLS_client_method());
+    if (tls_state->context == NULL) {
+        native_tls_stream_destroy(tls_state);
+        return NULL;
+    }
+    SSL_CTX_set_min_proto_version(tls_state->context, TLS1_2_VERSION);
+    SSL_CTX_set_verify(tls_state->context, SSL_VERIFY_PEER, NULL);
+    if (SSL_CTX_set_default_verify_paths(tls_state->context) != 1) {
+        native_tls_stream_destroy(tls_state);
+        return NULL;
+    }
+    tls_state->stream = SSL_new(tls_state->context);
+    if (tls_state->stream == NULL) {
+        native_tls_stream_destroy(tls_state);
+        return NULL;
+    }
+    if (host != NULL && host[0] != '\0') {
+        if (SSL_set_tlsext_host_name(tls_state->stream, host) != 1) {
+            native_tls_stream_destroy(tls_state);
+            return NULL;
+        }
+        if (SSL_set1_host(tls_state->stream, host) != 1) {
+            native_tls_stream_destroy(tls_state);
+            return NULL;
+        }
+    }
+    if (SSL_set_fd(tls_state->stream, socket_fd) != 1) {
+        native_tls_stream_destroy(tls_state);
+        return NULL;
+    }
+    return tls_state;
+}
+
+static int native_tls_stream_handshake(NativeNetHandleState* state)
+{
+    int rc;
+    int err;
+    NativeTlsStreamState* tls_state;
+    if (state == NULL || state->kind != NATIVE_NET_HANDLE_KIND_TCP_TLS_STREAM || state->tls_state == NULL) {
+        return -1;
+    }
+    tls_state = (NativeTlsStreamState*)state->tls_state;
+    rc = SSL_connect(tls_state->stream);
+    if (rc == 1) {
+        return 1;
+    }
+    err = SSL_get_error(tls_state->stream, rc);
+    if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
+        return 0;
+    }
+    return -1;
+}
 #endif
 
 static void native_net_reset(void)
@@ -705,6 +798,28 @@ static int native_net_stream_read(
             return 1;
         }
     }
+#elif defined(AIRUN_NATIVE_TLS_OPENSSL)
+    if (state->kind == NATIVE_NET_HANDLE_KIND_TCP_TLS_STREAM) {
+        int read_count;
+        int ssl_error;
+        NativeTlsStreamState* tls_state = (NativeTlsStreamState*)state->tls_state;
+        if (tls_state == NULL || tls_state->stream == NULL || max_bytes > (size_t)INT_MAX) {
+            return -1;
+        }
+        read_count = SSL_read(tls_state->stream, bytes, (int)max_bytes);
+        if (read_count > 0) {
+            *out_read = (size_t)read_count;
+            return 1;
+        }
+        ssl_error = SSL_get_error(tls_state->stream, read_count);
+        if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+            return 0;
+        }
+        if (ssl_error == SSL_ERROR_ZERO_RETURN) {
+            *out_closed = 1;
+            return 1;
+        }
+    }
 #endif
     return -1;
 }
@@ -749,6 +864,24 @@ static int native_net_stream_write(
         }
         if (status == errSSLWouldBlock) {
             return processed > 0U ? 1 : 0;
+        }
+    }
+#elif defined(AIRUN_NATIVE_TLS_OPENSSL)
+    if (state->kind == NATIVE_NET_HANDLE_KIND_TCP_TLS_STREAM) {
+        int write_count;
+        int ssl_error;
+        NativeTlsStreamState* tls_state = (NativeTlsStreamState*)state->tls_state;
+        if (tls_state == NULL || tls_state->stream == NULL || max_bytes > (size_t)INT_MAX) {
+            return -1;
+        }
+        write_count = SSL_write(tls_state->stream, bytes, (int)max_bytes);
+        if (write_count > 0) {
+            *out_written = (size_t)write_count;
+            return 1;
+        }
+        ssl_error = SSL_get_error(tls_state->stream, write_count);
+        if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+            return 0;
         }
     }
 #endif
@@ -916,7 +1049,7 @@ static int native_net_handle_close(int64_t handle)
     if (state == NULL) {
         return 0;
     }
-#ifdef __APPLE__
+#ifdef AIRUN_NATIVE_TLS_AVAILABLE
     if (state->tls_state != NULL) {
         native_tls_stream_destroy((NativeTlsStreamState*)state->tls_state);
         state->tls_state = NULL;
@@ -1055,7 +1188,7 @@ static void native_net_async_close_worker_socket(NativeNetAsyncState* op)
     if (op == NULL) {
         return;
     }
-#ifdef __APPLE__
+#ifdef AIRUN_NATIVE_TLS_AVAILABLE
     if (op->worker_tls_state != NULL) {
         native_tls_stream_destroy((NativeTlsStreamState*)op->worker_tls_state);
         op->worker_tls_state = NULL;
@@ -1133,7 +1266,7 @@ static void native_net_async_worker_connect_execute(NativeNetAsyncConnectWorkerC
         goto finalize;
     }
     if (ctx->use_tls) {
-#ifdef __APPLE__
+#ifdef AIRUN_NATIVE_TLS_AVAILABLE
         NativeNetHandleState temp_state;
         memset(&temp_state, 0, sizeof(temp_state));
         temp_state.kind = NATIVE_NET_HANDLE_KIND_TCP_TLS_STREAM;
@@ -1170,7 +1303,7 @@ finalize:
             op->canceled,
             (unsigned long long)op->generation,
             (unsigned long long)ctx->generation);
-#ifdef __APPLE__
+#ifdef AIRUN_NATIVE_TLS_AVAILABLE
         if (tls_state != NULL) {
             native_tls_stream_destroy((NativeTlsStreamState*)tls_state);
             tls_state = NULL;
@@ -2088,7 +2221,7 @@ static int native_syscall_net_tcp_connect_tls(
         *result = aivm_value_int(-1);
         return AIVM_SYSCALL_OK;
     }
-#ifdef __APPLE__
+#ifdef AIRUN_NATIVE_TLS_AVAILABLE
     state->tls_state = native_tls_stream_create(socket_fd, args[0].string_value);
     if (state->tls_state == NULL) {
         (void)native_net_handle_close(handle);

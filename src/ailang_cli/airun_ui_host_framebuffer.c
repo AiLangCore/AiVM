@@ -48,8 +48,95 @@ static size_t g_event_head = 0U;
 static size_t g_event_tail = 0U;
 static int g_cursor_x = 32;
 static int g_cursor_y = 32;
+static int g_presented_cursor_x = -1;
+static int g_presented_cursor_y = -1;
 static int g_pointer_down = 0;
 static int g_shift_down = 0;
+static int g_dirty_valid = 0;
+static int g_dirty_x0 = 0;
+static int g_dirty_y0 = 0;
+static int g_dirty_x1 = 0;
+static int g_dirty_y1 = 0;
+static int g_dirty_suppressed = 0;
+
+static int fb_trace_enabled(void)
+{
+    static int initialized = 0;
+    static int enabled = 0;
+    const char* value;
+    if (!initialized) {
+        value = getenv("AILANG_FB_TRACE");
+        enabled = value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
+        initialized = 1;
+    }
+    return enabled;
+}
+
+static uint64_t fb_now_ns(void)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+        return 0U;
+    }
+    return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
+static void fb_mark_dirty(int x0, int y0, int x1, int y1)
+{
+    if (g_dirty_suppressed) {
+        return;
+    }
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > (int)g_fb_var.xres) x1 = (int)g_fb_var.xres;
+    if (y1 > (int)g_fb_var.yres) y1 = (int)g_fb_var.yres;
+    if (x0 >= x1 || y0 >= y1) {
+        return;
+    }
+    if (!g_dirty_valid) {
+        g_dirty_x0 = x0;
+        g_dirty_y0 = y0;
+        g_dirty_x1 = x1;
+        g_dirty_y1 = y1;
+        g_dirty_valid = 1;
+        return;
+    }
+    if (x0 < g_dirty_x0) g_dirty_x0 = x0;
+    if (y0 < g_dirty_y0) g_dirty_y0 = y0;
+    if (x1 > g_dirty_x1) g_dirty_x1 = x1;
+    if (y1 > g_dirty_y1) g_dirty_y1 = y1;
+}
+
+static void fb_copy_back_to_front_rect(int x, int y, int width, int height)
+{
+    int yy;
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+    size_t bytes_per_pixel;
+    if (g_fb_mem == NULL || g_back_mem == NULL || width <= 0 || height <= 0) {
+        return;
+    }
+    bytes_per_pixel = (size_t)g_fb_var.bits_per_pixel / 8U;
+    if (bytes_per_pixel == 0U) {
+        return;
+    }
+    x0 = x < 0 ? 0 : x;
+    y0 = y < 0 ? 0 : y;
+    x1 = x + width;
+    y1 = y + height;
+    if (x1 > (int)g_fb_var.xres) x1 = (int)g_fb_var.xres;
+    if (y1 > (int)g_fb_var.yres) y1 = (int)g_fb_var.yres;
+    if (x0 >= x1 || y0 >= y1) {
+        return;
+    }
+    for (yy = y0; yy < y1; yy += 1) {
+        size_t row_offset = (size_t)yy * (size_t)g_fb_fix.line_length + (size_t)x0 * bytes_per_pixel;
+        size_t row_bytes = (size_t)(x1 - x0) * bytes_per_pixel;
+        memcpy(g_fb_mem + row_offset, g_back_mem + row_offset, row_bytes);
+    }
+}
 
 static int fb_open(void)
 {
@@ -257,6 +344,7 @@ static void fb_put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b)
     } else {
         *(uint32_t*)(void*)(g_draw_mem + offset) = pixel;
     }
+    fb_mark_dirty(x, y, x + 1, y + 1);
 }
 
 static void fb_fill_rect(int x, int y, int width, int height, uint8_t r, uint8_t g, uint8_t b)
@@ -288,6 +376,7 @@ static void fb_fill_rect(int x, int y, int width, int height, uint8_t r, uint8_t
     if (bytes_per_pixel == 0U) {
         return;
     }
+    fb_mark_dirty(x0, y0, x1, y1);
     pixel = pack_pixel(r, g, b);
     for (yy = y0; yy < y1; yy += 1) {
         uint8_t* row = g_draw_mem + (size_t)yy * (size_t)g_fb_fix.line_length + (size_t)x0 * bytes_per_pixel;
@@ -554,15 +643,20 @@ static void fb_queue_key_event(unsigned short code, int value)
 static void fb_queue_pointer_event(const NativeUiFramebufferWindow* window, const char* type, int dx, int dy)
 {
     NativeHostUiEvent event;
-    size_t previous;
+    size_t i;
     fb_clamp_cursor(window);
-    if (!fb_event_queue_empty()) {
-        previous = g_event_tail == 0U ? FB_EVENT_QUEUE_CAPACITY - 1U : g_event_tail - 1U;
-        if (strcmp(g_event_queue[previous].type, type) == 0) {
-            g_event_queue[previous].x = g_cursor_x;
-            g_event_queue[previous].y = g_cursor_y;
-            g_event_queue[previous].dx += dx;
-            g_event_queue[previous].dy += dy;
+    if (strcmp(type, "drag") == 0 || strcmp(type, "mousemove") == 0 || strcmp(type, "wheel") == 0) {
+        size_t count = (g_event_tail + FB_EVENT_QUEUE_CAPACITY - g_event_head) % FB_EVENT_QUEUE_CAPACITY;
+        for (i = 0U; i < count; i += 1U) {
+            size_t reverse_offset = count - 1U - i;
+            size_t index = (g_event_head + reverse_offset) % FB_EVENT_QUEUE_CAPACITY;
+            if (strcmp(g_event_queue[index].type, type) != 0) {
+                break;
+            }
+            g_event_queue[index].x = g_cursor_x;
+            g_event_queue[index].y = g_cursor_y;
+            g_event_queue[index].dx += dx;
+            g_event_queue[index].dy += dy;
             return;
         }
     }
@@ -612,6 +706,8 @@ static void fb_process_input_event(const NativeUiFramebufferWindow* window, cons
 static void fb_poll_input_devices(const NativeUiFramebufferWindow* window)
 {
     size_t i;
+    int old_cursor_x = g_cursor_x;
+    int old_cursor_y = g_cursor_y;
     fb_ensure_input_open();
     for (i = 0U; i < g_input_fd_count; i += 1U) {
         for (;;) {
@@ -626,6 +722,9 @@ static void fb_poll_input_devices(const NativeUiFramebufferWindow* window)
             }
             break;
         }
+    }
+    if (old_cursor_x != g_cursor_x || old_cursor_y != g_cursor_y) {
+        fb_present_cursor_overlay(window);
     }
 }
 
@@ -662,6 +761,26 @@ static void fb_draw_cursor(void)
     fb_draw_line_raw(g_cursor_x, g_cursor_y, g_cursor_x + 2, g_cursor_y + 22, 16U, 24U, 39U, 1);
     fb_draw_line_raw(g_cursor_x + 2, g_cursor_y + 22, g_cursor_x + 7, g_cursor_y + 16, 16U, 24U, 39U, 1);
     fb_draw_line_raw(g_cursor_x + 7, g_cursor_y + 16, g_cursor_x + 13, g_cursor_y + 18, 16U, 24U, 39U, 1);
+}
+
+static void fb_present_cursor_overlay(const NativeUiFramebufferWindow* window)
+{
+    uint8_t* previous_draw_mem;
+    if (window == NULL || g_fb_mem == NULL || g_back_mem == NULL) {
+        return;
+    }
+    fb_clamp_cursor(window);
+    if (g_presented_cursor_x >= 0 && g_presented_cursor_y >= 0) {
+        fb_copy_back_to_front_rect(g_presented_cursor_x - 3, g_presented_cursor_y - 3, 24, 30);
+    }
+    previous_draw_mem = g_draw_mem;
+    g_draw_mem = g_fb_mem;
+    g_dirty_suppressed = 1;
+    fb_draw_cursor();
+    g_dirty_suppressed = 0;
+    g_draw_mem = previous_draw_mem;
+    g_presented_cursor_x = g_cursor_x;
+    g_presented_cursor_y = g_cursor_y;
 }
 
 void native_host_ui_reset(void)
@@ -738,14 +857,50 @@ int native_host_ui_end_frame(int64_t handle) { return fb_find_window(handle) != 
 int native_host_ui_present(int64_t handle)
 {
     NativeUiFramebufferWindow* window = fb_find_window(handle);
+    uint64_t start_ns = 0U;
+    uint64_t end_ns;
+    size_t copied_rows = 0U;
     if (window == NULL) {
         return 0;
     }
     if (g_fb_mem != NULL && g_back_mem != NULL) {
+        int y;
+        int y0;
+        int y1;
+        size_t row_bytes = (size_t)g_fb_fix.line_length;
+        if (fb_trace_enabled()) {
+            start_ns = fb_now_ns();
+        }
         g_draw_mem = g_back_mem;
-        fb_clamp_cursor(window);
-        fb_draw_cursor();
-        memcpy(g_fb_mem, g_back_mem, g_fb_bytes);
+        if (g_dirty_valid) {
+            y0 = g_dirty_y0;
+            y1 = g_dirty_y1;
+        } else {
+            y0 = 0;
+            y1 = 0;
+        }
+        for (y = y0; y < y1; y += 1) {
+            uint8_t* fb_row = g_fb_mem + (size_t)y * row_bytes;
+            uint8_t* back_row = g_back_mem + (size_t)y * row_bytes;
+            if (memcmp(fb_row, back_row, row_bytes) != 0) {
+                memcpy(fb_row, back_row, row_bytes);
+                copied_rows += 1U;
+            }
+        }
+        if (fb_trace_enabled()) {
+            end_ns = fb_now_ns();
+            fprintf(stderr,
+                "aivectra framebuffer present: dirty=%d,%d-%d,%d scannedRows=%d copiedRows=%llu elapsedMs=%.3f\n",
+                g_dirty_x0,
+                g_dirty_y0,
+                g_dirty_x1,
+                g_dirty_y1,
+                y1 - y0,
+                (unsigned long long)copied_rows,
+                (double)(end_ns - start_ns) / 1000000.0);
+        }
+        fb_present_cursor_overlay(window);
+        g_dirty_valid = 0;
     }
     return 1;
 }

@@ -584,8 +584,25 @@ static int native_ui_is_text_input_event(NSEvent* event, const char* key_name, c
 static int native_ui_queue_push(const NativeHostUiEvent* event)
 {
     size_t write_index;
+    size_t i;
     if (event == NULL) {
         return 0;
+    }
+    if (strcmp(event->type, "drag") == 0 || strcmp(event->type, "wheel") == 0 || strcmp(event->type, "mousemove") == 0) {
+        for (i = 0U; i < g_native_ui_event_queue_count; i += 1U) {
+            size_t reverse_offset = g_native_ui_event_queue_count - 1U - i;
+            size_t index = (g_native_ui_event_queue_start + reverse_offset) %
+                           (sizeof(g_native_ui_event_queue) / sizeof(g_native_ui_event_queue[0]));
+            if (strcmp(g_native_ui_event_queue[index].type, event->type) != 0 ||
+                strcmp(g_native_ui_event_queue[index].target_id, event->target_id) != 0) {
+                break;
+            }
+            g_native_ui_event_queue[index].x = event->x;
+            g_native_ui_event_queue[index].y = event->y;
+            g_native_ui_event_queue[index].dx += event->dx;
+            g_native_ui_event_queue[index].dy += event->dy;
+            return 1;
+        }
     }
     if (g_native_ui_event_queue_count >= (sizeof(g_native_ui_event_queue) / sizeof(g_native_ui_event_queue[0]))) {
         return 0;
