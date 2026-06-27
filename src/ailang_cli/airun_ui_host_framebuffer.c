@@ -59,6 +59,8 @@ static int g_dirty_x1 = 0;
 static int g_dirty_y1 = 0;
 static int g_dirty_suppressed = 0;
 
+static void fb_present_cursor_overlay(const NativeUiFramebufferWindow* window);
+
 static int fb_trace_enabled(void)
 {
     static int initialized = 0;
