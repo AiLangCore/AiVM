@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <linux/fb.h>
 #include <linux/input.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +38,8 @@ static NativeUiFramebufferWindow g_windows[NATIVE_HOST_UI_WINDOW_CAPACITY];
 
 enum {
     FB_INPUT_DEVICE_CAPACITY = 32,
-    FB_EVENT_QUEUE_CAPACITY = 128
+    FB_EVENT_QUEUE_CAPACITY = 128,
+    FB_IDLE_INPUT_WAIT_MS = 4
 };
 
 static int g_input_fds[FB_INPUT_DEVICE_CAPACITY];
@@ -60,6 +62,19 @@ static int g_dirty_y1 = 0;
 static int g_dirty_suppressed = 0;
 
 static void fb_present_cursor_overlay(const NativeUiFramebufferWindow* window);
+
+static int fb_event_loop_trace_enabled(void)
+{
+    static int initialized = 0;
+    static int enabled = 0;
+    const char* value;
+    if (!initialized) {
+        value = getenv("AILANG_EVENT_LOOP_TRACE");
+        enabled = value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
+        initialized = 1;
+    }
+    return enabled;
+}
 
 static int fb_trace_enabled(void)
 {
@@ -188,6 +203,11 @@ static int fb_open(void)
 static int fb_event_queue_empty(void)
 {
     return g_event_head == g_event_tail;
+}
+
+static size_t fb_event_queue_depth(void)
+{
+    return (g_event_tail + FB_EVENT_QUEUE_CAPACITY - g_event_head) % FB_EVENT_QUEUE_CAPACITY;
 }
 
 static int fb_event_queue_full(void)
@@ -704,18 +724,79 @@ static void fb_process_input_event(const NativeUiFramebufferWindow* window, cons
     }
 }
 
-static void fb_poll_input_devices(const NativeUiFramebufferWindow* window)
+static int fb_wait_for_input_events(int timeout_ms)
+{
+    struct pollfd fds[FB_INPUT_DEVICE_CAPACITY];
+    size_t i;
+    nfds_t count = 0;
+    int ready;
+    uint64_t start_ns = 0U;
+    uint64_t end_ns = 0U;
+    fb_ensure_input_open();
+    if (timeout_ms < 0) {
+        timeout_ms = 0;
+    }
+    if (fb_event_loop_trace_enabled()) {
+        start_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: input-wait-begin timeoutMs=%d queueDepth=%llu inputFds=%llu\n",
+            timeout_ms,
+            (unsigned long long)fb_event_queue_depth(),
+            (unsigned long long)g_input_fd_count);
+    }
+    for (i = 0U; i < g_input_fd_count; i += 1U) {
+        if (g_input_fds[i] < 0) {
+            continue;
+        }
+        fds[count].fd = g_input_fds[i];
+        fds[count].events = POLLIN;
+        fds[count].revents = 0;
+        count += 1U;
+    }
+    if (count == 0U) {
+        struct timespec delay;
+        delay.tv_sec = timeout_ms / 1000;
+        delay.tv_nsec = (long)(timeout_ms % 1000) * 1000000L;
+        while (nanosleep(&delay, &delay) != 0 && errno == EINTR) {
+        }
+        ready = 0;
+    } else {
+        ready = poll(fds, count, timeout_ms);
+        if (ready < 0 && errno == EINTR) {
+            ready = 0;
+        }
+    }
+    if (fb_event_loop_trace_enabled()) {
+        end_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: input-wait-end ready=%d elapsedMs=%.3f queueDepth=%llu\n",
+            ready,
+            (double)(end_ns - start_ns) / 1000000.0,
+            (unsigned long long)fb_event_queue_depth());
+    }
+    return ready > 0;
+}
+
+static size_t fb_poll_input_devices(const NativeUiFramebufferWindow* window)
 {
     size_t i;
+    size_t event_count = 0U;
     int old_cursor_x = g_cursor_x;
     int old_cursor_y = g_cursor_y;
+    uint64_t start_ns = 0U;
+    uint64_t end_ns = 0U;
     fb_ensure_input_open();
+    if (fb_event_loop_trace_enabled()) {
+        start_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: input-poll-begin queueDepth=%llu inputFds=%llu\n",
+            (unsigned long long)fb_event_queue_depth(),
+            (unsigned long long)g_input_fd_count);
+    }
     for (i = 0U; i < g_input_fd_count; i += 1U) {
         for (;;) {
             struct input_event ev;
             ssize_t read_result = read(g_input_fds[i], &ev, sizeof(ev));
             if (read_result == (ssize_t)sizeof(ev)) {
                 fb_process_input_event(window, &ev);
+                event_count += 1U;
                 continue;
             }
             if (read_result < 0 && (errno == EINTR)) {
@@ -727,6 +808,16 @@ static void fb_poll_input_devices(const NativeUiFramebufferWindow* window)
     if (old_cursor_x != g_cursor_x || old_cursor_y != g_cursor_y) {
         fb_present_cursor_overlay(window);
     }
+    if (fb_event_loop_trace_enabled()) {
+        end_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: input-poll-end inputEvents=%llu queueDepth=%llu cursor=%d,%d elapsedMs=%.3f\n",
+            (unsigned long long)event_count,
+            (unsigned long long)fb_event_queue_depth(),
+            g_cursor_x,
+            g_cursor_y,
+            (double)(end_ns - start_ns) / 1000000.0);
+    }
+    return event_count;
 }
 
 static void fb_draw_glyph(int x, int y, char c, uint8_t r, uint8_t g, uint8_t b, int scale)
@@ -864,6 +955,15 @@ int native_host_ui_present(int64_t handle)
     if (window == NULL) {
         return 0;
     }
+    if (fb_event_loop_trace_enabled()) {
+        start_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: present-begin dirtyValid=%d dirty=%d,%d-%d,%d\n",
+            g_dirty_valid,
+            g_dirty_x0,
+            g_dirty_y0,
+            g_dirty_x1,
+            g_dirty_y1);
+    }
     if (g_fb_mem != NULL && g_back_mem != NULL) {
         int y;
         int y0;
@@ -902,6 +1002,11 @@ int native_host_ui_present(int64_t handle)
         }
         fb_present_cursor_overlay(window);
         g_dirty_valid = 0;
+    }
+    if (fb_event_loop_trace_enabled()) {
+        end_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: present-end elapsedMs=%.3f\n",
+            (double)(end_ns - start_ns) / 1000000.0);
     }
     return 1;
 }
@@ -1017,15 +1122,42 @@ int native_host_ui_pop_clip_path(int64_t handle) { return fb_find_window(handle)
 int native_host_ui_poll_event(int64_t handle, NativeHostUiEvent* out_event)
 {
     NativeUiFramebufferWindow* window = fb_find_window(handle);
+    uint64_t start_ns = 0U;
+    uint64_t end_ns;
+    size_t input_count;
     if (window == NULL || out_event == NULL) return 0;
-    fb_poll_input_devices(window);
+    if (fb_event_loop_trace_enabled()) {
+        start_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: loop-begin queueDepth=%llu\n",
+            (unsigned long long)fb_event_queue_depth());
+    }
+    input_count = fb_poll_input_devices(window);
+    if (fb_event_queue_empty()) {
+        (void)fb_wait_for_input_events(FB_IDLE_INPUT_WAIT_MS);
+        input_count += fb_poll_input_devices(window);
+    }
     if (fb_pop_event(out_event)) {
+        if (fb_event_loop_trace_enabled()) {
+            end_ns = fb_now_ns();
+            fprintf(stderr, "aivectra event-loop trace: loop-end event=%s inputEvents=%llu queueDepth=%llu elapsedMs=%.3f\n",
+                out_event->type,
+                (unsigned long long)input_count,
+                (unsigned long long)fb_event_queue_depth(),
+                (double)(end_ns - start_ns) / 1000000.0);
+        }
         return 1;
     }
     memset(out_event, 0, sizeof(*out_event));
     snprintf(out_event->type, sizeof(out_event->type), "none");
     out_event->x = -1;
     out_event->y = -1;
+    if (fb_event_loop_trace_enabled()) {
+        end_ns = fb_now_ns();
+        fprintf(stderr, "aivectra event-loop trace: loop-end event=none inputEvents=%llu queueDepth=%llu elapsedMs=%.3f\n",
+            (unsigned long long)input_count,
+            (unsigned long long)fb_event_queue_depth(),
+            (double)(end_ns - start_ns) / 1000000.0);
+    }
     return 1;
 }
 
