@@ -251,10 +251,35 @@ static void fb_copy_back_to_front_rect(int x, int y, int width, int height)
 static int fb_open(void)
 {
     const char* path;
+    AirunAiosDrmSurface drm_surface;
     if (g_fb_fd >= 0 && g_fb_mem != NULL) {
         return 1;
     }
-    airun_aios_drm_probe_or_report_fallback();
+    if (airun_aios_drm_active() && g_fb_mem != NULL) {
+        return 1;
+    }
+    if (airun_aios_drm_open(&drm_surface)) {
+        memset(&g_fb_var, 0, sizeof(g_fb_var));
+        memset(&g_fb_fix, 0, sizeof(g_fb_fix));
+        g_fb_var.xres = (uint32_t)drm_surface.width;
+        g_fb_var.yres = (uint32_t)drm_surface.height;
+        g_fb_var.xres_virtual = (uint32_t)drm_surface.width;
+        g_fb_var.yres_virtual = (uint32_t)drm_surface.height;
+        g_fb_var.bits_per_pixel = (uint32_t)drm_surface.bits_per_pixel;
+        g_fb_fix.line_length = (uint32_t)drm_surface.line_length;
+        g_fb_bytes = drm_surface.bytes;
+        g_fb_mem = drm_surface.memory;
+        g_back_mem = (uint8_t*)malloc(g_fb_bytes);
+        if (g_back_mem == NULL) {
+            perror("aivectra drm back buffer");
+            airun_aios_drm_shutdown();
+            g_fb_mem = NULL;
+            return 0;
+        }
+        memcpy(g_back_mem, g_fb_mem, g_fb_bytes);
+        g_draw_mem = g_back_mem;
+        return 1;
+    }
     path = getenv("AILANG_FBDEV");
     if (path == NULL || path[0] == '\0') {
         path = "/dev/fb0";
@@ -1209,7 +1234,10 @@ void native_host_ui_reset(void)
 void native_host_ui_shutdown(void)
 {
     fb_close_input();
-    if (g_fb_mem != NULL) {
+    if (airun_aios_drm_active()) {
+        airun_aios_drm_shutdown();
+        g_fb_mem = NULL;
+    } else if (g_fb_mem != NULL) {
         munmap(g_fb_mem, g_fb_bytes);
         g_fb_mem = NULL;
     }
@@ -1274,6 +1302,7 @@ int native_host_ui_present(int64_t handle)
     uint64_t start_ns = 0U;
     uint64_t end_ns;
     size_t copied_rows = 0U;
+    int presenting_drm = 0;
     if (window == NULL) {
         return 0;
     }
@@ -1285,6 +1314,16 @@ int native_host_ui_present(int64_t handle)
             g_dirty_y0,
             g_dirty_x1,
             g_dirty_y1);
+    }
+    if (airun_aios_drm_active()) {
+        AirunAiosDrmSurface drm_surface;
+        uint8_t* drm_mem = airun_aios_drm_begin_present(&drm_surface);
+        if (drm_mem != NULL) {
+            g_fb_mem = drm_mem;
+            g_fb_fix.line_length = (uint32_t)drm_surface.line_length;
+            g_fb_bytes = drm_surface.bytes;
+            presenting_drm = 1;
+        }
     }
     if (g_fb_mem != NULL && g_back_mem != NULL) {
         int y;
@@ -1323,6 +1362,9 @@ int native_host_ui_present(int64_t handle)
                 (double)(end_ns - start_ns) / 1000000.0);
         }
         fb_present_cursor_overlay(window);
+        if (presenting_drm) {
+            airun_aios_drm_end_present();
+        }
         g_dirty_valid = 0;
     }
     if (fb_event_loop_trace_enabled()) {
