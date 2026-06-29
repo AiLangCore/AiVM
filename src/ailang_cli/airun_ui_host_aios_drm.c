@@ -274,44 +274,77 @@ static int aios_drm_select_display(int fd)
     struct drm_mode_card_res res;
     uint32_t* connectors = NULL;
     uint32_t* crtcs = NULL;
-    uint32_t i;
+    uint32_t pass;
     if (!aios_drm_get_resources(fd, &res, &connectors, &crtcs)) {
         return 0;
     }
-    for (i = 0U; i < res.count_connectors; i += 1U) {
-        struct drm_mode_get_connector connector;
-        struct drm_mode_modeinfo* modes;
-        uint32_t* encoders;
-        memset(&connector, 0, sizeof(connector));
-        connector.connector_id = connectors[i];
-        if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &connector) != 0 ||
-            connector.count_modes == 0U ||
-            connector.connection != DRM_MODE_CONNECTED) {
-            continue;
-        }
-        modes = (struct drm_mode_modeinfo*)calloc(connector.count_modes, sizeof(struct drm_mode_modeinfo));
-        encoders = connector.count_encoders == 0U ? NULL : (uint32_t*)calloc(connector.count_encoders, sizeof(uint32_t));
-        if (modes == NULL || (connector.count_encoders > 0U && encoders == NULL)) {
+    if (aios_drm_trace_enabled()) {
+        fprintf(stderr, "AiOS DRM trace: resources connectors=%u crtcs=%u\n", res.count_connectors, res.count_crtcs);
+    }
+    for (pass = 0U; pass < 2U; pass += 1U) {
+        uint32_t i;
+        for (i = 0U; i < res.count_connectors; i += 1U) {
+            struct drm_mode_get_connector connector;
+            struct drm_mode_modeinfo* modes;
+            uint32_t* encoders;
+            memset(&connector, 0, sizeof(connector));
+            connector.connector_id = connectors[i];
+            if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &connector) != 0) {
+                if (aios_drm_trace_enabled()) {
+                    fprintf(stderr, "AiOS DRM trace: connector id=%u get failed errno=%d\n", connectors[i], errno);
+                }
+                continue;
+            }
+            if (aios_drm_trace_enabled()) {
+                fprintf(stderr,
+                    "AiOS DRM trace: connector id=%u connection=%u modes=%u encoders=%u encoder=%u pass=%u\n",
+                    connector.connector_id,
+                    connector.connection,
+                    connector.count_modes,
+                    connector.count_encoders,
+                    connector.encoder_id,
+                    pass);
+            }
+            if (connector.count_modes == 0U) {
+                continue;
+            }
+            if (pass == 0U && connector.connection != DRM_MODE_CONNECTED) {
+                continue;
+            }
+            modes = (struct drm_mode_modeinfo*)calloc(connector.count_modes, sizeof(struct drm_mode_modeinfo));
+            encoders = connector.count_encoders == 0U ? NULL : (uint32_t*)calloc(connector.count_encoders, sizeof(uint32_t));
+            if (modes == NULL || (connector.count_encoders > 0U && encoders == NULL)) {
+                free(modes);
+                free(encoders);
+                continue;
+            }
+            connector.modes_ptr = (uint64_t)(uintptr_t)modes;
+            connector.encoders_ptr = (uint64_t)(uintptr_t)encoders;
+            if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &connector) == 0 &&
+                connector.count_modes > 0U &&
+                (pass == 1U || connector.connection == DRM_MODE_CONNECTED) &&
+                aios_drm_select_crtc(fd, &res, crtcs, &connector, &g_drm_crtc_id)) {
+                g_drm_connector_id = connector.connector_id;
+                g_drm_mode = modes[0];
+                if (aios_drm_trace_enabled()) {
+                    fprintf(stderr,
+                        "AiOS DRM trace: selected connector=%u crtc=%u mode=%ux%u name=%s pass=%u\n",
+                        g_drm_connector_id,
+                        g_drm_crtc_id,
+                        (unsigned)g_drm_mode.hdisplay,
+                        (unsigned)g_drm_mode.vdisplay,
+                        g_drm_mode.name,
+                        pass);
+                }
+                free(modes);
+                free(encoders);
+                free(connectors);
+                free(crtcs);
+                return 1;
+            }
             free(modes);
             free(encoders);
-            continue;
         }
-        connector.modes_ptr = (uint64_t)(uintptr_t)modes;
-        connector.encoders_ptr = (uint64_t)(uintptr_t)encoders;
-        if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &connector) == 0 &&
-            connector.count_modes > 0U &&
-            connector.connection == DRM_MODE_CONNECTED &&
-            aios_drm_select_crtc(fd, &res, crtcs, &connector, &g_drm_crtc_id)) {
-            g_drm_connector_id = connector.connector_id;
-            g_drm_mode = modes[0];
-            free(modes);
-            free(encoders);
-            free(connectors);
-            free(crtcs);
-            return 1;
-        }
-        free(modes);
-        free(encoders);
     }
     free(connectors);
     free(crtcs);
