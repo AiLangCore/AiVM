@@ -3,6 +3,7 @@
 #endif
 
 #include "airun_ui_host.h"
+#include "airun_ui_host_aios_drm.h"
 
 #ifdef __linux__
 
@@ -253,6 +254,7 @@ static int fb_open(void)
     if (g_fb_fd >= 0 && g_fb_mem != NULL) {
         return 1;
     }
+    airun_aios_drm_probe_or_report_fallback();
     path = getenv("AILANG_FBDEV");
     if (path == NULL || path[0] == '\0') {
         path = "/dev/fb0";
