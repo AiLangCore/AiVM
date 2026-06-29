@@ -27,8 +27,11 @@
 #endif
 #endif
 
-#ifndef AIRUN_HAVE_DRM_UAPI_HEADERS
+#ifndef DRM_MODE_CONNECTED
 #define DRM_MODE_CONNECTED 1
+#endif
+
+#ifndef AIRUN_HAVE_DRM_UAPI_HEADERS
 #define DRM_IOCTL_BASE 'd'
 #define DRM_IOWR(nr, type) _IOWR(DRM_IOCTL_BASE, nr, type)
 
