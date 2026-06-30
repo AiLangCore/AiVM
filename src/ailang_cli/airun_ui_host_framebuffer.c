@@ -266,6 +266,14 @@ static int fb_open(void)
         g_fb_var.xres_virtual = (uint32_t)drm_surface.width;
         g_fb_var.yres_virtual = (uint32_t)drm_surface.height;
         g_fb_var.bits_per_pixel = (uint32_t)drm_surface.bits_per_pixel;
+        g_fb_var.red.offset = 16U;
+        g_fb_var.red.length = 8U;
+        g_fb_var.green.offset = 8U;
+        g_fb_var.green.length = 8U;
+        g_fb_var.blue.offset = 0U;
+        g_fb_var.blue.length = 8U;
+        g_fb_var.transp.offset = 24U;
+        g_fb_var.transp.length = 8U;
         g_fb_fix.line_length = (uint32_t)drm_surface.line_length;
         g_fb_bytes = drm_surface.bytes;
         g_fb_mem = drm_surface.memory;
