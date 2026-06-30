@@ -77,6 +77,10 @@ Local host integration shape:
 `aivm_syscall_contracts.h` provides deterministic typed syscall-contract validation scaffolding.
 `aivm_c_api.h` provides a C-ABI-friendly execution entrypoint for host integration.
 
+`Docs/Host-ABI.md` defines the target host ABI direction. Target repositories
+link against `libaivm_core.a` and provide platform host libraries such as
+`libaivm_host_aios.a`; AiVM itself remains platform neutral.
+
 ## Build and Test
 
 From repository root:
