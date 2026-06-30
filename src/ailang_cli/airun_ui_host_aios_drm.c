@@ -278,9 +278,7 @@ static int aios_drm_select_display(int fd)
     if (!aios_drm_get_resources(fd, &res, &connectors, &crtcs)) {
         return 0;
     }
-    if (aios_drm_trace_enabled()) {
-        fprintf(stderr, "AiOS DRM trace: resources connectors=%u crtcs=%u\n", res.count_connectors, res.count_crtcs);
-    }
+    fprintf(stderr, "AiOS DRM diagnostic: resources connectors=%u crtcs=%u\n", res.count_connectors, res.count_crtcs);
     for (pass = 0U; pass < 2U; pass += 1U) {
         uint32_t i;
         for (i = 0U; i < res.count_connectors; i += 1U) {
@@ -290,21 +288,17 @@ static int aios_drm_select_display(int fd)
             memset(&connector, 0, sizeof(connector));
             connector.connector_id = connectors[i];
             if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &connector) != 0) {
-                if (aios_drm_trace_enabled()) {
-                    fprintf(stderr, "AiOS DRM trace: connector id=%u get failed errno=%d\n", connectors[i], errno);
-                }
+                fprintf(stderr, "AiOS DRM diagnostic: connector id=%u get failed errno=%d\n", connectors[i], errno);
                 continue;
             }
-            if (aios_drm_trace_enabled()) {
-                fprintf(stderr,
-                    "AiOS DRM trace: connector id=%u connection=%u modes=%u encoders=%u encoder=%u pass=%u\n",
-                    connector.connector_id,
-                    connector.connection,
-                    connector.count_modes,
-                    connector.count_encoders,
-                    connector.encoder_id,
-                    pass);
-            }
+            fprintf(stderr,
+                "AiOS DRM diagnostic: connector id=%u connection=%u modes=%u encoders=%u encoder=%u pass=%u\n",
+                connector.connector_id,
+                connector.connection,
+                connector.count_modes,
+                connector.count_encoders,
+                connector.encoder_id,
+                pass);
             if (connector.count_modes == 0U) {
                 continue;
             }
@@ -336,6 +330,14 @@ static int aios_drm_select_display(int fd)
                         g_drm_mode.name,
                         pass);
                 }
+                fprintf(stderr,
+                    "AiOS DRM diagnostic: selected connector=%u crtc=%u mode=%ux%u name=%s pass=%u\n",
+                    g_drm_connector_id,
+                    g_drm_crtc_id,
+                    (unsigned)g_drm_mode.hdisplay,
+                    (unsigned)g_drm_mode.vdisplay,
+                    g_drm_mode.name,
+                    pass);
                 free(modes);
                 free(encoders);
                 free(connectors);
