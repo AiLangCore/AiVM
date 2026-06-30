@@ -206,9 +206,21 @@ static int aios_drm_get_resources(int fd, struct drm_mode_card_res* out_res, uin
     uint32_t* connectors;
     uint32_t* crtcs;
     memset(out_res, 0, sizeof(*out_res));
-    if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, out_res) != 0 ||
-        out_res->count_connectors == 0U ||
-        out_res->count_crtcs == 0U) {
+    if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, out_res) != 0) {
+        fprintf(stderr, "AiOS DRM diagnostic: get resources failed errno=%d\n", errno);
+        return 0;
+    }
+    fprintf(stderr,
+        "AiOS DRM diagnostic: initial resources fbs=%u crtcs=%u connectors=%u encoders=%u min=%ux%u max=%ux%u\n",
+        out_res->count_fbs,
+        out_res->count_crtcs,
+        out_res->count_connectors,
+        out_res->count_encoders,
+        out_res->min_width,
+        out_res->min_height,
+        out_res->max_width,
+        out_res->max_height);
+    if (out_res->count_connectors == 0U || out_res->count_crtcs == 0U) {
         return 0;
     }
     connectors = (uint32_t*)calloc(out_res->count_connectors, sizeof(uint32_t));
@@ -221,6 +233,7 @@ static int aios_drm_get_resources(int fd, struct drm_mode_card_res* out_res, uin
     out_res->connector_id_ptr = (uint64_t)(uintptr_t)connectors;
     out_res->crtc_id_ptr = (uint64_t)(uintptr_t)crtcs;
     if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, out_res) != 0) {
+        fprintf(stderr, "AiOS DRM diagnostic: populate resources failed errno=%d\n", errno);
         free(connectors);
         free(crtcs);
         return 0;
