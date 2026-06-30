@@ -8873,6 +8873,9 @@ static int package_target_exists_for_input(const char* program_path, const char*
 {
     char project_dir[PATH_MAX];
     PackageTargetLockRecord record;
+    if (getenv("AILANG_DISABLE_PACKAGE_TARGET_DISPATCH") != NULL) {
+        return 0;
+    }
     if (program_path == NULL || target_id == NULL || target_id[0] == '\0') {
         return 0;
     }
