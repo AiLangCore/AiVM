@@ -3684,6 +3684,7 @@ static NativeProcessState g_native_processes[NATIVE_PROCESS_CAPACITY];
 static uint8_t g_native_process_read_scratch[NATIVE_PROCESS_READ_CHUNK];
 
 #include "airun_net_host.inc"
+#include "airun_runtime_syscall_host.inc"
 #include "airun_fs_host.inc"
 #include "airun_storage_host.inc"
 #include "airun_time_host.inc"
@@ -8765,7 +8766,13 @@ static int delegate_package_target_operation(
         return 2;
     }
 
-    runner = (explicit_runner != NULL && explicit_runner[0] != '\0') ? explicit_runner : record.default_runner;
+    if (explicit_runner != NULL && explicit_runner[0] != '\0') {
+        runner = explicit_runner;
+    } else if (strcmp(operation, "run") == 0) {
+        runner = record.default_runner;
+    } else {
+        runner = operation;
+    }
     if (runner == NULL || runner[0] == '\0') {
         fprintf(stderr,
             "Err#err1(code=RUN001 message=\"Package target has no runner. Pass --runner or set defaultRunner.\" nodeId=runner)\n");
@@ -8860,6 +8867,19 @@ static int delegate_package_target_operation(
     }
     free(tool_args);
     return tool_exit;
+}
+
+static int package_target_exists_for_input(const char* program_path, const char* target_id)
+{
+    char project_dir[PATH_MAX];
+    PackageTargetLockRecord record;
+    if (program_path == NULL || target_id == NULL || target_id[0] == '\0') {
+        return 0;
+    }
+    if (!resolve_project_dir_for_cache(program_path, project_dir, sizeof(project_dir))) {
+        return 0;
+    }
+    return find_package_target_in_lock(project_dir, target_id, &record);
 }
 
 static const char* derive_ui_platform_from_target(const char* target)
@@ -9573,6 +9593,23 @@ static int handle_run(int argc, char** argv)
     }
     airun_configure_log_level(target.log_level);
     airun_reset_injected_events();
+
+    if (target.target != NULL &&
+        target.target[0] != '\0' &&
+        package_target_exists_for_input(target.program_path, target.target)) {
+        return delegate_package_target_operation(
+            "run",
+            target.program_path,
+            target.target,
+            target.runner,
+            target.artifact_type,
+            target.target_version,
+            target.out_dir,
+            target.target_option_count,
+            target.target_options,
+            target.app_arg_count,
+            argc > target.app_arg_start ? &argv[target.app_arg_start] : NULL);
+    }
 
     if (run_target_is_wasm(target.target)) {
         int wasm_rc = run_wasm_browser_target(&target, argv);
@@ -11315,6 +11352,35 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
         return 2;
     }
 
+    if (target == NULL) {
+        int manifest_target_rc = resolve_publish_target_from_manifest(program_input, manifest_target, sizeof(manifest_target));
+        if (manifest_target_rc == -1) {
+            fprintf(stderr,
+                "Err#err1(code=VAL002 message=\"Project publishTargets must contain exactly one target or use --target explicitly.\" nodeId=project)\n");
+            return 2;
+        }
+        if (manifest_target_rc == 1) {
+            target = manifest_target;
+        } else {
+            target = host_rid();
+        }
+    }
+
+    if (package_target_exists_for_input(program_input, target)) {
+        return delegate_package_target_operation(
+            "publish",
+            program_input,
+            target,
+            runner,
+            artifact_type,
+            target_version,
+            out_dir,
+            target_option_count,
+            target_options,
+            0,
+            NULL);
+    }
+
     if ((program_input != NULL && ends_with(program_input, ".aos")) ||
         !resolve_input_to_aibc1(program_input, resolved_program, sizeof(resolved_program))) {
         if (resolve_input_to_aos(program_input, source_aos, sizeof(source_aos))) {
@@ -11369,20 +11435,6 @@ static AIRUN_MAYBE_UNUSED int handle_publish(int argc, char** argv)
             fprintf(stderr,
                 "Err#err1(code=DEV008 message=\"Publish needs prebuilt .aibc1 unless source is bytecode-style AOS.\" nodeId=program)\n");
             return 2;
-        }
-    }
-
-    if (target == NULL) {
-        int manifest_target_rc = resolve_publish_target_from_manifest(program_input, manifest_target, sizeof(manifest_target));
-        if (manifest_target_rc == -1) {
-            fprintf(stderr,
-                "Err#err1(code=VAL002 message=\"Project publishTargets must contain exactly one target or use --target explicitly.\" nodeId=project)\n");
-            return 2;
-        }
-        if (manifest_target_rc == 1) {
-            target = manifest_target;
-        } else {
-            target = host_rid();
         }
     }
 
