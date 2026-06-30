@@ -203,8 +203,10 @@ static int aios_drm_ioctl(int fd, unsigned long request, void* arg)
 
 static int aios_drm_get_resources(int fd, struct drm_mode_card_res* out_res, uint32_t** out_connectors, uint32_t** out_crtcs)
 {
+    uint32_t* fbs;
     uint32_t* connectors;
     uint32_t* crtcs;
+    uint32_t* encoders;
     memset(out_res, 0, sizeof(*out_res));
     if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, out_res) != 0) {
         fprintf(stderr, "AiOS DRM diagnostic: get resources failed errno=%d\n", errno);
@@ -223,21 +225,34 @@ static int aios_drm_get_resources(int fd, struct drm_mode_card_res* out_res, uin
     if (out_res->count_connectors == 0U || out_res->count_crtcs == 0U) {
         return 0;
     }
-    connectors = (uint32_t*)calloc(out_res->count_connectors, sizeof(uint32_t));
+    fbs = out_res->count_fbs == 0U ? NULL : (uint32_t*)calloc(out_res->count_fbs, sizeof(uint32_t));
     crtcs = (uint32_t*)calloc(out_res->count_crtcs, sizeof(uint32_t));
-    if (connectors == NULL || crtcs == NULL) {
+    connectors = (uint32_t*)calloc(out_res->count_connectors, sizeof(uint32_t));
+    encoders = out_res->count_encoders == 0U ? NULL : (uint32_t*)calloc(out_res->count_encoders, sizeof(uint32_t));
+    if ((out_res->count_fbs > 0U && fbs == NULL) ||
+        crtcs == NULL ||
+        connectors == NULL ||
+        (out_res->count_encoders > 0U && encoders == NULL)) {
+        free(fbs);
         free(connectors);
         free(crtcs);
+        free(encoders);
         return 0;
     }
+    out_res->fb_id_ptr = (uint64_t)(uintptr_t)fbs;
     out_res->connector_id_ptr = (uint64_t)(uintptr_t)connectors;
     out_res->crtc_id_ptr = (uint64_t)(uintptr_t)crtcs;
+    out_res->encoder_id_ptr = (uint64_t)(uintptr_t)encoders;
     if (aios_drm_ioctl(fd, DRM_IOCTL_MODE_GETRESOURCES, out_res) != 0) {
         fprintf(stderr, "AiOS DRM diagnostic: populate resources failed errno=%d\n", errno);
+        free(fbs);
         free(connectors);
         free(crtcs);
+        free(encoders);
         return 0;
     }
+    free(fbs);
+    free(encoders);
     *out_connectors = connectors;
     *out_crtcs = crtcs;
     return 1;
