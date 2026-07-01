@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "airun_ui_host.h"
 #include <string.h>
 
@@ -9,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef struct {
@@ -360,8 +363,11 @@ int native_host_ui_present(int64_t handle)
 
 int native_host_ui_wait_frame(int64_t handle)
 {
+    struct timespec frame_wait;
     (void)handle;
-    usleep(16000U);
+    frame_wait.tv_sec = 0;
+    frame_wait.tv_nsec = 16000000L;
+    (void)nanosleep(&frame_wait, NULL);
     return 1;
 }
 
