@@ -216,6 +216,53 @@ static int native_ui_linux_paint_is_active(const char* color)
     return color != NULL && color[0] != '\0' && strcmp(color, "none") != 0;
 }
 
+static XFontStruct* native_ui_linux_load_font(int font_size)
+{
+    char font_name[128];
+    int pixel_size = font_size > 0 ? font_size : 12;
+    XFontStruct* font = NULL;
+    if (g_native_ui_display == NULL) {
+        return NULL;
+    }
+    if (pixel_size < 8) {
+        pixel_size = 8;
+    }
+    if (pixel_size > 72) {
+        pixel_size = 72;
+    }
+    (void)snprintf(
+        font_name,
+        sizeof(font_name),
+        "-misc-fixed-medium-r-normal--%d-*-*-*-*-*-iso10646-1",
+        pixel_size);
+    font = XLoadQueryFont(g_native_ui_display, font_name);
+    if (font != NULL) {
+        return font;
+    }
+    (void)snprintf(
+        font_name,
+        sizeof(font_name),
+        "-misc-fixed-medium-r-normal--%d-*-*-*-*-*-iso8859-1",
+        pixel_size);
+    font = XLoadQueryFont(g_native_ui_display, font_name);
+    if (font != NULL) {
+        return font;
+    }
+    if (pixel_size >= 20) {
+        font = XLoadQueryFont(g_native_ui_display, "10x20");
+        if (font != NULL) {
+            return font;
+        }
+    }
+    if (pixel_size >= 15) {
+        font = XLoadQueryFont(g_native_ui_display, "9x15");
+        if (font != NULL) {
+            return font;
+        }
+    }
+    return XLoadQueryFont(g_native_ui_display, "fixed");
+}
+
 void native_host_ui_reset(void)
 {
     size_t i;
@@ -499,13 +546,27 @@ int native_host_ui_draw_text(int64_t handle, int x, int y, const char* text, con
 {
     NativeUiLinuxWindowSlot* slot = native_ui_linux_find_slot(handle);
     unsigned long pixel;
-    (void)font_size;
+    XFontStruct* font;
     if (slot == NULL || g_native_ui_display == NULL || text == NULL) {
         return 0;
     }
+    font = native_ui_linux_load_font(font_size);
+    if (font != NULL) {
+        XSetFont(g_native_ui_display, slot->gc, font->fid);
+    }
     pixel = native_ui_linux_parse_color(color, BlackPixel(g_native_ui_display, g_native_ui_screen));
     XSetForeground(g_native_ui_display, slot->gc, pixel);
-    XDrawString(g_native_ui_display, slot->window, slot->gc, x, y, text, (int)strlen(text));
+    XDrawString(
+        g_native_ui_display,
+        slot->window,
+        slot->gc,
+        x,
+        y + (font != NULL ? font->ascent : ((font_size > 0) ? font_size : 12)),
+        text,
+        (int)strlen(text));
+    if (font != NULL) {
+        XFreeFont(g_native_ui_display, font);
+    }
     return 1;
 }
 
@@ -513,16 +574,15 @@ int native_host_ui_measure_text(int64_t handle, const char* text, int font_size,
 {
     NativeUiLinuxWindowSlot* slot = native_ui_linux_find_slot(handle);
     XFontStruct* font;
-    (void)font_size;
     if (slot == NULL || g_native_ui_display == NULL || text == NULL || out_width == NULL) {
         return 0;
     }
-    font = XQueryFont(g_native_ui_display, XGContextFromGC(slot->gc));
+    font = native_ui_linux_load_font(font_size);
     if (font == NULL) {
         return 0;
     }
     *out_width = XTextWidth(font, text, (int)strlen(text));
-    XFreeFontInfo(NULL, font, 1);
+    XFreeFont(g_native_ui_display, font);
     return 1;
 }
 
