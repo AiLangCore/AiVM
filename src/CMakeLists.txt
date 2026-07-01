@@ -83,6 +83,20 @@ endif()
 set(AIVM_CORE_SOURCES
     aivm_types.c
     aivm_vm.c
+    aivm_vm_arena.c
+    aivm_vm_blob.c
+    aivm_vm_error.c
+    aivm_vm_history.c
+    aivm_vm_lifecycle.c
+    aivm_vm_node.c
+    aivm_vm_node_create.c
+    aivm_vm_node_gc.c
+    aivm_vm_profile.c
+    aivm_vm_stack.c
+    aivm_vm_storage.c
+    aivm_vm_string_copy.c
+    aivm_vm_text.c
+    aivm_vm_value.c
     aivm_program.c
     aivm_debugger.c
     aivm_module_cache.c
