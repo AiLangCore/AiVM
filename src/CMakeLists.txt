@@ -98,6 +98,7 @@ set(AIVM_CORE_SOURCES
     aivm_vm_text.c
     aivm_vm_value.c
     aivm_program.c
+    aivm_host_abi.c
     aivm_debugger.c
     aivm_module_cache.c
     sys/aivm_syscall.c
@@ -340,6 +341,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_c_api PRIVATE aivm_core)
 
+    add_executable(aivm_test_host_abi
+        ../tests/unit/vm/test_host_abi.c
+    )
+    target_link_libraries(aivm_test_host_abi PRIVATE aivm_core)
+
     add_executable(aivm_test_ailang_native_bridge
         ../tests/unit/stdlib/test_ailang_native_bridge.c
     )
@@ -556,6 +562,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime PRIVATE /W4)
         target_compile_options(aivm_test_syscall_contracts PRIVATE /W4)
         target_compile_options(aivm_test_c_api PRIVATE /W4)
+        target_compile_options(aivm_test_host_abi PRIVATE /W4)
         target_compile_options(aivm_test_ailang_native_bridge PRIVATE /W4)
         target_compile_options(aivm_test_ailang_package_manager PRIVATE /W4)
         target_compile_options(aivm_test_memory_rc PRIVATE /W4)
@@ -599,6 +606,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_runtime PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_syscall_contracts PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_c_api PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_host_abi PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_ailang_native_bridge PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_ailang_package_manager PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_memory_rc PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -643,6 +651,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_runtime COMMAND aivm_test_runtime)
     add_test(NAME aivm_test_syscall_contracts COMMAND aivm_test_syscall_contracts)
     add_test(NAME aivm_test_c_api COMMAND aivm_test_c_api)
+    add_test(NAME aivm_test_host_abi COMMAND aivm_test_host_abi)
     add_test(NAME aivm_test_ailang_native_bridge COMMAND aivm_test_ailang_native_bridge)
     add_test(NAME aivm_test_ailang_package_manager COMMAND aivm_test_ailang_package_manager)
     add_test(NAME aivm_test_memory_rc COMMAND aivm_test_memory_rc)
@@ -752,6 +761,10 @@ if (BUILD_TESTING)
         aivm_test_runtime
         aivm_test_c_api
         PROPERTIES LABELS "unit;core;vm"
+    )
+    set_tests_properties(
+        aivm_test_host_abi
+        PROPERTIES LABELS "unit;host;vm"
     )
     set_tests_properties(
         aivm_test_syscall

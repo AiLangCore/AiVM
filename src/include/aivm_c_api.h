@@ -4,10 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "aivm_host_abi.h"
 #include "aivm_program.h"
 #include "sys/aivm_syscall.h"
 #include "aivm_vm.h"
 
+#ifndef AIVM_API
 #if defined(_WIN32) && defined(AIVM_BUILD_SHARED_LIB)
 #if defined(AIVM_CORE_SHARED_IMPL)
 #define AIVM_API __declspec(dllexport)
@@ -16,6 +18,7 @@
 #endif
 #else
 #define AIVM_API
+#endif
 #endif
 
 #ifdef __cplusplus

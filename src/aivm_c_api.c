@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "aivm_host_abi.h"
 #include "aivm_runtime.h"
 
 static AivmCResult result_defaults(void)
@@ -260,5 +261,5 @@ size_t aivm_c_vm_task_reclaim_exhausted_count(const AivmVm* vm)
 
 uint32_t aivm_c_abi_version(void)
 {
-    return 1U;
+    return AIVM_HOST_ABI_VERSION;
 }

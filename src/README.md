@@ -46,6 +46,11 @@ the debug runtime, `aivm-debug <program.aibc1>` is the debug run path.
 
 `aivm_parity_cli` is provided as an initial harness utility to compare two text outputs using deterministic normalization (CRLF/LF normalization and trailing newline trimming).
 
+`aivm_host_abi.h` is the target-facing host ABI entrypoint. It exposes the
+current host ABI version, compatibility checks, and `AivmHostAbiDescriptor`,
+which target repositories use to declare their syscall bindings and event
+adapter.
+
 `aivm_runtime.h` provides host-bridge execution APIs:
 
 - `aivm_execute_program(...)`

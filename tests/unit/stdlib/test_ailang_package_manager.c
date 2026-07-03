@@ -148,6 +148,7 @@ int main(void)
             "aliases = [\"fixture-svc\"]\n"
             "defaultRunner = \"demo\"\n"
             "artifactTypes = [\"aibc1\", \"img\"]\n"
+            "hostAbi = 1\n"
             "options = [\"arch\", \"boot\", \"image\", \"partition\", \"feature\"]\n"
             "\n"
             "[targets.fixture-service.tools]\n"
@@ -296,6 +297,7 @@ int main(void)
         strstr(output, "aliases = [\"fixture-svc\"]") == NULL ||
         strstr(output, "defaultRunner = \"demo\"") == NULL ||
         strstr(output, "artifactTypes = [\"aibc1\", \"img\"]") == NULL ||
+        strstr(output, "hostAbi = 1") == NULL ||
         strstr(output, "options = [\"arch\", \"boot\", \"image\", \"partition\", \"feature\"]") == NULL ||
         strstr(output, "runTools = [\"sh\"]") == NULL ||
         strstr(output, "publishTools = [\"tar\"]") == NULL) {

@@ -8,6 +8,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,6 +66,7 @@ typedef struct AilangPackageTargetMetadata {
     char options[512];
     char run_tools[512];
     char publish_tools[512];
+    int host_abi;
 } AilangPackageTargetMetadata;
 
 typedef struct AilangPackageSourceMetadata {
@@ -410,6 +412,48 @@ static int pm_toml_get_array(const char* text, const char* key, char* out, size_
     }
     memcpy(out, start, n);
     out[n] = '\0';
+    return 1;
+}
+
+static int pm_toml_get_int(const char* text, const char* key, int* out)
+{
+    char needle[128];
+    const char* pos;
+    const char* start;
+    char* end = NULL;
+    long value;
+    if (text == NULL || key == NULL || out == NULL) {
+        return 0;
+    }
+    if (snprintf(needle, sizeof(needle), "%s = ", key) >= (int)sizeof(needle)) {
+        return 0;
+    }
+    pos = strstr(text, needle);
+    if (pos == NULL) {
+        if (snprintf(needle, sizeof(needle), "%s=", key) >= (int)sizeof(needle)) {
+            return 0;
+        }
+        pos = strstr(text, needle);
+    }
+    if (pos == NULL) {
+        return 0;
+    }
+    start = pos + strlen(needle);
+    errno = 0;
+    value = strtol(start, &end, 10);
+    if (errno != 0 || end == start || value < 0L || value > INT_MAX) {
+        return 0;
+    }
+    while (*end != '\0' && *end != '\n' && *end != '\r') {
+        if (*end == '#') {
+            break;
+        }
+        if (!isspace((unsigned char)*end)) {
+            return 0;
+        }
+        end += 1;
+    }
+    *out = (int)value;
     return 1;
 }
 
@@ -914,6 +958,12 @@ static int pm_collect_source_targets(
                         0,
                         error,
                         error_len)) {
+                    continue;
+                }
+                if (pm_toml_get_int(trim, "hostAbi", &metadata->targets[current_target].host_abi)) {
+                    if (metadata->targets[current_target].host_abi <= 0) {
+                        return pm_set_error(error, error_len, "invalid package target hostAbi");
+                    }
                     continue;
                 }
             } else {
@@ -2324,6 +2374,7 @@ int ailang_package_manager_restore(
                         &lock_used,
                         "artifactTypes = [%s]\n",
                         target_metadata->artifact_types) ||
+                    !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "hostAbi = %d\n", target_metadata->host_abi) ||
                     !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "options = [%s]\n", target_metadata->options) ||
                     !pm_appendf(&lock_text[0], sizeof(lock_text), &lock_used, "runTools = [%s]\n", target_metadata->run_tools) ||
                     !pm_appendf(

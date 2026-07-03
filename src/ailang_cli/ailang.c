@@ -8398,6 +8398,7 @@ typedef struct {
     char options[512];
     char run_tools[512];
     char publish_tools[512];
+    uint32_t host_abi;
 } PackageTargetLockRecord;
 
 static const char* skip_toml_ws(const char* p)
@@ -8507,6 +8508,26 @@ static int toml_section_get_value(
     return 0;
 }
 
+static int toml_section_get_u32(const char* section_start, const char* section_end, const char* key, uint32_t* out)
+{
+    char raw[64];
+    char* end = NULL;
+    unsigned long value;
+    if (out == NULL) {
+        return 0;
+    }
+    if (!toml_section_get_value(section_start, section_end, key, 0, raw, sizeof(raw))) {
+        return 0;
+    }
+    errno = 0;
+    value = strtoul(raw, &end, 10);
+    if (errno != 0 || end == raw || *end != '\0' || value == 0UL || value > UINT32_MAX) {
+        return 0;
+    }
+    *out = (uint32_t)value;
+    return 1;
+}
+
 static int toml_array_contains_quoted(const char* raw_array, const char* value)
 {
     const char* p;
@@ -8593,6 +8614,7 @@ static int find_package_target_in_lock(
             (void)toml_section_get_value(section, section_end, "options", 0, out_record->options, sizeof(out_record->options));
             (void)toml_section_get_value(section, section_end, "runTools", 0, out_record->run_tools, sizeof(out_record->run_tools));
             (void)toml_section_get_value(section, section_end, "publishTools", 0, out_record->publish_tools, sizeof(out_record->publish_tools));
+            (void)toml_section_get_u32(section, section_end, "hostAbi", &out_record->host_abi);
             free(lock_text);
             return out_record->id[0] != '\0';
         }
@@ -8763,6 +8785,19 @@ static int delegate_package_target_operation(
     if (!find_package_target_in_lock(project_dir, target_id, &record)) {
         fprintf(stderr,
             "Err#err1(code=RUN001 message=\"Unknown package target. Run 'ailang package restore' after adding the target package.\" nodeId=target)\n");
+        return 2;
+    }
+    if (record.host_abi <= 0) {
+        fprintf(stderr,
+            "Err#err1(code=TARGET002 message=\"Package target missing hostAbi. Run 'ailang package restore' with an updated target package.\" nodeId=target)\n");
+        return 2;
+    }
+    if (record.host_abi != aivm_c_abi_version()) {
+        fprintf(stderr,
+            "Err#err1(code=TARGET002 message=\"Package target host ABI mismatch. target=%s requires=%u installed=%u\" nodeId=target)\n",
+            record.id,
+            record.host_abi,
+            aivm_c_abi_version());
         return 2;
     }
 
