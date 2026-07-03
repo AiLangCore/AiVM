@@ -23,6 +23,10 @@ candidate expectations. It does not mean the whole AiLangCore project is RC.
 - [x] Production command surface is intentionally tiny.
 - [x] Debug/runtime tooling split is documented through `aivm` and
   `aivm-debug`.
+- [x] Public Host ABI header and compatibility descriptor are documented and
+  unit-tested.
+- [x] `aivm_c_abi_version()` reports the canonical AiVM Host ABI version used
+  by package target dispatch.
 - [x] Syscall boundary is documented and contract-tested.
 - [x] Resource limits and error families are documented.
 - [x] Deterministic safe-point compaction is implemented and tested.
@@ -38,8 +42,8 @@ candidate expectations. It does not mean the whole AiLangCore project is RC.
   behavior.
 - [ ] Confirm every syscall has docs, contract coverage, error behavior, and
   resource-limit behavior.
-- [ ] Add or confirm one public embedding smoke that uses the installed headers
-  and library from a minimal host program.
+- [ ] Add one public embedding smoke that uses the installed headers and
+  library from a minimal host program.
 - [ ] Make the security model prominent in README and release notes: AiVM is a
   runtime with explicit syscalls, not a sandbox; OS/container/app sandboxing is
   the deployment boundary.

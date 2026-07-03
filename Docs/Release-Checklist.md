@@ -8,6 +8,10 @@ Use this checklist for alpha, beta, release-candidate, and stable AiVM releases.
 - Confirm `src/CMakeLists.txt` contains the intended base version.
 - Confirm `README.md`, `CHANGELOG.md`, and release notes describe the release accurately.
 - Confirm the working tree contains no generated artifacts.
+- Confirm `Docs/Host-ABI.md`, `src/include/aivm_host_abi.h`, and
+  `aivm_c_abi_version()` agree on the released Host ABI version.
+- Confirm official target packages in `ailang-packages` declare the same
+  required Host ABI before publishing a coordinated SDK release.
 
 ## Local Verification
 
