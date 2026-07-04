@@ -1,41 +1,11 @@
 # AiVM Release Checklist
 
-Use this checklist for alpha, beta, release-candidate, and stable AiVM releases.
+Status: moved.
 
-## Preflight
+The active release checklist now lives in:
 
-- Confirm the release branch follows the workspace Git Flow policy.
-- Confirm `src/CMakeLists.txt` contains the intended base version.
-- Confirm `README.md`, `CHANGELOG.md`, and release notes describe the release accurately.
-- Confirm the working tree contains no generated artifacts.
-- Confirm `Docs/Host-ABI.md`, `src/include/aivm_host_abi.h`, and
-  `aivm_c_abi_version()` agree on the released Host ABI version.
-- Confirm official target packages in `ailang-packages` declare the same
-  required Host ABI before publishing a coordinated SDK release.
+- `../Planning/ReleaseChecklist.rc.md`
 
-## Local Verification
-
-```bash
-./build.sh
-./test-aivm-c.sh
-```
-
-Optional broader gate:
-
-```bash
-AIVM_CTEST_LABEL='unit|integration' ./test-aivm-c.sh
-```
-
-## Release
-
-- Push the release branch and confirm GitHub Actions pass.
-- Tag with `v<version>`, for example `v0.0.1-alpha.17`.
-- Confirm the GitHub release is marked as a prerelease for `-alpha`, `-beta`,
-  `-rc`, and `-local` tags.
-- Confirm Linux, macOS, and Windows artifacts are attached.
-
-## Post-Release
-
-- Update `CHANGELOG.md` for the released version if needed.
-- Update the website release page with the known-good AiLangCore alpha set.
-- Merge the release branch back according to Git Flow.
+This compatibility pointer remains so existing links do not fail. Do not add new
+release-gate checklist content here. Active release planning belongs in
+`../Planning/`.
