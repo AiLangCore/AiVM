@@ -72,6 +72,7 @@ static FILE* g_debug_stdout_capture = NULL;
 
 #define NATIVE_PROCESS_CAPACITY 32U
 #define NATIVE_PROCESS_READ_CHUNK 4096U
+#define NATIVE_FILE_HANDLE_CAPACITY 32U
 #define AIRUN_LOG_TRACE 3
 static int g_airun_log_level = 0;
 
@@ -98,6 +99,14 @@ typedef struct NativeProcessState
     int stderr_fd;
 #endif
 } NativeProcessState;
+
+typedef struct NativeFileState
+{
+    int used;
+    FILE* file;
+} NativeFileState;
+
+static NativeFileState g_native_files[NATIVE_FILE_HANDLE_CAPACITY];
 
 static NativeProcessState g_native_processes[NATIVE_PROCESS_CAPACITY];
 static uint8_t g_native_process_read_scratch[NATIVE_PROCESS_READ_CHUNK];
@@ -753,6 +762,188 @@ static int aivm_cli_file_read(
     free(g_cli_bytes_scratch);
     g_cli_bytes_scratch = bytes;
     *result = aivm_value_bytes(g_cli_bytes_scratch, byte_count);
+    return AIVM_SYSCALL_OK;
+}
+
+static int aivm_cli_file_open_with_mode(const char* path, const char* mode, AivmValue* result)
+{
+    size_t i;
+    if (path == NULL || mode == NULL || result == NULL) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    for (i = 0U; i < NATIVE_FILE_HANDLE_CAPACITY; i += 1U) {
+        if (g_native_files[i].used == 0) {
+            FILE* file = fopen(path, mode);
+            if (file == NULL) {
+                *result = aivm_value_int(-1);
+                return AIVM_SYSCALL_OK;
+            }
+            g_native_files[i].used = 1;
+            g_native_files[i].file = file;
+            *result = aivm_value_int((int64_t)i + 1);
+            return AIVM_SYSCALL_OK;
+        }
+    }
+    *result = aivm_value_int(-1);
+    return AIVM_SYSCALL_OK;
+}
+
+static int aivm_cli_file_open_read(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    return aivm_cli_file_open_with_mode(args[0].string_value, "rb", result);
+}
+
+static int aivm_cli_file_open_write(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_STRING || args[0].string_value == NULL) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    return aivm_cli_file_open_with_mode(args[0].string_value, "wb", result);
+}
+
+static int aivm_cli_file_read_chunk(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int64_t handle;
+    int64_t requested;
+    size_t index;
+    size_t byte_count;
+    size_t read_count;
+    uint8_t* bytes;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 2U ||
+        args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_INT) {
+        *result = aivm_value_bytes(NULL, 0U);
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    handle = args[0].int_value;
+    requested = args[1].int_value;
+    if (requested < 0 || requested > (int64_t)AIVM_VM_FILE_READ_BYTES) {
+        *result = aivm_value_bytes(NULL, 0U);
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
+    if (handle <= 0 || handle > (int64_t)NATIVE_FILE_HANDLE_CAPACITY) {
+        *result = aivm_value_bytes(NULL, 0U);
+        return AIVM_SYSCALL_OK;
+    }
+    index = (size_t)(handle - 1);
+    if (g_native_files[index].used == 0 || g_native_files[index].file == NULL) {
+        *result = aivm_value_bytes(NULL, 0U);
+        return AIVM_SYSCALL_OK;
+    }
+    byte_count = (size_t)requested;
+    bytes = NULL;
+    if (byte_count > 0U) {
+        bytes = (uint8_t*)malloc(byte_count);
+        if (bytes == NULL) {
+            *result = aivm_value_bytes(NULL, 0U);
+            return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+        }
+        read_count = fread(bytes, 1U, byte_count, g_native_files[index].file);
+    } else {
+        read_count = 0U;
+    }
+    free(g_cli_bytes_scratch);
+    g_cli_bytes_scratch = bytes;
+    *result = aivm_value_bytes(g_cli_bytes_scratch, read_count);
+    return AIVM_SYSCALL_OK;
+}
+
+static int aivm_cli_file_write_chunk(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int64_t handle;
+    size_t index;
+    size_t written;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 2U ||
+        args == NULL ||
+        args[0].type != AIVM_VAL_INT ||
+        args[1].type != AIVM_VAL_BYTES) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    if (args[1].bytes_value.length > AIVM_VM_FILE_WRITE_BYTES) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_ERR_RESOURCE_LIMIT;
+    }
+    handle = args[0].int_value;
+    if (handle <= 0 || handle > (int64_t)NATIVE_FILE_HANDLE_CAPACITY) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_OK;
+    }
+    index = (size_t)(handle - 1);
+    if (g_native_files[index].used == 0 || g_native_files[index].file == NULL) {
+        *result = aivm_value_int(-1);
+        return AIVM_SYSCALL_OK;
+    }
+    written = fwrite(args[1].bytes_value.data, 1U, args[1].bytes_value.length, g_native_files[index].file);
+    *result = aivm_value_int((int64_t)written);
+    return AIVM_SYSCALL_OK;
+}
+
+static int aivm_cli_file_close(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    int64_t handle;
+    size_t index;
+    int closed = 0;
+    (void)target;
+    if (result == NULL) {
+        return AIVM_SYSCALL_ERR_NULL_RESULT;
+    }
+    if (arg_count != 1U || args == NULL || args[0].type != AIVM_VAL_INT) {
+        *result = aivm_value_bool(0);
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    handle = args[0].int_value;
+    if (handle > 0 && handle <= (int64_t)NATIVE_FILE_HANDLE_CAPACITY) {
+        index = (size_t)(handle - 1);
+        if (g_native_files[index].used != 0 && g_native_files[index].file != NULL) {
+            closed = fclose(g_native_files[index].file) == 0;
+            g_native_files[index].file = NULL;
+            g_native_files[index].used = 0;
+        }
+    }
+    *result = aivm_value_bool(closed);
     return AIVM_SYSCALL_OK;
 }
 
@@ -1860,7 +2051,12 @@ static int execute_bytes(
         { "sys.fs.dir.delete", aivm_cli_dir_delete },
         { "sys.fs.file.delete", aivm_cli_file_delete },
         { "sys.fs.file.write", aivm_cli_file_write },
-        { "sys.fs.file.read", aivm_cli_file_read }
+        { "sys.fs.file.read", aivm_cli_file_read },
+        { "sys.fs.file.openRead", aivm_cli_file_open_read },
+        { "sys.fs.file.readChunk", aivm_cli_file_read_chunk },
+        { "sys.fs.file.close", aivm_cli_file_close },
+        { "sys.fs.file.openWrite", aivm_cli_file_open_write },
+        { "sys.fs.file.writeChunk", aivm_cli_file_write_chunk }
     };
 
     load_result = aivm_program_load_aibc1(bytes, byte_count, &program);
@@ -2111,7 +2307,12 @@ static int debug_session_run(int argc, char** argv)
         { "sys.fs.dir.delete", aivm_cli_dir_delete },
         { "sys.fs.file.delete", aivm_cli_file_delete },
         { "sys.fs.file.write", aivm_cli_file_write },
-        { "sys.fs.file.read", aivm_cli_file_read }
+        { "sys.fs.file.read", aivm_cli_file_read },
+        { "sys.fs.file.openRead", aivm_cli_file_open_read },
+        { "sys.fs.file.readChunk", aivm_cli_file_read_chunk },
+        { "sys.fs.file.close", aivm_cli_file_close },
+        { "sys.fs.file.openWrite", aivm_cli_file_open_write },
+        { "sys.fs.file.writeChunk", aivm_cli_file_write_chunk }
     };
 
     if (argc < 5) {

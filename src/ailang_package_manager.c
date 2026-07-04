@@ -2773,6 +2773,42 @@ int ailang_package_manager_try_run_interactive_tool(
     return pm_try_run_tool_mode(options, tool_name, arg_count, args, exit_code, error, error_len, 0);
 }
 
+int ailang_package_manager_try_run_package_interactive_tool(
+    const AilangPackageManagerOptions* options,
+    const char* package_name,
+    const char* tool_name,
+    int arg_count,
+    char** args,
+    int* exit_code,
+    char* error,
+    size_t error_len)
+{
+    char package_root[PATH_MAX];
+    char tool_path[PATH_MAX];
+    if (exit_code != NULL) {
+        *exit_code = 0;
+    }
+    if (package_name == NULL || package_name[0] == '\0' ||
+        tool_name == NULL || tool_name[0] == '\0' ||
+        exit_code == NULL) {
+        return pm_set_error(error, error_len, "invalid package tool request");
+    }
+    if (!ailang_package_manager_find_package_root(
+            options,
+            package_name,
+            package_root,
+            sizeof(package_root),
+            error,
+            error_len)) {
+        return 0;
+    }
+    if (!pm_find_tool_in_package_root(package_root, tool_name, tool_path, sizeof(tool_path))) {
+        return 0;
+    }
+    return pm_run_tool_command_mode(tool_name, tool_path, arg_count, args, exit_code, error, error_len, 0) ? 1 :
+        pm_set_error_if_empty(error, error_len, "failed to run package tool: %s/%s", package_name, tool_name);
+}
+
 static int bridge_package_list(
     void* context,
     const AilangNativeValue* args,

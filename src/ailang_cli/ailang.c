@@ -162,6 +162,7 @@ static int simple_resolve_sdk_import_path(
     const char* import_path,
     char* out_path,
     size_t out_path_len);
+static int try_dispatch_external_ailang_command(int argc, char** argv);
 static int simple_fail(const char* message);
 static int simple_failf(const char* fmt, ...);
 static int starts_with(const char* value, const char* prefix);
@@ -5617,7 +5618,7 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
         return 0;
     }
     if (strcmp(node->kind, "Lit") == 0) {
-        char value[256];
+        char value[4096];
         int value_is_quoted = parse_attr_value_is_quoted(node->attrs, "value");
         if (!parse_attr_span(node->attrs, "value", value, sizeof(value))) {
             return simple_fail("lit missing value");
@@ -5654,7 +5655,7 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
             }
         }
         {
-            char unescaped[256];
+            char unescaped[4096];
             size_t idx = 0U;
             if (!unescape_string(value, unescaped, sizeof(unescaped))) {
                 return simple_failf("string literal decode failed: raw=%s attrs=%s", value, node->attrs);
@@ -5818,6 +5819,10 @@ static int parse_simple_program_aos_to_program_text(const char* source, AivmProg
             }
             if (strcmp(target, "io.print") == 0 || strcmp(target, "io.write") == 0 || strcmp(target, "sys.stdout.writeLine") == 0) {
                 mapped = "sys.stdout.writeLine";
+            } else if (strcmp(target, "io.readLine") == 0) {
+                mapped = "sys.console.readLine";
+            } else if (strcmp(target, "io.readAllStdin") == 0) {
+                mapped = "sys.console.readAllStdin";
             } else if (strcmp(target, "io.fileExists") == 0) {
                 mapped = "sys.fs.file.exists";
             } else if (strcmp(target, "io.readFile") == 0) {
@@ -6211,6 +6216,113 @@ static int simple_resolve_sdk_root(const char* base_file, char* out_root, size_t
     }
 
     return snprintf(out_root, out_len, "%s", parent_dir) >= 0 && strlen(parent_dir) < out_len;
+}
+
+static AIRUN_MAYBE_UNUSED int is_external_command_name(const char* command)
+{
+    const unsigned char* p;
+    if (command == NULL || command[0] == '\0' || command[0] == '-') {
+        return 0;
+    }
+    for (p = (const unsigned char*)command; *p != '\0'; ++p) {
+        if (*p == '/' || *p == '\\' || *p == ':' || *p == '.') {
+            return 0;
+        }
+        if (!isalnum(*p) && *p != '-' && *p != '_') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int try_dispatch_external_ailang_command(int argc, char** argv)
+{
+#ifdef AIRUN_MINIMAL_RUNTIME
+    (void)argc;
+    (void)argv;
+    return 0;
+#else
+    const char* command;
+    char sdk_root[PATH_MAX];
+    char libexec_dir[PATH_MAX];
+    char ailang_libexec_dir[PATH_MAX];
+    char commands_dir[PATH_MAX];
+    char command_path[PATH_MAX];
+    char command_exe[PATH_MAX];
+    char** child_argv;
+    int i;
+#ifdef _WIN32
+    intptr_t rc;
+#endif
+
+    if (argc < 2 || argv == NULL || argv[1] == NULL) {
+        return 0;
+    }
+    if (getenv("AILANG_DISABLE_EXTERNAL_COMMAND_DISPATCH") != NULL) {
+        return 0;
+    }
+
+    command = argv[1];
+    if (!is_external_command_name(command)) {
+        return 0;
+    }
+    if (!simple_resolve_sdk_root(NULL, sdk_root, sizeof(sdk_root)) ||
+        !join_path(sdk_root, "libexec", libexec_dir, sizeof(libexec_dir)) ||
+        !join_path(libexec_dir, "ailang", ailang_libexec_dir, sizeof(ailang_libexec_dir)) ||
+        !join_path(ailang_libexec_dir, "commands", commands_dir, sizeof(commands_dir)) ||
+        !join_path(commands_dir, command, command_path, sizeof(command_path))) {
+        return 0;
+    }
+
+#ifdef _WIN32
+    if (snprintf(command_exe, sizeof(command_exe), "%s%s", command_path, AIVM_EXE_EXT) < 0 ||
+        strlen(command_path) + strlen(AIVM_EXE_EXT) >= sizeof(command_exe)) {
+        return 0;
+    }
+#else
+    if (snprintf(command_exe, sizeof(command_exe), "%s", command_path) < 0 ||
+        strlen(command_path) >= sizeof(command_exe)) {
+        return 0;
+    }
+#endif
+
+    if (!file_exists(command_exe)) {
+        return 0;
+    }
+
+    child_argv = (char**)calloc((size_t)argc, sizeof(char*));
+    if (child_argv == NULL) {
+        fprintf(stderr, "Err#err1(code=RUN001 message=\"Out of memory while dispatching command.\" nodeId=command)\n");
+        exit(2);
+    }
+    child_argv[0] = command_exe;
+    for (i = 2; i < argc; ++i) {
+        child_argv[i - 1] = argv[i];
+    }
+    child_argv[argc - 1] = NULL;
+
+#ifdef _WIN32
+    rc = _spawnv(_P_WAIT, command_exe, (const char* const*)child_argv);
+    free(child_argv);
+    if (rc < 0) {
+        fprintf(stderr,
+            "Err#err1(code=RUN001 message=\"Failed to dispatch command '%s': %s\" nodeId=command)\n",
+            command,
+            strerror(errno));
+        exit(127);
+    }
+    exit((int)rc);
+#else
+    execv(command_exe, child_argv);
+    fprintf(stderr,
+        "Err#err1(code=RUN001 message=\"Failed to dispatch command '%s': %s\" nodeId=command)\n",
+        command,
+        strerror(errno));
+    free(child_argv);
+    exit(127);
+#endif
+#endif
+    return 0;
 }
 
 static int simple_resolve_sdk_import_path(
@@ -6986,6 +7098,8 @@ static int simple_compile_call_ext(
         starts_with(target, "sys.") ||
         strcmp(target, "io.print") == 0 ||
         strcmp(target, "io.write") == 0 ||
+        strcmp(target, "io.readLine") == 0 ||
+        strcmp(target, "io.readAllStdin") == 0 ||
         strcmp(target, "io.fileExists") == 0 ||
         strcmp(target, "io.readFile") == 0 ||
         strcmp(target, "io.writeFile") == 0 ||
@@ -6997,6 +7111,10 @@ static int simple_compile_call_ext(
         const char* mapped = target;
         if (strcmp(target, "io.print") == 0 || strcmp(target, "io.write") == 0) {
             mapped = "sys.stdout.writeLine";
+        } else if (strcmp(target, "io.readLine") == 0) {
+            mapped = "sys.console.readLine";
+        } else if (strcmp(target, "io.readAllStdin") == 0) {
+            mapped = "sys.console.readAllStdin";
         } else if (strcmp(target, "io.fileExists") == 0) {
             mapped = "sys.fs.file.exists";
         } else if (strcmp(target, "io.readFile") == 0) {
@@ -8882,8 +9000,9 @@ static int delegate_package_target_operation(
 #endif
     }
     error[0] = '\0';
-    if (!ailang_package_manager_try_run_interactive_tool(
+    if (!ailang_package_manager_try_run_package_interactive_tool(
             &package_options,
+            record.package_name,
             runner,
             index,
             tool_args,
@@ -10202,7 +10321,14 @@ static AIRUN_MAYBE_UNUSED int handle_debug(int argc, char** argv)
         }
 
         if (rc == 0 && sample_count > 0) {
-            int64_t growth_kb = rss_series[sample_count - 1] - rss_series[0];
+            int warmup_samples = (sample_count > 3) ? 3 : sample_count;
+            int64_t baseline_rss = rss_series[0];
+            for (i = 1; i < warmup_samples; i += 1) {
+                if (rss_series[i] > baseline_rss) {
+                    baseline_rss = rss_series[i];
+                }
+            }
+            int64_t growth_kb = rss_series[sample_count - 1] - baseline_rss;
             if (growth_kb > max_growth_kb) {
                 status_fail = 1;
             }
@@ -10230,11 +10356,21 @@ static AIRUN_MAYBE_UNUSED int handle_debug(int argc, char** argv)
         fprintf(report, "run_rc = %d\n", rc);
         if (sample_count > 0) {
             int64_t first_rss = rss_series[0];
+            int warmup_samples = (sample_count > 3) ? 3 : sample_count;
+            int64_t warmup_rss = rss_series[0];
             int64_t last_rss = rss_series[sample_count - 1];
+            for (i = 1; i < warmup_samples; i += 1) {
+                if (rss_series[i] > warmup_rss) {
+                    warmup_rss = rss_series[i];
+                }
+            }
             int64_t growth_kb = last_rss - first_rss;
+            int64_t growth_after_warmup_kb = last_rss - warmup_rss;
             fprintf(report, "first_rss_kb = %lld\n", (long long)first_rss);
+            fprintf(report, "warmup_rss_kb = %lld\n", (long long)warmup_rss);
             fprintf(report, "last_rss_kb = %lld\n", (long long)last_rss);
             fprintf(report, "rss_growth_kb = %lld\n", (long long)growth_kb);
+            fprintf(report, "rss_growth_after_warmup_kb = %lld\n", (long long)growth_after_warmup_kb);
             fprintf(report, "rss_series_kb = [");
             for (i = 0; i < sample_count; i += 1) {
                 if (i > 0) {
@@ -10245,8 +10381,10 @@ static AIRUN_MAYBE_UNUSED int handle_debug(int argc, char** argv)
             fprintf(report, "]\n");
         } else {
             fprintf(report, "first_rss_kb = 0\n");
+            fprintf(report, "warmup_rss_kb = 0\n");
             fprintf(report, "last_rss_kb = 0\n");
             fprintf(report, "rss_growth_kb = 0\n");
+            fprintf(report, "rss_growth_after_warmup_kb = 0\n");
             fprintf(report, "rss_series_kb = []\n");
         }
         fclose(report);
@@ -11821,6 +11959,9 @@ int main(int argc, char** argv)
     }
     if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
         print_usage();
+        return 0;
+    }
+    if (try_dispatch_external_ailang_command(argc, argv)) {
         return 0;
     }
     if (strcmp(argv[1], "run") == 0) {

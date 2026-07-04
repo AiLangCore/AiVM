@@ -2352,7 +2352,7 @@ int aivm_vm_mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs)
     if (vm == NULL || live_pairs == NULL) {
         return 0;
     }
-    memset(live_pairs, 0, AIVM_VM_SCRATCH_PAIR_CAPACITY * sizeof(live_pairs[0]));
+    memset(live_pairs, 0, vm->scratch_pair_count * sizeof(live_pairs[0]));
     for (i = 0U; i < vm->stack_count; i += 1U) {
         if (!mark_live_scratch_pair_value(vm, &vm->stack[i], live_pairs)) {
             return 0;
@@ -2374,6 +2374,119 @@ int aivm_vm_mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs)
         }
     }
     return 1;
+}
+
+static int remap_value_scratch_pair_handle(AivmVm* vm, AivmValue* value, const int64_t* pair_map)
+{
+    int64_t old_handle;
+    if (vm == NULL || value == NULL || pair_map == NULL) {
+        return 0;
+    }
+    if (value->type != AIVM_VAL_PAIR) {
+        return 1;
+    }
+    old_handle = value->pair_handle;
+    if (old_handle <= 0 || old_handle > (int64_t)vm->scratch_pair_count || pair_map[old_handle] <= 0) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid scratch-pair handle during pair compaction.");
+        return 0;
+    }
+    value->pair_handle = pair_map[old_handle];
+    return 1;
+}
+
+int aivm_vm_compact_scratch_pairs(AivmVm* vm)
+{
+    uint8_t* live_pairs = NULL;
+    int64_t* pair_map = NULL;
+    AivmScratchPair* compacted_pairs = NULL;
+    size_t new_pair_count = 0U;
+    size_t i;
+
+    if (vm == NULL) {
+        return 0;
+    }
+    if (vm->scratch_pair_count == 0U) {
+        return 1;
+    }
+    live_pairs = (uint8_t*)calloc(vm->scratch_pair_count, sizeof(live_pairs[0]));
+    pair_map = (int64_t*)calloc(vm->scratch_pair_count + 1U, sizeof(pair_map[0]));
+    compacted_pairs = (AivmScratchPair*)calloc(vm->scratch_pair_count, sizeof(compacted_pairs[0]));
+    if (live_pairs == NULL || pair_map == NULL || compacted_pairs == NULL) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: scratch-pair compaction allocation failed.");
+        goto fail;
+    }
+    if (!aivm_vm_mark_live_scratch_pair_handles(vm, live_pairs)) {
+        goto fail;
+    }
+
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        if (live_pairs[i] != 0U) {
+            size_t old_handle_index;
+            size_t compacted_handle;
+            if (!aivm_size_add_checked(i, 1U, &old_handle_index) ||
+                !aivm_size_add_checked(new_pair_count, 1U, &compacted_handle)) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: scratch-pair compaction handle overflow.");
+                goto fail;
+            }
+            pair_map[old_handle_index] = (int64_t)compacted_handle;
+            new_pair_count = compacted_handle;
+        }
+    }
+
+    for (i = 0U; i < vm->scratch_pair_count; i += 1U) {
+        int64_t new_handle;
+        if (live_pairs[i] == 0U) {
+            continue;
+        }
+        new_handle = pair_map[i + 1U];
+        if (new_handle <= 0) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Dangling live scratch-pair handle during compaction.");
+            goto fail;
+        }
+        compacted_pairs[(size_t)(new_handle - 1)] = vm->scratch_pairs[i];
+    }
+
+    for (i = 0U; i < new_pair_count; i += 1U) {
+        if (!remap_value_scratch_pair_handle(vm, &compacted_pairs[i].first, pair_map) ||
+            !remap_value_scratch_pair_handle(vm, &compacted_pairs[i].second, pair_map)) {
+            goto fail;
+        }
+    }
+    for (i = 0U; i < vm->stack_count; i += 1U) {
+        if (!remap_value_scratch_pair_handle(vm, &vm->stack[i], pair_map)) {
+            goto fail;
+        }
+    }
+    for (i = 0U; i < vm->locals_count; i += 1U) {
+        if (!remap_value_scratch_pair_handle(vm, &vm->locals[i], pair_map)) {
+            goto fail;
+        }
+    }
+    for (i = 0U; i < vm->completed_task_count; i += 1U) {
+        if (!remap_value_scratch_pair_handle(vm, &vm->completed_tasks[i].result, pair_map)) {
+            goto fail;
+        }
+    }
+    for (i = 0U; i < vm->par_value_count; i += 1U) {
+        if (!remap_value_scratch_pair_handle(vm, &vm->par_values[i], pair_map)) {
+            goto fail;
+        }
+    }
+
+    memset(vm->scratch_pairs, 0, AIVM_VM_SCRATCH_PAIR_CAPACITY * sizeof(vm->scratch_pairs[0]));
+    memcpy(vm->scratch_pairs, compacted_pairs, new_pair_count * sizeof(vm->scratch_pairs[0]));
+    vm->scratch_pair_count = new_pair_count;
+
+    free(live_pairs);
+    free(pair_map);
+    free(compacted_pairs);
+    return 1;
+
+fail:
+    free(live_pairs);
+    free(pair_map);
+    free(compacted_pairs);
+    return 0;
 }
 
 int aivm_compact_string_arena(AivmVm* vm)
@@ -2684,6 +2797,9 @@ static int collect_safe_point_internal(AivmVm* vm, int collect_bytes)
             return 0;
         }
         vm->node_allocations_since_gc = 0U;
+    }
+    if (vm->scratch_pair_count > 0U && !aivm_vm_compact_scratch_pairs(vm)) {
+        return 0;
     }
     if (vm->string_arena_used > 0U && !aivm_compact_string_arena(vm)) {
         return 0;

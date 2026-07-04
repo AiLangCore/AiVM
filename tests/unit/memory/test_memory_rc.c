@@ -89,6 +89,67 @@ static int test_bytes_safe_point_compaction(void)
     return 0;
 }
 
+static int test_scratch_pair_safe_point_compaction(void)
+{
+    static AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_MAKE_PAIR, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_MAKE_PAIR, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 4 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 5 },
+        { .opcode = AIVM_OP_MAKE_PAIR, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 10 },
+        { .type = AIVM_VAL_INT, .int_value = 11 },
+        { .type = AIVM_VAL_INT, .int_value = 20 },
+        { .type = AIVM_VAL_INT, .int_value = 21 },
+        { .type = AIVM_VAL_INT, .int_value = 30 },
+        { .type = AIVM_VAL_INT, .int_value = 31 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = sizeof(instructions) / sizeof(instructions[0]),
+        .constants = constants,
+        .constant_count = sizeof(constants) / sizeof(constants[0]),
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0 ||
+        expect(vm.scratch_pair_count == 3U) != 0 ||
+        expect(vm.locals[0].type == AIVM_VAL_PAIR) != 0 ||
+        expect(vm.locals[0].pair_handle == 2) != 0) {
+        return 1;
+    }
+
+    if (!aivm_collect_safe_point(&vm)) {
+        return 1;
+    }
+    if (expect(vm.scratch_pair_count == 1U) != 0 ||
+        expect(vm.locals[0].type == AIVM_VAL_PAIR) != 0 ||
+        expect(vm.locals[0].pair_handle == 1) != 0 ||
+        expect(vm.scratch_pairs[0].first.type == AIVM_VAL_INT) != 0 ||
+        expect(vm.scratch_pairs[0].first.int_value == 20) != 0 ||
+        expect(vm.scratch_pairs[0].second.type == AIVM_VAL_INT) != 0 ||
+        expect(vm.scratch_pairs[0].second.int_value == 21) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     size_t first = 0U;
@@ -104,6 +165,9 @@ int main(void)
         return 1;
     }
     if (test_bytes_safe_point_compaction() != 0) {
+        return 1;
+    }
+    if (test_scratch_pair_safe_point_compaction() != 0) {
         return 1;
     }
 

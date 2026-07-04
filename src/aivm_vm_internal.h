@@ -29,6 +29,7 @@ char* aivm_vm_copy_string_splice_to_arena(
     size_t suffix_length);
 int aivm_pointer_in_string_arena(const AivmVm* vm, const char* text);
 int aivm_vm_mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs);
+int aivm_vm_compact_scratch_pairs(AivmVm* vm);
 int aivm_vm_lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
 int aivm_vm_lookup_scratch_pair(const AivmVm* vm, int64_t handle, const AivmScratchPair** out_pair);
 int aivm_vm_create_scratch_pair(AivmVm* vm, AivmValue first, AivmValue second, int64_t* out_handle);
