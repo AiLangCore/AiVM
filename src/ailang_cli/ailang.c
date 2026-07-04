@@ -4217,6 +4217,9 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_TO_UTF8_STRING: return "BYTES_TO_UTF8_STRING";
         case AIVM_OP_BYTES_FROM_BASE64: return "BYTES_FROM_BASE64";
         case AIVM_OP_BYTES_TO_BASE64: return "BYTES_TO_BASE64";
+        case AIVM_OP_BYTES_FROM_BYTE: return "BYTES_FROM_BYTE";
+        case AIVM_OP_BYTES_U32_LE: return "BYTES_U32_LE";
+        case AIVM_OP_BYTES_I64_LE: return "BYTES_I64_LE";
         case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
         case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
         case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
@@ -5082,6 +5085,9 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(BYTES_TO_UTF8_STRING)
     MAP_OP(BYTES_FROM_BASE64)
     MAP_OP(BYTES_TO_BASE64)
+    MAP_OP(BYTES_FROM_BYTE)
+    MAP_OP(BYTES_U32_LE)
+    MAP_OP(BYTES_I64_LE)
     MAP_OP(MAKE_PAIR)
     MAP_OP(PAIR_FIRST)
     MAP_OP(PAIR_SECOND)
@@ -6910,7 +6916,7 @@ static int ensure_cache_root_for_source(const char* source_aos, char* out_root, 
 
 static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path, int allow_entry_export)
 {
-    char text[131072];
+    char* text = NULL;
     const char* program_pos;
     const char* open_brace;
     const char* close_brace;
@@ -6922,15 +6928,16 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
         return simple_fail("collect: invalid args");
     }
     trace = getenv("AIVM_NATIVE_BUILD_TRACE");
-    if (!read_text_file(path, text, sizeof(text))) {
+    if (!read_text_file_alloc(path, &text)) {
         return simple_failf("collect: failed reading %s", path);
     }
     if (!simple_add_source(ctx, path, text, &source_index)) {
+        free(text);
         return simple_failf("collect: failed adding source %s", path);
     }
+    free(text);
     /* already collected previously */
-    if (ctx->sources[(size_t)source_index].text != NULL &&
-        ctx->sources[(size_t)source_index].text != text) {
+    if (ctx->sources[(size_t)source_index].text != NULL) {
         /* continue; collection idempotence is handled by func dedupe */
     }
 
@@ -7637,7 +7644,10 @@ static int simple_compile_expr_ext(
     if (strcmp(node->kind, "BytesFromUtf8String") == 0 ||
         strcmp(node->kind, "BytesToUtf8String") == 0 ||
         strcmp(node->kind, "BytesFromBase64") == 0 ||
-        strcmp(node->kind, "BytesToBase64") == 0) {
+        strcmp(node->kind, "BytesToBase64") == 0 ||
+        strcmp(node->kind, "BytesFromByte") == 0 ||
+        strcmp(node->kind, "BytesU32LE") == 0 ||
+        strcmp(node->kind, "BytesI64LE") == 0) {
         SimpleNodeView value;
         if (!simple_parse_next_node(node->body_start, node->body_end, &value)) {
             return simple_failf("%s missing arg", node->kind);
@@ -7654,7 +7664,16 @@ static int simple_compile_expr_ext(
         if (strcmp(node->kind, "BytesFromBase64") == 0) {
             return simple_emit_instruction(program, AIVM_OP_BYTES_FROM_BASE64, 0);
         }
-        return simple_emit_instruction(program, AIVM_OP_BYTES_TO_BASE64, 0);
+        if (strcmp(node->kind, "BytesToBase64") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_TO_BASE64, 0);
+        }
+        if (strcmp(node->kind, "BytesFromByte") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_FROM_BYTE, 0);
+        }
+        if (strcmp(node->kind, "BytesU32LE") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_BYTES_U32_LE, 0);
+        }
+        return simple_emit_instruction(program, AIVM_OP_BYTES_I64_LE, 0);
     }
     if (strcmp(node->kind, "BytesAt") == 0 || strcmp(node->kind, "BytesConcat") == 0) {
         SimpleNodeView left;

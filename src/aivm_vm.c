@@ -593,6 +593,8 @@ static int push_escaped_string(AivmVm* vm, const char* input)
     size_t next_length;
     size_t next_out_index;
     char* output;
+    char* input_copy = NULL;
+    const char* source;
 
     if (vm == NULL || input == NULL) {
         return 0;
@@ -619,71 +621,89 @@ static int push_escaped_string(AivmVm* vm, const char* input)
         return 0;
     }
 
+    source = aivm_vm_snapshot_arena_backed_string(vm, input, length, &input_copy);
+    if (source == NULL) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String escape operand snapshot failed.");
+        return 0;
+    }
+
     output = aivm_string_arena_alloc(vm, escaped_length);
     if (output == NULL) {
+        free(input_copy);
         return 0;
     }
 
     for (i = 0U; i < length; i += 1U) {
-        char ch = input[i];
+        char ch = source[i];
         if (ch == '\\') {
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
         } else if (ch == '"') {
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
             output[out_index] = '"';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
         } else if (ch == '\n') {
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
             output[out_index] = 'n';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
         } else if (ch == '\r') {
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
             output[out_index] = 'r';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
         } else if (ch == '\t') {
             output[out_index] = '\\';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
             output[out_index] = 't';
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
         } else {
             output[out_index] = ch;
             if (!aivm_size_add_checked(out_index, 1U, &next_out_index)) {
+                free(input_copy);
                 return 0;
             }
             out_index = next_out_index;
@@ -691,6 +711,7 @@ static int push_escaped_string(AivmVm* vm, const char* input)
     }
 
     output[out_index] = '\0';
+    free(input_copy);
     return aivm_stack_push(vm, aivm_value_string(output));
 }
 
@@ -3405,6 +3426,10 @@ void aivm_step(AivmVm* vm)
             size_t bytes_needed = 0U;
             size_t i;
             char* output;
+            char* left_copy = NULL;
+            char* right_copy = NULL;
+            const char* left_source;
+            const char* right_source;
 
             if (!aivm_stack_pop(vm, &right) || !aivm_stack_pop(vm, &left)) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -3449,29 +3474,47 @@ void aivm_step(AivmVm* vm)
                 break;
             }
 
+            left_source = aivm_vm_snapshot_arena_backed_string(vm, left.string_value, left_length, &left_copy);
+            right_source = aivm_vm_snapshot_arena_backed_string(vm, right.string_value, right_length, &right_copy);
+            if (left_source == NULL || right_source == NULL) {
+                free(left_copy);
+                free(right_copy);
+                aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat operand snapshot failed.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+
             output = aivm_string_arena_alloc(vm, bytes_needed);
             if (output == NULL) {
+                free(left_copy);
+                free(right_copy);
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
 
             for (i = 0U; i < left_length; i += 1U) {
-                output[i] = left.string_value[i];
+                output[i] = left_source[i];
             }
             for (i = 0U; i < right_length; i += 1U) {
                 size_t output_slot = 0U;
                 if (!aivm_size_add_checked(left_length, i, &output_slot) ||
                     output_slot >= total_length) {
+                    free(left_copy);
+                    free(right_copy);
                     aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "String concat output slot overflow.");
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
-                output[output_slot] = right.string_value[i];
+                output[output_slot] = right_source[i];
             }
             if (vm->instruction_pointer == vm->program->instruction_count) {
+                free(left_copy);
+                free(right_copy);
                 break;
             }
             output[left_length + right_length] = '\0';
+            free(left_copy);
+            free(right_copy);
 
             if (!aivm_stack_push(vm, aivm_value_string(output))) {
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -4098,6 +4141,83 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             if (!aivm_stack_push(vm, aivm_value_string(output))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_FROM_BYTE: {
+            AivmValue byte_value;
+            uint8_t output[1];
+            if (!aivm_stack_pop(vm, &byte_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (byte_value.type != AIVM_VAL_INT || byte_value.int_value < 0 || byte_value.int_value > 255) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_FROM_BYTE requires int in range 0..255.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            output[0] = (uint8_t)byte_value.int_value;
+            if (!push_bytes_copy(vm, output, sizeof(output))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_U32_LE: {
+            AivmValue int_value;
+            uint64_t encoded;
+            uint8_t output[4];
+            if (!aivm_stack_pop(vm, &int_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (int_value.type != AIVM_VAL_INT || int_value.int_value < 0 || (uint64_t)int_value.int_value > 0xFFFFFFFFULL) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_U32_LE requires int in range 0..4294967295.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            encoded = (uint64_t)int_value.int_value;
+            output[0] = (uint8_t)(encoded & 0xFFU);
+            output[1] = (uint8_t)((encoded >> 8U) & 0xFFU);
+            output[2] = (uint8_t)((encoded >> 16U) & 0xFFU);
+            output[3] = (uint8_t)((encoded >> 24U) & 0xFFU);
+            if (!push_bytes_copy(vm, output, sizeof(output))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_BYTES_I64_LE: {
+            AivmValue int_value;
+            uint64_t encoded;
+            uint8_t output[8];
+            if (!aivm_stack_pop(vm, &int_value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (int_value.type != AIVM_VAL_INT) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_I64_LE requires int operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            encoded = (uint64_t)int_value.int_value;
+            output[0] = (uint8_t)(encoded & 0xFFU);
+            output[1] = (uint8_t)((encoded >> 8U) & 0xFFU);
+            output[2] = (uint8_t)((encoded >> 16U) & 0xFFU);
+            output[3] = (uint8_t)((encoded >> 24U) & 0xFFU);
+            output[4] = (uint8_t)((encoded >> 32U) & 0xFFU);
+            output[5] = (uint8_t)((encoded >> 40U) & 0xFFU);
+            output[6] = (uint8_t)((encoded >> 48U) & 0xFFU);
+            output[7] = (uint8_t)((encoded >> 56U) & 0xFFU);
+            if (!push_bytes_copy(vm, output, sizeof(output))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

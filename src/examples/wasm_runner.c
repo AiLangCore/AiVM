@@ -82,6 +82,9 @@ static const char* opcode_name(AivmOpcode opcode)
         case AIVM_OP_MOD_NUM: return "MOD_NUM";
         case AIVM_OP_POW_NUM: return "POW_NUM";
         case AIVM_OP_LT_NUM: return "LT_NUM";
+        case AIVM_OP_BYTES_FROM_BYTE: return "BYTES_FROM_BYTE";
+        case AIVM_OP_BYTES_U32_LE: return "BYTES_U32_LE";
+        case AIVM_OP_BYTES_I64_LE: return "BYTES_I64_LE";
         default: return "UNKNOWN";
     }
 }

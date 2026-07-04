@@ -88,12 +88,15 @@ static const PerfOpcodeCoverage g_opcode_coverage[] = {
     { AIVM_OP_DIV_NUM, "AIVM_OP_DIV_NUM", PERF_OPCODE_BENCHMARKED, "numeric benchmark" },
     { AIVM_OP_MOD_NUM, "AIVM_OP_MOD_NUM", PERF_OPCODE_BENCHMARKED, "numeric benchmark" },
     { AIVM_OP_POW_NUM, "AIVM_OP_POW_NUM", PERF_OPCODE_TRACKED_GAP, "unit-covered; add numeric benchmark" },
-    { AIVM_OP_LT_NUM, "AIVM_OP_LT_NUM", PERF_OPCODE_BENCHMARKED, "numeric benchmark" }
+    { AIVM_OP_LT_NUM, "AIVM_OP_LT_NUM", PERF_OPCODE_BENCHMARKED, "numeric benchmark" },
+    { AIVM_OP_BYTES_FROM_BYTE, "AIVM_OP_BYTES_FROM_BYTE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" },
+    { AIVM_OP_BYTES_U32_LE, "AIVM_OP_BYTES_U32_LE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" },
+    { AIVM_OP_BYTES_I64_LE, "AIVM_OP_BYTES_I64_LE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" }
 };
 
 int main(void)
 {
-    int seen[AIVM_OP_LT_NUM + 1U];
+    int seen[AIVM_OP_BYTES_I64_LE + 1U];
     size_t benchmarked = 0U;
     size_t tracked_gap = 0U;
     size_t index;
@@ -103,7 +106,7 @@ int main(void)
 
     for (index = 0U; index < sizeof(g_opcode_coverage) / sizeof(g_opcode_coverage[0]); index += 1U) {
         const PerfOpcodeCoverage* row = &g_opcode_coverage[index];
-        if ((int)row->opcode < 0 || row->opcode > AIVM_OP_LT_NUM) {
+        if ((int)row->opcode < 0 || row->opcode > AIVM_OP_BYTES_I64_LE) {
             (void)fprintf(stderr, "opcode coverage row is out of range: %s\n", row->name);
             failed = 1;
             continue;
@@ -120,7 +123,7 @@ int main(void)
         }
     }
 
-    for (index = 0U; index <= (size_t)AIVM_OP_LT_NUM; index += 1U) {
+    for (index = 0U; index <= (size_t)AIVM_OP_BYTES_I64_LE; index += 1U) {
         if (seen[index] == 0) {
             (void)fprintf(stderr, "opcode coverage missing opcode=%zu\n", index);
             failed = 1;
