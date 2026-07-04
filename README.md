@@ -5,6 +5,8 @@ Standalone repository for the AiVM runtime layer.
 ![AiVM](assets/AiVM_Logo.png)
 
 For contributor setup and verification, see [CONTRIBUTING.md](CONTRIBUTING.md).
+For stable usage documentation, see [Docs/README.md](Docs/README.md).
+For normative runtime specifications, see [SPEC/README.md](SPEC/README.md).
 
 ## Status
 
@@ -36,6 +38,11 @@ src/
 
 - `src` - imported native C VM source, tests, native launcher code, and CMake build.
 - `src/ailang_cli` - temporary native AiLang launcher/host adapter code.
+- `SPEC` - normative AiVM runtime contracts.
+- `Docs` - stable usage documentation.
+- `Design` - non-normative design notes.
+- `Planning` - active gated work, readiness, and release checklists.
+- `Archive` - historical or superseded documents.
 - `.github/workflows` - CI and release workflows.
 
 Source layout:
@@ -66,12 +73,13 @@ call into AiVM rather than expanding the production VM command surface.
 
 ## Specifications
 
-- `Docs/Syscalls.md` defines the syscall boundary and syscall addition rules.
-- `Docs/Resource-Limits-And-Errors.md` defines beta resource limits and
-  error-code families.
+- `SPEC/README.md` defines AiVM specification authority.
+- `SPEC/MEMORY.md` defines deterministic AiVM memory implementation mechanics.
+- `SPEC/SYSCALLS.md` defines the syscall boundary and syscall addition rules.
+- `SPEC/RESOURCE_LIMITS.md` defines runtime resource limits and error-code families.
+- `SPEC/DEBUG_ARTIFACTS.md` defines machine-readable debug artifact shape.
 - `Docs/Native-Test-Infrastructure.md` defines the CTest native test layout.
-- `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
-- `Docs/Production-VM-Readiness.md` tracks production hardening work.
+- `Planning/ProductionVMReadiness.rc1.md` tracks production hardening work.
 - [AiLangCore roadmap](https://ailang.codes/docs/roadmap.html) tracks the
   Alpha -> Beta -> RC -> 1.0 direction across AiLang, AiVM, and AiVectra.
 
