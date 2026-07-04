@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PRESET="${AIVM_CMAKE_PRESET:-aivm-native-unix}"
 TEST_LABEL="${AIVM_CTEST_LABEL:-unit|integration|golden|security|spec}"
 
+bash "${ROOT_DIR}/scripts/check-doc-taxonomy.sh"
 "${ROOT_DIR}/scripts/check-syscall-contracts.sh"
 
 cmake --preset "${PRESET}" -S "${ROOT_DIR}/src"
