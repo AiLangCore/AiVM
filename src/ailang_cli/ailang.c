@@ -4184,6 +4184,7 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_PAR_JOIN: return "PAR_JOIN";
         case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
         case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
+        case AIVM_OP_STR_SCALAR_LENGTH: return "STR_SCALAR_LENGTH";
         case AIVM_OP_NODE_KIND: return "NODE_KIND";
         case AIVM_OP_NODE_ID: return "NODE_ID";
         case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
@@ -5061,6 +5062,7 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(PAR_JOIN)
     MAP_OP(PAR_CANCEL)
     MAP_OP(STR_UTF8_BYTE_COUNT)
+    MAP_OP(STR_SCALAR_LENGTH)
     MAP_OP(NODE_KIND)
     MAP_OP(NODE_ID)
     MAP_OP(ATTR_COUNT)
@@ -7601,6 +7603,7 @@ static int simple_compile_expr_ext(
         return 1;
     }
     if (strcmp(node->kind, "StringUtf8ByteCount") == 0 ||
+        strcmp(node->kind, "StringScalarLength") == 0 ||
         strcmp(node->kind, "StringFromCodePoint") == 0 ||
         strcmp(node->kind, "StringDecodeUnicodeHex4") == 0) {
         SimpleNodeView value;
@@ -7612,6 +7615,9 @@ static int simple_compile_expr_ext(
         }
         if (strcmp(node->kind, "StringUtf8ByteCount") == 0) {
             return simple_emit_instruction(program, AIVM_OP_STR_UTF8_BYTE_COUNT, 0);
+        }
+        if (strcmp(node->kind, "StringScalarLength") == 0) {
+            return simple_emit_instruction(program, AIVM_OP_STR_SCALAR_LENGTH, 0);
         }
         if (strcmp(node->kind, "StringFromCodePoint") == 0) {
             return simple_emit_instruction(program, AIVM_OP_STR_FROM_CODEPOINT, 0);

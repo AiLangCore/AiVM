@@ -241,6 +241,7 @@ static const char* cli_opcode_name(AivmOpcode opcode)
         case AIVM_OP_PAR_JOIN: return "PAR_JOIN";
         case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
         case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
+        case AIVM_OP_STR_SCALAR_LENGTH: return "STR_SCALAR_LENGTH";
         case AIVM_OP_NODE_KIND: return "NODE_KIND";
         case AIVM_OP_NODE_ID: return "NODE_ID";
         case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";

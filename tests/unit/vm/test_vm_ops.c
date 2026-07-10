@@ -3254,6 +3254,77 @@ static int test_str_utf8_byte_count_requires_string(void)
     return 0;
 }
 
+static int test_str_scalar_length(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const char mixed_text[] = { 'a', (char)0xC3, (char)0xA9, 'x', '\0' };
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_STR_SCALAR_LENGTH, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = mixed_text }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 3U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
+        return 1;
+    }
+    if (expect(out.type == AIVM_VAL_INT && out.int_value == 3) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_str_scalar_length_requires_string(void)
+{
+    static AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_STR_SCALAR_LENGTH, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 9 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 2U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(vm.error == AIVM_VM_ERR_TYPE_MISMATCH) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "STR_SCALAR_LENGTH requires string operand.") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_node_ops_core_semantics(void)
 {
     static AivmVm vm;
@@ -5026,6 +5097,12 @@ int main(void)
         return 1;
     }
     if (run_test("test_str_utf8_byte_count_requires_string", test_str_utf8_byte_count_requires_string) != 0) {
+        return 1;
+    }
+    if (run_test("test_str_scalar_length", test_str_scalar_length) != 0) {
+        return 1;
+    }
+    if (run_test("test_str_scalar_length_requires_string", test_str_scalar_length_requires_string) != 0) {
         return 1;
     }
     if (run_test("test_node_ops_core_semantics", test_node_ops_core_semantics) != 0) {

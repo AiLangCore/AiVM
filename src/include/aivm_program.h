@@ -82,7 +82,9 @@ typedef enum {
     AIVM_OP_LT_NUM = 72,
     AIVM_OP_BYTES_FROM_BYTE = 73,
     AIVM_OP_BYTES_U32_LE = 74,
-    AIVM_OP_BYTES_I64_LE = 75
+    AIVM_OP_BYTES_I64_LE = 75,
+    AIVM_OP_STR_SCALAR_LENGTH = 76,
+    AIVM_OP_MAX = AIVM_OP_STR_SCALAR_LENGTH
 } AivmOpcode;
 
 typedef struct {

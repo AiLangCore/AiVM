@@ -550,6 +550,7 @@ static int bench_constants_and_strings(PerfResult* results, size_t* result_count
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_STR_CONCAT, .operand_int = 0 },
         { .opcode = AIVM_OP_STR_UTF8_BYTE_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_STR_SCALAR_LENGTH, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {

@@ -165,7 +165,7 @@ static size_t build_instruction_program(
     cursor = 28U;
 
     for (index = 0U; index < instruction_count; index += 1U) {
-        uint32_t opcode = (index + opcode_seed) % ((uint32_t)AIVM_OP_BYTES_I64_LE + 1U);
+        uint32_t opcode = (index + opcode_seed) % ((uint32_t)AIVM_OP_MAX + 1U);
         if (index + 1U == instruction_count) {
             opcode = (uint32_t)AIVM_OP_HALT;
         } else if (opcode == (uint32_t)AIVM_OP_STUB ||

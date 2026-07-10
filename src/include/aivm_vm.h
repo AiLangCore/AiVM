@@ -241,7 +241,7 @@ typedef struct {
     size_t recent_opcode_count;
 #if defined(AIVM_DEBUG_RUNTIME)
     size_t profile_instruction_count;
-    size_t profile_opcode_counts[73];
+    size_t profile_opcode_counts[(size_t)AIVM_OP_MAX + 1U];
     size_t profile_syscall_count;
     double profile_syscall_elapsed_seconds;
     AivmProfileSyscallTargetCount profile_syscall_targets[AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY];

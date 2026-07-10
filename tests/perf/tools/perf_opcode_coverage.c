@@ -47,6 +47,7 @@ static const PerfOpcodeCoverage g_opcode_coverage[] = {
     { AIVM_OP_PAR_JOIN, "AIVM_OP_PAR_JOIN", PERF_OPCODE_BENCHMARKED, "par join benchmark" },
     { AIVM_OP_PAR_CANCEL, "AIVM_OP_PAR_CANCEL", PERF_OPCODE_BENCHMARKED, "par join benchmark" },
     { AIVM_OP_STR_UTF8_BYTE_COUNT, "AIVM_OP_STR_UTF8_BYTE_COUNT", PERF_OPCODE_BENCHMARKED, "string benchmark" },
+    { AIVM_OP_STR_SCALAR_LENGTH, "AIVM_OP_STR_SCALAR_LENGTH", PERF_OPCODE_BENCHMARKED, "string benchmark" },
     { AIVM_OP_NODE_KIND, "AIVM_OP_NODE_KIND", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node traversal benchmark" },
     { AIVM_OP_NODE_ID, "AIVM_OP_NODE_ID", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node traversal benchmark" },
     { AIVM_OP_ATTR_COUNT, "AIVM_OP_ATTR_COUNT", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node attr benchmark" },
@@ -96,7 +97,7 @@ static const PerfOpcodeCoverage g_opcode_coverage[] = {
 
 int main(void)
 {
-    int seen[AIVM_OP_BYTES_I64_LE + 1U];
+    int seen[AIVM_OP_MAX + 1U];
     size_t benchmarked = 0U;
     size_t tracked_gap = 0U;
     size_t index;
@@ -106,7 +107,7 @@ int main(void)
 
     for (index = 0U; index < sizeof(g_opcode_coverage) / sizeof(g_opcode_coverage[0]); index += 1U) {
         const PerfOpcodeCoverage* row = &g_opcode_coverage[index];
-        if ((int)row->opcode < 0 || row->opcode > AIVM_OP_BYTES_I64_LE) {
+        if ((int)row->opcode < 0 || row->opcode > AIVM_OP_MAX) {
             (void)fprintf(stderr, "opcode coverage row is out of range: %s\n", row->name);
             failed = 1;
             continue;
@@ -123,7 +124,7 @@ int main(void)
         }
     }
 
-    for (index = 0U; index <= (size_t)AIVM_OP_BYTES_I64_LE; index += 1U) {
+    for (index = 0U; index <= (size_t)AIVM_OP_MAX; index += 1U) {
         if (seen[index] == 0) {
             (void)fprintf(stderr, "opcode coverage missing opcode=%zu\n", index);
             failed = 1;

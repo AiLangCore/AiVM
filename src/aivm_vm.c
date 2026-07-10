@@ -4538,6 +4538,47 @@ void aivm_step(AivmVm* vm)
             break;
         }
 
+        case AIVM_OP_STR_SCALAR_LENGTH: {
+            AivmValue value;
+            int64_t index = 0;
+            int64_t count = 0;
+            if (!aivm_stack_pop(vm, &value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (value.type != AIVM_VAL_STRING || value.string_value == NULL) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "STR_SCALAR_LENGTH requires string operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            while (value.string_value[index] != '\0') {
+                unsigned char ch = (unsigned char)value.string_value[index];
+                if ((ch & 0xC0U) != 0x80U) {
+                    if (count == INT64_MAX) {
+                        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "STR_SCALAR_LENGTH overflow.");
+                        vm->instruction_pointer = vm->program->instruction_count;
+                        break;
+                    }
+                    count += 1;
+                }
+                if (index == INT64_MAX) {
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "STR_SCALAR_LENGTH input overflow.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+                }
+                index += 1;
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
+            }
+            if (!aivm_stack_push(vm, aivm_value_int(count))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
         case AIVM_OP_NODE_KIND: {
             AivmValue node_value;
             const AivmNodeRecord* node;
