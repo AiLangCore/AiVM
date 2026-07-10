@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACTS_FILE="${ROOT_DIR}/src/sys/aivm_syscall_contracts.c"
-DOCS_FILE="${ROOT_DIR}/Docs/Syscalls.md"
+SPEC_FILE="${ROOT_DIR}/SPEC/SYSCALLS.md"
 TEST_FILE="${ROOT_DIR}/tests/unit/syscalls/test_syscall_contracts.c"
 TMP_DIR="${ROOT_DIR}/.tmp/syscall-contract-check"
 CONTRACT_LIST="${TMP_DIR}/contracts.txt"
@@ -34,8 +34,8 @@ if [ -n "${duplicate_targets}" ]; then
   exit 1
 fi
 
-if [ ! -f "${DOCS_FILE}" ]; then
-  echo "syscall check: missing ${DOCS_FILE}" >&2
+if [ ! -f "${SPEC_FILE}" ]; then
+  echo "syscall check: missing ${SPEC_FILE}" >&2
   exit 1
 fi
 
@@ -47,8 +47,8 @@ while read -r _id target; do
     echo "syscall check: ${target} is missing a syscall capability group" >&2
     missing_capability=1
   fi
-  if ! grep -qF "\`${target}\`" "${DOCS_FILE}"; then
-    echo "syscall check: ${target} is missing from Docs/Syscalls.md" >&2
+  if ! grep -qF "\`${target}\`" "${SPEC_FILE}"; then
+    echo "syscall check: ${target} is missing from SPEC/SYSCALLS.md" >&2
     missing_docs=1
   fi
   if ! grep -qF "\"${target}\"" "${TEST_FILE}"; then

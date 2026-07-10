@@ -11,6 +11,7 @@ parity_loop_stmt_break_exit|./tools/ailang run tests/golden/parity_cases/loop_st
 parity_loop_break_continue|./tools/ailang run tests/golden/parity_cases/loop_break_continue.aos|cat tests/golden/parity_cases/loop_break_continue.out
 parity_sdk_import_formatted_attrs|./tools/ailang run tests/golden/parity_cases/sdk_import_formatted_attrs.aos|cat tests/golden/parity_cases/sdk_import_formatted_attrs.out
 parity_dynamic_call|./tools/ailang run tests/golden/parity_cases/dynamic_call.aos|cat tests/golden/parity_cases/dynamic_call.out
+parity_dynamic_optional_call|./tools/ailang run tests/golden/parity_cases/dynamic_optional_call.aos|cat tests/golden/parity_cases/dynamic_optional_call.out
 parity_repl_sys_success|./tools/ailang repl < tests/golden/parity_cases/repl_sys_success.in|cat tests/golden/parity_cases/repl_sys_success.out
 parity_repl_sys_error|./tools/ailang repl < tests/golden/parity_cases/repl_sys_error.in|cat tests/golden/parity_cases/repl_sys_error.out
 parity_repl_ui_drawline_error|./tools/ailang repl < tests/golden/parity_cases/repl_ui_drawline_error.in|cat tests/golden/parity_cases/repl_ui_drawline_error.out

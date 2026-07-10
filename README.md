@@ -13,7 +13,7 @@ For normative runtime specifications, see [SPEC/README.md](SPEC/README.md).
 This repository owns the native C AiVM implementation. It is intentionally
 independent from the AiLang compiler and AiVectra UI SDK.
 
-Current public beta: `v0.0.1-beta.2`.
+Current public beta: `v0.0.1-beta.4`.
 
 Install the public AiLangCore SDK, including `aivm`:
 

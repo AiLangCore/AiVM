@@ -2,6 +2,24 @@
 
 All notable changes to AiVM are documented in this file.
 
+## [0.0.1-beta.4] - 2026-07-10
+
+### Added
+
+- Added the `STR_SCALAR_LENGTH` intrinsic opcode for deterministic UTF-8 scalar
+  counting, with unit and performance coverage.
+- Added a normative syscall inventory to `SPEC/SYSCALLS.md`.
+
+### Changed
+
+- Updated syscall-contract verification to enforce the normative spec rather
+  than the retired compatibility pointer under `Docs/`.
+
+### Notes
+
+- This beta verifies the native C runtime through the full CTest release gate,
+  including syscall-contract, debug-artifact, and package-dispatch coverage.
+
 ## [0.0.1-beta.2] - 2026-05-27
 
 ### Added

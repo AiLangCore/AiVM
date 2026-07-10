@@ -88,6 +88,127 @@ A conforming AiVM build must keep these in sync:
 - `tests/unit/syscalls/test_syscall_contracts.c`
 - `scripts/check-syscall-contracts.sh`
 
+## Current Contract Inventory
+
+This inventory is the normative, human-readable list of registered syscall
+targets. The C contract table remains the executable source for numeric IDs,
+arity, value types, and capability metadata. The release verifier requires the
+two to remain in sync.
+
+| ID | Target |
+| --- | --- |
+| 5 | `sys.net.tcp.close` |
+| 6 | `sys.console.write` |
+| 7 | `sys.console.writeLine` |
+| 8 | `sys.console.readLine` |
+| 9 | `sys.console.readAllStdin` |
+| 10 | `sys.console.writeErrLine` |
+| 16 | `sys.stdout.writeLine` |
+| 11 | `sys.process.cwd` |
+| 12 | `sys.process.env.get` |
+| 18 | `sys.process.args` |
+| 105 | `sys.process.spawn` |
+| 106 | `sys.process.wait` |
+| 107 | `sys.process.kill` |
+| 108 | `sys.process.stdout.read` |
+| 109 | `sys.process.stderr.read` |
+| 110 | `sys.process.poll` |
+| 117 | `sys.remote.call` |
+| 120 | `sys.host.openDefault` |
+| 121 | `sys.image.decodeToRgbaBase64` |
+| 28 | `sys.platform` |
+| 29 | `sys.arch` |
+| 30 | `sys.os.version` |
+| 31 | `sys.runtime` |
+| 13 | `sys.time.nowUnixMs` |
+| 14 | `sys.time.monotonicMs` |
+| 15 | `sys.time.sleepMs` |
+| 122 | `sys.time.timeZoneId` |
+| 123 | `sys.time.timeZoneOffsetMinutesAt` |
+| 17 | `sys.process.exit` |
+| 19 | `sys.fs.file.read` |
+| 20 | `sys.fs.file.exists` |
+| 21 | `sys.fs.dir.list` |
+| 22 | `sys.fs.path.stat` |
+| 23 | `sys.fs.path.exists` |
+| 24 | `sys.fs.file.write` |
+| 25 | `sys.fs.dir.create` |
+| 103 | `sys.fs.file.delete` |
+| 104 | `sys.fs.dir.delete` |
+| 124 | `sys.fs.file.openRead` |
+| 125 | `sys.fs.file.readChunk` |
+| 126 | `sys.fs.file.close` |
+| 127 | `sys.fs.file.openWrite` |
+| 128 | `sys.fs.file.writeChunk` |
+| 42 | `sys.crypto.randomBytes` |
+| 27 | `sys.net.tcp.connect` |
+| 32 | `sys.net.tcp.listen` |
+| 33 | `sys.net.tcp.listenTls` |
+| 34 | `sys.net.tcp.accept` |
+| 35 | `sys.net.tcp.read` |
+| 36 | `sys.net.tcp.write` |
+| 61 | `sys.net.tcp.connectTls` |
+| 62 | `sys.net.tcp.connectStart` |
+| 63 | `sys.net.tcp.connectTlsStart` |
+| 64 | `sys.net.tcp.readStart` |
+| 65 | `sys.net.tcp.writeStart` |
+| 66 | `sys.net.async.poll` |
+| 67 | `sys.net.async.await` |
+| 68 | `sys.net.async.cancel` |
+| 69 | `sys.net.async.resultInt` |
+| 70 | `sys.net.async.resultBytes` |
+| 71 | `sys.net.async.error` |
+| 43 | `sys.net.udp.bind` |
+| 44 | `sys.net.udp.recv` |
+| 45 | `sys.net.udp.send` |
+| 46 | `sys.ui.createWindow` |
+| 47 | `sys.ui.beginFrame` |
+| 48 | `sys.ui.drawRect` |
+| 49 | `sys.ui.drawText` |
+| 50 | `sys.ui.endFrame` |
+| 51 | `sys.ui.pollEvent` |
+| 52 | `sys.ui.present` |
+| 53 | `sys.ui.closeWindow` |
+| 54 | `sys.ui.drawLine` |
+| 55 | `sys.ui.drawEllipse` |
+| 56 | `sys.ui.drawPath` |
+| 57 | `sys.ui.drawImage` |
+| 58 | `sys.ui.getWindowSize` |
+| 130 | `sys.runtime.platform` |
+| 131 | `sys.runtime.target` |
+| 132 | `sys.storage.local.available` |
+| 133 | `sys.storage.local.get` |
+| 134 | `sys.storage.local.set` |
+| 135 | `sys.storage.local.delete` |
+| 136 | `sys.storage.local.exists` |
+| 137 | `sys.storage.secure.available` |
+| 138 | `sys.storage.secure.get` |
+| 139 | `sys.storage.secure.set` |
+| 140 | `sys.storage.secure.delete` |
+| 141 | `sys.storage.secure.exists` |
+| 142 | `sys.ui.pushClipPath` |
+| 143 | `sys.ui.popClipPath` |
+| 129 | `sys.ui.measureText` |
+| 72 | `sys.ui.waitFrame` |
+| 73 | `sys.worker.start` |
+| 74 | `sys.worker.poll` |
+| 75 | `sys.worker.result` |
+| 76 | `sys.worker.error` |
+| 77 | `sys.worker.cancel` |
+| 78 | `sys.debug.emit` |
+| 79 | `sys.debug.mode` |
+| 80 | `sys.debug.captureFrameBegin` |
+| 81 | `sys.debug.captureFrameEnd` |
+| 82 | `sys.debug.captureDraw` |
+| 83 | `sys.debug.captureInput` |
+| 84 | `sys.debug.captureState` |
+| 85 | `sys.debug.replayLoad` |
+| 86 | `sys.debug.replayNext` |
+| 87 | `sys.debug.assert` |
+| 88 | `sys.debug.artifactWrite` |
+| 89 | `sys.debug.traceAsync` |
+| 115 | `sys.debug.taskReclaimStats` |
+
 ## Host-Boundary Categories
 
 The current syscall surface includes host-boundary targets for:

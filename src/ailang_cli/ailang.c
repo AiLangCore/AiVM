@@ -7222,7 +7222,6 @@ static int simple_compile_dynamic_call_ext(
     size_t end_jumps[128];
     size_t end_jump_count = 0U;
     size_t i;
-    int matched_candidate = 0;
     char candidates[512];
     int has_candidates = 0;
     if (node == NULL || program == NULL || locals == NULL || ctx == NULL) {
@@ -7298,7 +7297,6 @@ static int simple_compile_dynamic_call_ext(
             return simple_fail("dynamic call end jump emit failed");
         }
         program->instruction_storage[jump_false_ip].operand_int = (int64_t)program->instruction_count;
-        matched_candidate = 1;
     }
     {
         size_t missing_target_idx = 0U;
@@ -7311,12 +7309,6 @@ static int simple_compile_dynamic_call_ext(
     }
     for (i = 0U; i < end_jump_count; i += 1U) {
         program->instruction_storage[end_jumps[i]].operand_int = (int64_t)program->instruction_count;
-    }
-    if (!matched_candidate) {
-        if (has_candidates) {
-            return simple_failf("dynamic call has no matching candidate with %llu args", (unsigned long long)arg_count);
-        }
-        return simple_failf("dynamic call has no functions with %llu args", (unsigned long long)arg_count);
     }
     return 1;
 }
