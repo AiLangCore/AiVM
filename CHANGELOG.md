@@ -2,6 +2,24 @@
 
 All notable changes to AiVM are documented in this file.
 
+## [0.0.1-rc.4] - 2026-07-10
+
+### Changed
+
+- Restored the release channel after the incorrectly labeled `v0.0.1-beta.4`
+  prerelease. This release continues the existing RC line from `v0.0.1-rc.3`.
+
+### Added
+
+- Added the `STR_SCALAR_LENGTH` intrinsic opcode for deterministic UTF-8 scalar
+  counting, with unit and performance coverage.
+- Added a normative syscall inventory to `SPEC/SYSCALLS.md`.
+
+### Fixed
+
+- Updated syscall-contract verification to enforce the normative spec rather
+  than the retired compatibility pointer under `Docs/`.
+
 ## [0.0.1-beta.4] - 2026-07-10
 
 ### Added
