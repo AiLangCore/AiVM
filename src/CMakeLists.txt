@@ -734,6 +734,12 @@ if (BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/../../..
             )
             add_test(
+                NAME aivm_test_process_exit_lifecycle
+                COMMAND bash
+                    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/integration/ctest_process_exit_lifecycle.sh
+                    ${CMAKE_CURRENT_SOURCE_DIR}/..
+            )
+            add_test(
                 NAME aivm_test_wasm_golden
                 COMMAND bash
                     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/golden/ctest_wasm_golden.sh

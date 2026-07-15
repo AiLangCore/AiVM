@@ -4185,6 +4185,7 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
         case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
         case AIVM_OP_STR_SCALAR_LENGTH: return "STR_SCALAR_LENGTH";
+        case AIVM_OP_VALUE_KIND: return "VALUE_KIND";
         case AIVM_OP_NODE_KIND: return "NODE_KIND";
         case AIVM_OP_NODE_ID: return "NODE_ID";
         case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
@@ -4446,13 +4447,27 @@ static int run_native_compiled_program(
     int ok;
     int exit_code = 0;
     int has_exit_code = 0;
+    int bool_result = 0;
+    int has_bool_result = 0;
+    /* The `ailang` executable hosts compiler and package workloads. Published
+     * applications select their target runtime profile independently. */
+    AivmRuntimeProfile runtime_profile = AIVM_RUNTIME_PROFILE_TOOLING;
+    const char* requested_runtime_profile;
     char diagnostics_line[768];
 
     if (program == NULL) {
         (void)write_native_debug_bundle(debug_options, NULL, NULL, 0, 0, "program-null");
         return 2;
     }
+    requested_runtime_profile = getenv("AILANG_VM_PROFILE");
+    if (requested_runtime_profile != NULL && requested_runtime_profile[0] != '\0' &&
+        !aivm_runtime_profile_from_name(requested_runtime_profile, &runtime_profile)) {
+        fprintf(stderr, "ailang: invalid AILANG_VM_PROFILE: %s\n", requested_runtime_profile);
+        return 2;
+    }
     g_native_active_vm = &vm;
+    g_native_process_exit_requested = 0;
+    g_native_process_exit_code = 0;
     g_airun_live_debug_options = debug_options;
     g_airun_live_debug_program = program;
     g_airun_live_debug_vm = &vm;
@@ -4722,12 +4737,13 @@ static int run_native_compiled_program(
     } else {
         g_native_trace_real_binding_count = 0U;
     }
-    ok = aivm_execute_program_with_syscalls_and_argv(
+    ok = aivm_execute_program_with_syscalls_and_argv_profile(
         program,
         bindings,
         binding_count,
         process_argv,
         process_argv_count,
+        runtime_profile,
         &vm);
     if (!ok || vm.status == AIVM_VM_STATUS_ERROR) {
         const char* detail = aivm_vm_error_detail(&vm);
@@ -4758,7 +4774,14 @@ static int run_native_compiled_program(
         if (top->type == AIVM_VAL_INT) {
             has_exit_code = 1;
             exit_code = (int)top->int_value;
+        } else if (top->type == AIVM_VAL_BOOL) {
+            has_bool_result = 1;
+            bool_result = top->bool_value ? 1 : 0;
         }
+    }
+    if (g_native_process_exit_requested) {
+        has_exit_code = 1;
+        exit_code = g_native_process_exit_code;
     }
     (void)snprintf(
         diagnostics_line,
@@ -4779,9 +4802,16 @@ static int run_native_compiled_program(
     g_airun_live_debug_refresh_counter = 0U;
     g_airun_live_debug_emit_bundle = 0;
     g_native_active_vm = NULL;
+    if (g_native_process_exit_requested) {
+        g_native_process_exit_requested = 0;
+        return exit_code;
+    }
     if (has_exit_code) {
         printf("Ok#ok1(type=int value=%d)\n", exit_code);
         return exit_code;
+    }
+    if (has_bool_result) {
+        printf("Ok#ok1(type=bool value=%s)\n", bool_result ? "true" : "false");
     }
     return 0;
 }
@@ -5063,6 +5093,7 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(PAR_CANCEL)
     MAP_OP(STR_UTF8_BYTE_COUNT)
     MAP_OP(STR_SCALAR_LENGTH)
+    MAP_OP(VALUE_KIND)
     MAP_OP(NODE_KIND)
     MAP_OP(NODE_ID)
     MAP_OP(ATTR_COUNT)
@@ -6811,11 +6842,19 @@ static int source_graph_hash_file(
     source_graph_hash_update_pair(hash_state_a, hash_state_b, (const unsigned char*)text, text_len);
     source_graph_hash_update_pair_text(hash_state_a, hash_state_b, "\n");
 
-    program_pos = strstr(text, "Program#");
-    if (program_pos == NULL) {
-        program_pos = strstr(text, "Program");
+    program_pos = text;
+    while (*program_pos == ' ' || *program_pos == '\t' || *program_pos == '\r' || *program_pos == '\n') {
+        program_pos += 1;
     }
-    if (program_pos == NULL) {
+    if (strncmp(program_pos, "Program", 7U) != 0 ||
+        (program_pos[7] != '\0' &&
+         program_pos[7] != '#' &&
+         program_pos[7] != '(' &&
+         program_pos[7] != '{' &&
+         program_pos[7] != ' ' &&
+         program_pos[7] != '\t' &&
+         program_pos[7] != '\r' &&
+         program_pos[7] != '\n')) {
         free(text);
         return 1;
     }
@@ -6943,11 +6982,19 @@ static int simple_collect_from_file(SimpleCompileContext* ctx, const char* path,
         /* continue; collection idempotence is handled by func dedupe */
     }
 
-    program_pos = strstr(ctx->sources[(size_t)source_index].text, "Program#");
-    if (program_pos == NULL) {
-        program_pos = strstr(ctx->sources[(size_t)source_index].text, "Program");
+    program_pos = ctx->sources[(size_t)source_index].text;
+    while (*program_pos == ' ' || *program_pos == '\t' || *program_pos == '\r' || *program_pos == '\n') {
+        program_pos += 1;
     }
-    if (program_pos == NULL) {
+    if (strncmp(program_pos, "Program", 7U) != 0 ||
+        (program_pos[7] != '\0' &&
+         program_pos[7] != '#' &&
+         program_pos[7] != '(' &&
+         program_pos[7] != '{' &&
+         program_pos[7] != ' ' &&
+         program_pos[7] != '\t' &&
+         program_pos[7] != '\r' &&
+         program_pos[7] != '\n')) {
         return simple_failf("collect: missing Program in %s", path);
     }
     open_brace = strchr(program_pos, '{');
@@ -7737,6 +7784,7 @@ static int simple_compile_expr_ext(
         strcmp(node->kind, "AttrValueString") == 0 || strcmp(node->kind, "AttrValueInt") == 0 ||
         strcmp(node->kind, "AttrValueBool") == 0 || strcmp(node->kind, "AttrValueKind") == 0 ||
         strcmp(node->kind, "ChildCount") == 0 || strcmp(node->kind, "ChildAt") == 0 ||
+        strcmp(node->kind, "ValueKind") == 0 ||
         strcmp(node->kind, "NodeKind") == 0 || strcmp(node->kind, "NodeId") == 0) {
         const char* c = node->body_start;
         SimpleNodeView first;
@@ -7744,6 +7792,7 @@ static int simple_compile_expr_ext(
         if (strcmp(node->kind, "ToString") == 0 ||
             strcmp(node->kind, "AttrCount") == 0 ||
             strcmp(node->kind, "ChildCount") == 0 ||
+            strcmp(node->kind, "ValueKind") == 0 ||
             strcmp(node->kind, "NodeKind") == 0 ||
             strcmp(node->kind, "NodeId") == 0) {
             if (!simple_parse_next_node(c, node->body_end, &first)) {
@@ -7755,6 +7804,7 @@ static int simple_compile_expr_ext(
             if (strcmp(node->kind, "ToString") == 0) return simple_emit_instruction(program, AIVM_OP_TO_STRING, 0);
             if (strcmp(node->kind, "AttrCount") == 0) return simple_emit_instruction(program, AIVM_OP_ATTR_COUNT, 0);
             if (strcmp(node->kind, "ChildCount") == 0) return simple_emit_instruction(program, AIVM_OP_CHILD_COUNT, 0);
+            if (strcmp(node->kind, "ValueKind") == 0) return simple_emit_instruction(program, AIVM_OP_VALUE_KIND, 0);
             if (strcmp(node->kind, "NodeKind") == 0) return simple_emit_instruction(program, AIVM_OP_NODE_KIND, 0);
             return simple_emit_instruction(program, AIVM_OP_NODE_ID, 0);
         }
@@ -8172,9 +8222,23 @@ static int simple_compile_fn_by_index(SimpleCompileContext* ctx, size_t fn_index
     return 1;
 }
 
+static void simple_compile_context_destroy(SimpleCompileContext* ctx)
+{
+    size_t index;
+
+    if (ctx == NULL) {
+        return;
+    }
+    for (index = 0U; index < ctx->source_count; index += 1U) {
+        free(ctx->sources[index].text);
+        ctx->sources[index].text = NULL;
+    }
+    free(ctx);
+}
+
 static int parse_simple_program_graph_to_program_file(const char* aos_path, AivmProgram* out_program)
 {
-    SimpleCompileContext ctx;
+    SimpleCompileContext* ctx;
     size_t entry_index;
     size_t bootstrap_call_ip;
     size_t i;
@@ -8182,18 +8246,24 @@ static int parse_simple_program_graph_to_program_file(const char* aos_path, Aivm
     if (aos_path == NULL || out_program == NULL) {
         return simple_fail("graph compile: invalid args");
     }
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.program = out_program;
-    ctx.next_local_slot = 0U;
+    ctx = (SimpleCompileContext*)calloc(1U, sizeof(*ctx));
+    if (ctx == NULL) {
+        return simple_fail("graph compile: allocation failed");
+    }
+    ctx->program = out_program;
+    ctx->next_local_slot = 0U;
 
-    if (!simple_collect_from_file(&ctx, aos_path, 1)) {
+    if (!simple_collect_from_file(ctx, aos_path, 1)) {
+        simple_compile_context_destroy(ctx);
         return 0;
     }
-    if (ctx.entry_export[0] == '\0') {
-        (void)snprintf(ctx.entry_export, sizeof(ctx.entry_export), "%s", "start");
+    if (ctx->entry_export[0] == '\0') {
+        (void)snprintf(ctx->entry_export, sizeof(ctx->entry_export), "%s", "start");
     }
-    if (!simple_find_func(&ctx, ctx.entry_export, &entry_index)) {
-        return simple_failf("entry export '%s' not found", ctx.entry_export);
+    if (!simple_find_func(ctx, ctx->entry_export, &entry_index)) {
+        int failed = simple_failf("entry export '%s' not found", ctx->entry_export);
+        simple_compile_context_destroy(ctx);
+        return failed;
     }
 
     aivm_program_clear(out_program);
@@ -8205,14 +8275,17 @@ static int parse_simple_program_graph_to_program_file(const char* aos_path, Aivm
     {
         char params[SIMPLE_MAX_LOCALS][64];
         size_t param_count = 0U;
-        if (!simple_split_params(ctx.funcs[entry_index].params_raw, params, &param_count)) {
-            return simple_failf("graph compile: invalid entry params for %s", ctx.funcs[entry_index].name);
+        if (!simple_split_params(ctx->funcs[entry_index].params_raw, params, &param_count)) {
+            int failed = simple_failf("graph compile: invalid entry params for %s", ctx->funcs[entry_index].name);
+            simple_compile_context_destroy(ctx);
+            return failed;
         }
         if (param_count > 0U) {
             size_t argv_target = 0U;
             if (!simple_add_string_const(out_program, "sys.process.args", &argv_target) ||
                 !simple_emit_instruction(out_program, AIVM_OP_CONST, (int64_t)argv_target) ||
                 !simple_emit_instruction(out_program, AIVM_OP_CALL_SYS, 0)) {
+                simple_compile_context_destroy(ctx);
                 return simple_fail("graph compile: failed emitting argv bootstrap");
             }
         }
@@ -8220,38 +8293,42 @@ static int parse_simple_program_graph_to_program_file(const char* aos_path, Aivm
     bootstrap_call_ip = out_program->instruction_count;
     if (!simple_emit_instruction(out_program, AIVM_OP_CALL, 0) ||
         !simple_emit_instruction(out_program, AIVM_OP_HALT, 0)) {
+        simple_compile_context_destroy(ctx);
         return simple_fail("graph compile: failed emitting bootstrap call/halt");
     }
 
-    if (!simple_compile_fn_by_index(&ctx, entry_index)) {
+    if (!simple_compile_fn_by_index(ctx, entry_index)) {
+        simple_compile_context_destroy(ctx);
         return 0;
     }
-    out_program->instruction_storage[bootstrap_call_ip].operand_int = (int64_t)ctx.funcs[entry_index].entry_ip;
+    out_program->instruction_storage[bootstrap_call_ip].operand_int = (int64_t)ctx->funcs[entry_index].entry_ip;
 
-    for (i = 0U; i < ctx.fixup_count; i += 1U) {
+    for (i = 0U; i < ctx->fixup_count; i += 1U) {
         size_t target_index;
-        if (!simple_find_func(&ctx, ctx.fixups[i].target, &target_index)) {
-            return simple_failf("unresolved call target %s", ctx.fixups[i].target);
+        if (!simple_find_func(ctx, ctx->fixups[i].target, &target_index)) {
+            int failed = simple_failf("unresolved call target %s", ctx->fixups[i].target);
+            simple_compile_context_destroy(ctx);
+            return failed;
         }
-        if (!ctx.funcs[target_index].compiled) {
-            if (!simple_compile_fn_by_index(&ctx, target_index)) {
+        if (!ctx->funcs[target_index].compiled) {
+            if (!simple_compile_fn_by_index(ctx, target_index)) {
+                simple_compile_context_destroy(ctx);
                 return 0;
             }
         }
-        if (ctx.fixups[i].instruction_index >= out_program->instruction_count) {
+        if (ctx->fixups[i].instruction_index >= out_program->instruction_count) {
+            simple_compile_context_destroy(ctx);
             return simple_fail("call fixup index out of range");
         }
-        out_program->instruction_storage[ctx.fixups[i].instruction_index].operand_int =
-            (int64_t)ctx.funcs[target_index].entry_ip;
+        out_program->instruction_storage[ctx->fixups[i].instruction_index].operand_int =
+            (int64_t)ctx->funcs[target_index].entry_ip;
     }
 
-    for (i = 0U; i < ctx.source_count; i += 1U) {
-        free(ctx.sources[i].text);
-        ctx.sources[i].text = NULL;
-    }
     if (out_program->instruction_count == 0U) {
+        simple_compile_context_destroy(ctx);
         return simple_fail("graph compile: produced empty program");
     }
+    simple_compile_context_destroy(ctx);
     return 1;
 }
 
@@ -10936,7 +11013,7 @@ static int build_input_to_aibc1(
     char cache_key[40];
     char cache_key_dir[PATH_MAX];
     char cache_app_path[PATH_MAX];
-    AivmProgram program;
+    AivmProgram* program = NULL;
     int explicit_aibc1_input;
     int explicit_aos_input;
 
@@ -11015,13 +11092,19 @@ static int build_input_to_aibc1(
         }
     }
 
-    if (parse_bytecode_aos_to_program_file(source_aos, &program, 0) ||
-        parse_simple_program_aos_to_program_file(source_aos, &program)) {
-        if (!write_program_as_aibc1(&program, out_app_path)) {
+    program = (AivmProgram*)calloc(1U, sizeof(*program));
+    if (program == NULL) {
+        set_native_build_error("failed allocating native build program");
+        return 0;
+    }
+    if (parse_bytecode_aos_to_program_file(source_aos, program, 0) ||
+        parse_simple_program_aos_to_program_file(source_aos, program)) {
+        if (!write_program_as_aibc1(program, out_app_path)) {
             set_native_build_errorf(
                 "failed writing app.aibc1 (inst=%llu const=%llu)",
-                (unsigned long long)program.instruction_count,
-                (unsigned long long)program.constant_count);
+                (unsigned long long)program->instruction_count,
+                (unsigned long long)program->constant_count);
+            free(program);
             return 0;
         }
         if (use_cache &&
@@ -11032,8 +11115,11 @@ static int build_input_to_aibc1(
             join_path(cache_key_dir, "app.aibc1", cache_app_path, sizeof(cache_app_path))) {
             (void)copy_file(out_app_path, cache_app_path);
         }
+        free(program);
         return 1;
     }
+
+    free(program);
 
     {
         const char* detail = simple_last_error();

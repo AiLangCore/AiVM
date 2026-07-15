@@ -32,8 +32,8 @@ static int ensure_bytes_arena_capacity(AivmVm* vm, size_t needed)
     if (vm == NULL) {
         return 0;
     }
-    while (needed > vm->bytes_arena_limit && vm->bytes_arena_limit < AIVM_VM_BYTES_ARENA_CAPACITY) {
-        vm->bytes_arena_limit = arena_grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, AIVM_VM_BYTES_ARENA_CAPACITY);
+    while (needed > vm->bytes_arena_limit && vm->bytes_arena_limit < vm->bytes_arena_capacity) {
+        vm->bytes_arena_limit = arena_grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, vm->bytes_arena_capacity);
     }
     return needed <= vm->bytes_arena_limit;
 }
@@ -163,7 +163,7 @@ static int compact_relocate_value_bytes(
     }
     if (*relocation_count >= relocation_capacity ||
         !aivm_size_add_checked(*new_used, value->bytes_value.length, &next_used) ||
-        next_used > AIVM_VM_BYTES_ARENA_CAPACITY) {
+        next_used > vm->bytes_arena_capacity) {
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded during compaction.");
         return 0;
     }
@@ -207,11 +207,13 @@ int aivm_compact_bytes_arena(AivmVm* vm)
     }
     if (relocation_capacity == 0U) {
         vm->bytes_arena_used = 0U;
-        vm->bytes_arena_gc_threshold = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+        vm->bytes_arena_gc_threshold = vm->bytes_arena_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
+            ? vm->bytes_arena_capacity
+            : AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
         return 1;
     }
     live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
-    new_arena = (uint8_t*)calloc(AIVM_VM_BYTES_ARENA_CAPACITY, sizeof(new_arena[0]));
+    new_arena = (uint8_t*)calloc(vm->bytes_arena_capacity, sizeof(new_arena[0]));
     relocations = (AivmBytesRelocation*)calloc(relocation_capacity, sizeof(relocations[0]));
     if (live_pairs == NULL || new_arena == NULL || relocations == NULL) {
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena compaction workspace allocation failed.");
@@ -248,11 +250,12 @@ int aivm_compact_bytes_arena(AivmVm* vm)
 #undef RELOCATE_BYTES
     old_arena = vm->bytes_arena;
     vm->bytes_arena = new_arena;
+    vm->bytes_arena_storage_capacity = vm->bytes_arena_capacity;
     vm->bytes_arena_used = new_used;
     vm->bytes_arena_gc_threshold = arena_grow_limit(
         new_used,
         AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY,
-        AIVM_VM_BYTES_ARENA_CAPACITY);
+        vm->bytes_arena_capacity);
     free(old_arena);
     free(live_pairs);
     free(relocations);

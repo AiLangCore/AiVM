@@ -29,7 +29,7 @@ profile limit record.
 | `call_frame_capacity` | 2048 | Maximum active call frames. |
 | `locals_capacity` | 16384 | Maximum VM local slots. |
 | `string_arena_capacity` | 2097152 | Maximum VM-owned string arena bytes. |
-| `bytes_arena_capacity` | 131072 | Maximum VM-owned byte arena bytes. |
+| `bytes_arena_capacity` | profile-dependent | Maximum VM-owned byte arena bytes. |
 | `node_capacity` | 16384 | Maximum semantic node records. |
 | `node_attr_capacity` | 65536 | Maximum semantic node attributes. |
 | `node_child_capacity` | 131072 | Maximum semantic node child handles. |
@@ -42,7 +42,7 @@ Additional bytecode loader limits:
 | Loader limit | Current value | Notes |
 | --- | ---: | --- |
 | `program_section_capacity` | 32 | Maximum AiBC1 sections. |
-| `program_instruction_capacity` | 16384 | Maximum AiBC1 instructions. |
+| `program_instruction_capacity` | 32768 | Maximum AiBC1 instructions. This leaves sufficient bounded capacity for the self-hosted compiler and linker while preserving deterministic loader failure above the limit. |
 | `program_constant_capacity` | 1024 | Maximum AiBC1 constants. |
 | `program_string_storage_capacity` | 8192 | Maximum loaded program string bytes. |
 | `program_bytes_storage_capacity` | 32768 | Maximum loaded program byte storage. |
@@ -50,6 +50,22 @@ Additional bytecode loader limits:
 The VM must fail deterministically when these limits are exceeded. Raising a
 limit is not the default fix for compiler/parser failures; first measure
 retained roots and reduce temporary structures.
+
+### Profile-Specific Arena Limits
+
+The production VM remains bounded for deployed applications. The tooling
+profile has a separately bounded byte arena because compiler and package
+workloads must hold source modules larger than the production payload budget.
+
+| Profile | `bytes_arena_capacity` | Intended workload |
+| --- | ---: | --- |
+| `production` | 131072 | Published application execution. |
+| `debug` | 131072 | Diagnostic execution with production-sized memory behavior. |
+| `tooling` | 4194304 | Compiler, parser, linker, package, and SDK execution. |
+
+The `ailang` tool host defaults to `tooling`. `AILANG_VM_PROFILE` may select a
+different named profile explicitly. This changes only bounded runtime resource
+limits and capability policy; it does not change AiLang semantics.
 
 ## Diagnostic Visibility
 

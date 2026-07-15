@@ -389,7 +389,7 @@ static int test_gc_policy_requires_interval_even_under_pressure(void)
     return 0;
 }
 
-static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
+static int test_gc_policy_does_not_compact_observational_pressure(void)
 {
     static AivmVm vm;
     static AivmInstruction instructions[(AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS + 1U) * 3U + 1U];
@@ -441,19 +441,19 @@ static int test_gc_policy_triggers_when_interval_and_pressure_align(void)
     if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+    if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_attempt_count == 1U) != 0) {
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_reclaimed_nodes == (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
+    if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_allocations_since_gc == 1U) != 0) {
+    if (expect(vm.node_allocations_since_gc >= (size_t)AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS) != 0) {
         return 1;
     }
-    if (expect(vm.node_count == (size_t)(AIVM_VM_NODE_GC_PRESSURE_THRESHOLD + 1U)) != 0) {
+    if (expect(vm.node_count > (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) != 0) {
         return 1;
     }
 
@@ -805,6 +805,82 @@ static int test_pressure_counters_remain_zero_on_successful_run(void)
     return 0;
 }
 
+static int test_tooling_profile_allocates_tooling_node_arenas(void)
+{
+    static AivmVm production_vm;
+    static AivmVm tooling_vm;
+    AivmRuntimeProfileLimits tooling_limits = aivm_runtime_profile_limits(AIVM_RUNTIME_PROFILE_TOOLING);
+
+    aivm_init_with_profile(&production_vm, NULL, AIVM_RUNTIME_PROFILE_PRODUCTION);
+    aivm_init_with_profile(&tooling_vm, NULL, AIVM_RUNTIME_PROFILE_TOOLING);
+
+    if (expect(production_vm.node_capacity == AIVM_VM_NODE_CAPACITY) != 0 ||
+        expect(production_vm.node_attr_capacity == AIVM_VM_NODE_ATTR_CAPACITY) != 0 ||
+        expect(production_vm.node_child_capacity == AIVM_VM_NODE_CHILD_CAPACITY) != 0 ||
+        expect(tooling_vm.runtime_profile == AIVM_RUNTIME_PROFILE_TOOLING) != 0 ||
+        expect(tooling_vm.node_capacity == tooling_limits.node_capacity) != 0 ||
+        expect(tooling_vm.node_attr_capacity == tooling_limits.node_attr_capacity) != 0 ||
+        expect(tooling_vm.node_child_capacity == tooling_limits.node_child_capacity) != 0 ||
+        expect(production_vm.bytes_arena_capacity == AIVM_VM_BYTES_ARENA_CAPACITY) != 0 ||
+        expect(tooling_vm.bytes_arena_capacity == tooling_limits.bytes_arena_capacity) != 0 ||
+        expect(tooling_vm.bytes_arena_capacity > production_vm.bytes_arena_capacity) != 0 ||
+        expect(tooling_vm.node_capacity > production_vm.node_capacity) != 0) {
+        return 1;
+    }
+
+    aivm_dispose(&production_vm);
+    aivm_dispose(&tooling_vm);
+    return 0;
+}
+
+static int test_tooling_profile_materializes_large_bytes(void)
+{
+    static AivmVm vm;
+    AivmValue result;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 1 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.fs.file.read" },
+        { .type = AIVM_VAL_STRING, .string_value = "ignored" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 4U,
+        .constants = constants,
+        .constant_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.fs.file.read", host_core_bytes_large }
+    };
+
+    aivm_init_with_syscalls_and_argv_profile(
+        &vm,
+        &program,
+        bindings,
+        1U,
+        NULL,
+        0U,
+        AIVM_RUNTIME_PROFILE_TOOLING);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0 ||
+        expect(vm.bytes_arena_pressure_count == 0U) != 0 ||
+        expect(aivm_stack_pop(&vm, &result) == 1) != 0 ||
+        expect(result.type == AIVM_VAL_BYTES) != 0 ||
+        expect(result.bytes_value.length == AIVM_VM_BYTES_ARENA_CAPACITY + 1U) != 0) {
+        aivm_dispose(&vm);
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -837,7 +913,7 @@ int main(void)
     if (test_gc_policy_requires_interval_even_under_pressure() != 0) {
         return 1;
     }
-    if (test_gc_policy_triggers_when_interval_and_pressure_align() != 0) {
+    if (test_gc_policy_does_not_compact_observational_pressure() != 0) {
         return 1;
     }
     if (test_gc_counters_saturate_without_wrapping() != 0) {
@@ -856,6 +932,12 @@ int main(void)
         return 1;
     }
     if (test_pressure_counters_remain_zero_on_successful_run() != 0) {
+        return 1;
+    }
+    if (test_tooling_profile_allocates_tooling_node_arenas() != 0) {
+        return 1;
+    }
+    if (test_tooling_profile_materializes_large_bytes() != 0) {
         return 1;
     }
 

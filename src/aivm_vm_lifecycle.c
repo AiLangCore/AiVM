@@ -49,9 +49,14 @@ void aivm_reset_state(AivmVm* vm)
     vm->string_arena_used = 0U;
     vm->string_arena_limit = AIVM_VM_STRING_ARENA_INITIAL_CAPACITY;
     vm->string_arena[0] = '\0';
+    vm->utf8_offset_cache_text = NULL;
+    vm->utf8_offset_cache_rune = 0U;
+    vm->utf8_offset_cache_byte = 0U;
     vm->bytes_arena_used = 0U;
-    vm->bytes_arena_limit = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
-    vm->bytes_arena_gc_threshold = AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+    vm->bytes_arena_limit = vm->bytes_arena_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
+        ? vm->bytes_arena_capacity
+        : AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+    vm->bytes_arena_gc_threshold = vm->bytes_arena_limit;
     vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
@@ -112,6 +117,8 @@ void aivm_dispose(AivmVm* vm)
     vm->locals = NULL;
     vm->string_arena = NULL;
     vm->bytes_arena = NULL;
+    vm->bytes_arena_capacity = 0U;
+    vm->bytes_arena_storage_capacity = 0U;
     vm->nodes = NULL;
     vm->node_attrs = NULL;
     vm->node_children = NULL;
@@ -128,13 +135,18 @@ void aivm_dispose(AivmVm* vm)
 
 void aivm_init(AivmVm* vm, const AivmProgram* program)
 {
+    aivm_init_with_profile(vm, program, aivm_runtime_default_profile());
+}
+
+void aivm_init_with_profile(AivmVm* vm, const AivmProgram* program, AivmRuntimeProfile profile)
+{
     if (vm == NULL) {
         return;
     }
     prepare_vm_for_init(vm);
 
     vm->program = program;
-    aivm_set_runtime_profile(vm, aivm_runtime_default_profile());
+    aivm_set_runtime_profile(vm, profile);
     vm->syscall_bindings = NULL;
     vm->syscall_binding_count = 0U;
     vm->process_argv = NULL;
@@ -159,13 +171,32 @@ void aivm_init_with_syscalls_and_argv(
     const char* const* process_argv,
     size_t process_argv_count)
 {
+    aivm_init_with_syscalls_and_argv_profile(
+        vm,
+        program,
+        bindings,
+        binding_count,
+        process_argv,
+        process_argv_count,
+        aivm_runtime_default_profile());
+}
+
+void aivm_init_with_syscalls_and_argv_profile(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count,
+    AivmRuntimeProfile profile)
+{
     if (vm == NULL) {
         return;
     }
     prepare_vm_for_init(vm);
 
     vm->program = program;
-    aivm_set_runtime_profile(vm, aivm_runtime_default_profile());
+    aivm_set_runtime_profile(vm, profile);
     vm->syscall_bindings = bindings;
     vm->syscall_binding_count = binding_count;
     vm->process_argv = process_argv;

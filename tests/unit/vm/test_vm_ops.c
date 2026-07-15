@@ -1603,6 +1603,16 @@ static int test_str_substring_reuses_interned_results(void)
         aivm_dispose(&vm);
         return 1;
     }
+    if (expect(vm.utf8_offset_cache_text == constants[0].string_value) != 0) {
+        aivm_dispose(&baseline_vm);
+        aivm_dispose(&vm);
+        return 1;
+    }
+    if (expect(vm.utf8_offset_cache_rune == 1U && vm.utf8_offset_cache_byte == 1U) != 0) {
+        aivm_dispose(&baseline_vm);
+        aivm_dispose(&vm);
+        return 1;
+    }
     aivm_dispose(&baseline_vm);
     aivm_dispose(&vm);
     return 0;
@@ -3325,6 +3335,58 @@ static int test_str_scalar_length_requires_string(void)
     return 0;
 }
 
+static int test_value_kind_classifies_runtime_values(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_VALUE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_MAKE_PAIR, .operand_int = 0 },
+        { .opcode = AIVM_OP_VALUE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_VALUE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_INT, .int_value = 7 },
+        { .type = AIVM_VAL_STRING, .string_value = "left" },
+        { .type = AIVM_VAL_BOOL, .bool_value = 1 },
+        { .type = AIVM_VAL_STRING, .string_value = "node1" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 10U,
+        .constants = constants,
+        .constant_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("node")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("pair")) == 1) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("int")) == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 static int test_node_ops_core_semantics(void)
 {
     static AivmVm vm;
@@ -3769,7 +3831,7 @@ static int test_node_compaction_reclaims_unreachable_nodes(void)
     return 0;
 }
 
-static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
+static int test_node_compaction_does_not_run_for_observational_pressure(void)
 {
     static AivmVm vm;
     static AivmInstruction instructions[(AIVM_VM_NODE_CAPACITY - 8U) * 3U + 3U];
@@ -3778,8 +3840,6 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
     size_t ip = 0U;
     size_t i;
     size_t transient_nodes = AIVM_VM_NODE_CAPACITY - 8U;
-    size_t expected_alloc_counter_after_compaction =
-        transient_nodes - (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD + 2U;
 
     constants[0] = aivm_value_string("tmp");
     for (i = 0U; i < transient_nodes; i += 1U) {
@@ -3818,25 +3878,19 @@ static int test_node_compaction_runs_before_capacity_when_pressure_is_high(void)
     if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_compaction_count > 0U) != 0) {
+    if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_attempt_count >= vm.node_gc_compaction_count) != 0) {
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_compaction_count >= 1U) != 0) {
+    if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
+    if (expect(vm.node_allocations_since_gc == transient_nodes + 1U) != 0) {
         return 1;
     }
-    if (expect(vm.node_allocations_since_gc > 0U) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_allocations_since_gc == expected_alloc_counter_after_compaction) != 0) {
-        return 1;
-    }
-    if (expect(vm.node_high_water < AIVM_VM_NODE_CAPACITY) != 0) {
+    if (expect(vm.node_high_water == vm.node_count) != 0) {
         return 1;
     }
     return 0;
@@ -4083,7 +4137,7 @@ static int test_return_boundary_runs_safe_point_compaction(void)
     return 0;
 }
 
-static int test_node_compaction_runs_on_child_pressure_before_node_threshold(void)
+static int test_node_compaction_does_not_run_on_child_pressure_before_capacity(void)
 {
     static AivmVm vm;
     size_t persistent_children = 17U;
@@ -4142,16 +4196,16 @@ static int test_node_compaction_runs_on_child_pressure_before_node_threshold(voi
     if (expect(vm.error == AIVM_VM_ERR_NONE) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_compaction_count > 0U) != 0) {
+    if (expect(vm.node_gc_compaction_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_attempt_count >= vm.node_gc_compaction_count) != 0) {
+    if (expect(vm.node_gc_attempt_count == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_gc_reclaimed_nodes > 0U) != 0) {
+    if (expect(vm.node_gc_reclaimed_nodes == 0U) != 0) {
         return 1;
     }
-    if (expect(vm.node_high_water < (size_t)AIVM_VM_NODE_GC_PRESSURE_THRESHOLD) != 0) {
+    if (expect(vm.node_high_water == vm.node_count) != 0) {
         return 1;
     }
     return 0;
@@ -5105,6 +5159,9 @@ int main(void)
     if (run_test("test_str_scalar_length_requires_string", test_str_scalar_length_requires_string) != 0) {
         return 1;
     }
+    if (run_test("test_value_kind_classifies_runtime_values", test_value_kind_classifies_runtime_values) != 0) {
+        return 1;
+    }
     if (run_test("test_node_ops_core_semantics", test_node_ops_core_semantics) != 0) {
         return 1;
     }
@@ -5126,7 +5183,7 @@ int main(void)
     if (run_test("test_node_compaction_reclaims_unreachable_nodes", test_node_compaction_reclaims_unreachable_nodes) != 0) {
         return 1;
     }
-    if (run_test("test_node_compaction_runs_before_capacity_when_pressure_is_high", test_node_compaction_runs_before_capacity_when_pressure_is_high) != 0) {
+    if (run_test("test_node_compaction_does_not_run_for_observational_pressure", test_node_compaction_does_not_run_for_observational_pressure) != 0) {
         return 1;
     }
     if (run_test("test_node_compaction_does_not_run_below_pressure_threshold", test_node_compaction_does_not_run_below_pressure_threshold) != 0) {
@@ -5138,7 +5195,7 @@ int main(void)
     if (run_test("test_return_boundary_runs_safe_point_compaction", test_return_boundary_runs_safe_point_compaction) != 0) {
         return 1;
     }
-    if (run_test("test_node_compaction_runs_on_child_pressure_before_node_threshold", test_node_compaction_runs_on_child_pressure_before_node_threshold) != 0) {
+    if (run_test("test_node_compaction_does_not_run_on_child_pressure_before_capacity", test_node_compaction_does_not_run_on_child_pressure_before_capacity) != 0) {
         return 1;
     }
     if (run_test("test_node_capacity_failure_resets_gc_allocation_counter", test_node_capacity_failure_resets_gc_allocation_counter) != 0) {

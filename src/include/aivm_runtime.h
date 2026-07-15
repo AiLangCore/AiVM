@@ -33,6 +33,14 @@ int aivm_execute_program_with_syscalls_and_argv(
     const char* const* process_argv,
     size_t process_argv_count,
     AivmVm* vm_out);
+int aivm_execute_program_with_syscalls_and_argv_profile(
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count,
+    AivmRuntimeProfile profile,
+    AivmVm* vm_out);
 AivmRuntimeHostEventStatus aivm_runtime_host_enqueue_event(
     const AivmRuntimeHostAdapter* adapter,
     const char* event_name,

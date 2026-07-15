@@ -61,6 +61,30 @@ static int snapshot_node_input_string(
     return 1;
 }
 
+static int prepare_compaction_scratch(
+    AivmVm* vm,
+    int64_t** remapped_children,
+    int64_t** handle_map,
+    size_t child_count)
+{
+    if (vm == NULL || remapped_children == NULL || handle_map == NULL) {
+        return 0;
+    }
+    if (*handle_map == NULL) {
+        *handle_map = (int64_t*)calloc(vm->node_capacity + 1U, sizeof((*handle_map)[0]));
+    } else {
+        memset(*handle_map, 0, (vm->node_capacity + 1U) * sizeof((*handle_map)[0]));
+    }
+    if (child_count > 0U && *remapped_children == NULL) {
+        *remapped_children = (int64_t*)calloc(child_count, sizeof((*remapped_children)[0]));
+    }
+    if (*handle_map == NULL || (child_count > 0U && *remapped_children == NULL)) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node compaction scratch allocation failed.");
+        return 0;
+    }
+    return 1;
+}
+
 int aivm_vm_create_node_record(
     AivmVm* vm,
     const char* kind,
@@ -93,16 +117,12 @@ int aivm_vm_create_node_record(
         aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Node attrs must be non-null when attr_count is non-zero.");
         return 0;
     }
-    remapped_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(int64_t));
-    handle_map = (int64_t*)calloc(AIVM_VM_NODE_CAPACITY + 1U, sizeof(int64_t));
     if (attr_count > 0U) {
         stable_attrs = (AivmNodeAttr*)calloc(attr_count, sizeof(stable_attrs[0]));
         attr_key_copies = (char**)calloc(attr_count, sizeof(attr_key_copies[0]));
         attr_value_copies = (char**)calloc(attr_count, sizeof(attr_value_copies[0]));
     }
-    if (remapped_children == NULL ||
-        handle_map == NULL ||
-        (attr_count > 0U && (stable_attrs == NULL || attr_key_copies == NULL || attr_value_copies == NULL))) {
+    if (attr_count > 0U && (stable_attrs == NULL || attr_key_copies == NULL || attr_value_copies == NULL)) {
         free(remapped_children);
         free(handle_map);
         free(stable_attrs);
@@ -135,6 +155,9 @@ int aivm_vm_create_node_record(
         }
     }
     if (aivm_vm_should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
+        if (!prepare_compaction_scratch(vm, &remapped_children, &handle_map, child_count)) {
+            goto fail;
+        }
         if (!aivm_vm_compact_node_arenas_with_map(vm, children, child_count, handle_map)) {
             goto fail;
         }
@@ -154,9 +177,12 @@ int aivm_vm_create_node_record(
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
         goto fail;
     }
-    if (needed_node_count > AIVM_VM_NODE_CAPACITY ||
-        needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-        needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+    if (needed_node_count > vm->node_capacity ||
+        needed_attr_count > vm->node_attr_capacity ||
+        needed_child_count > vm->node_child_capacity) {
+        if (!prepare_compaction_scratch(vm, &remapped_children, &handle_map, child_count)) {
+            goto fail;
+        }
         if (!aivm_vm_compact_node_arenas_with_map(vm, effective_children, child_count, handle_map)) {
             goto fail;
         }
@@ -171,9 +197,9 @@ int aivm_vm_create_node_record(
         if (!aivm_size_add_checked(vm->node_attr_count, attr_count, &needed_attr_count) ||
             !aivm_size_add_checked(vm->node_child_count, child_count, &needed_child_count) ||
             !aivm_size_add_checked(vm->node_count, 1U, &needed_node_count) ||
-            needed_node_count > AIVM_VM_NODE_CAPACITY ||
-            needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-            needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+            needed_node_count > vm->node_capacity ||
+            needed_attr_count > vm->node_attr_capacity ||
+            needed_child_count > vm->node_child_capacity) {
             aivm_counter_increment_saturating(&vm->node_arena_pressure_count);
             aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             goto fail;
@@ -196,7 +222,7 @@ int aivm_vm_create_node_record(
         size_t attr_slot = 0U;
         AivmNodeAttr* out_attr;
         if (!aivm_size_add_checked(vm->node_attr_count, i, &attr_slot) ||
-            attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+            attr_slot >= vm->node_attr_capacity) {
             aivm_counter_increment_saturating(&vm->node_arena_pressure_count);
             aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             goto fail;
@@ -222,7 +248,7 @@ int aivm_vm_create_node_record(
     for (i = 0U; i < child_count; i += 1U) {
         size_t child_slot = 0U;
         if (!aivm_size_add_checked(vm->node_child_count, i, &child_slot) ||
-            child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+            child_slot >= vm->node_child_capacity) {
             aivm_counter_increment_saturating(&vm->node_arena_pressure_count);
             aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM005: node arena capacity exceeded.");
             goto fail;

@@ -762,7 +762,7 @@ static size_t utf8_rune_count(const char* text)
     return count;
 }
 
-static size_t utf8_byte_offset_for_rune(const char* text, size_t rune_index)
+static size_t utf8_byte_offset_for_rune(AivmVm* vm, const char* text, size_t rune_index)
 {
     size_t byte_index = 0U;
     size_t current_rune = 0U;
@@ -770,12 +770,22 @@ static size_t utf8_byte_offset_for_rune(const char* text, size_t rune_index)
     if (text == NULL) {
         return 0U;
     }
+    if (vm != NULL && vm->utf8_offset_cache_text == text &&
+        vm->utf8_offset_cache_rune <= rune_index) {
+        byte_index = vm->utf8_offset_cache_byte;
+        current_rune = vm->utf8_offset_cache_rune;
+    }
     while (text[byte_index] != '\0' && current_rune < rune_index) {
         byte_index = utf8_next_index(text, byte_index);
         if (!aivm_size_add_checked(current_rune, 1U, &next_rune)) {
             return byte_index;
         }
         current_rune = next_rune;
+    }
+    if (vm != NULL) {
+        vm->utf8_offset_cache_text = text;
+        vm->utf8_offset_cache_rune = current_rune;
+        vm->utf8_offset_cache_byte = byte_index;
     }
     return byte_index;
 }
@@ -793,9 +803,7 @@ static size_t clamp_rune_index(int64_t value, size_t max_value)
 
 static int push_substring_by_runes(AivmVm* vm, const char* text, int64_t start, int64_t length)
 {
-    size_t rune_count;
     size_t start_rune;
-    size_t end_rune;
     size_t start_byte;
     size_t end_byte;
     size_t copy_length;
@@ -808,15 +816,19 @@ static int push_substring_by_runes(AivmVm* vm, const char* text, int64_t start, 
         return push_string_copy(vm, "");
     }
 
-    rune_count = utf8_rune_count(text);
-    start_rune = clamp_rune_index(start, rune_count);
-    end_rune = clamp_rune_index(start + length, rune_count);
-    if (end_rune < start_rune) {
-        end_rune = start_rune;
+    if (start <= 0) {
+        start_rune = 0U;
+    } else if ((uint64_t)start > (uint64_t)(size_t)-1) {
+        start_rune = (size_t)-1;
+    } else {
+        start_rune = (size_t)start;
     }
-
-    start_byte = utf8_byte_offset_for_rune(text, start_rune);
-    end_byte = utf8_byte_offset_for_rune(text, end_rune);
+    start_byte = utf8_byte_offset_for_rune(vm, text, start_rune);
+    end_byte = start_byte;
+    while (text[end_byte] != '\0' && length > 0) {
+        end_byte = utf8_next_index(text, end_byte);
+        length -= 1;
+    }
     copy_length = end_byte - start_byte;
     output = aivm_vm_copy_string_range_to_arena(vm, text + start_byte, copy_length);
     if (output == NULL) {
@@ -863,8 +875,8 @@ static int push_remove_by_runes(AivmVm* vm, const char* text, int64_t start, int
         end_rune = start_rune;
     }
 
-    start_byte = utf8_byte_offset_for_rune(text, start_rune);
-    end_byte = utf8_byte_offset_for_rune(text, end_rune);
+    start_byte = utf8_byte_offset_for_rune(vm, text, start_rune);
+    end_byte = utf8_byte_offset_for_rune(vm, text, end_rune);
     output = aivm_vm_copy_string_splice_to_arena(
         vm,
         text,
@@ -903,7 +915,7 @@ static int push_find_by_runes(AivmVm* vm, const char* text, const char* pattern,
 
     pattern_bytes = strlen(pattern);
     haystack_bytes = strlen(text);
-    candidate_byte = utf8_byte_offset_for_rune(text, start_rune);
+    candidate_byte = utf8_byte_offset_for_rune(vm, text, start_rune);
     for (candidate_rune = start_rune; candidate_byte + pattern_bytes <= haystack_bytes; candidate_rune += 1U) {
         if (memcmp(text + candidate_byte, pattern, pattern_bytes) == 0) {
             return aivm_stack_push(vm, aivm_value_int((int64_t)candidate_rune));
@@ -911,7 +923,7 @@ static int push_find_by_runes(AivmVm* vm, const char* text, const char* pattern,
         if (candidate_rune >= text_runes - pattern_runes) {
             break;
         }
-        candidate_byte = utf8_byte_offset_for_rune(text, candidate_rune + 1U);
+        candidate_byte = utf8_byte_offset_for_rune(vm, text, candidate_rune + 1U);
     }
     return aivm_stack_push(vm, aivm_value_int(-1));
 }
@@ -2525,7 +2537,7 @@ int aivm_compact_string_arena(AivmVm* vm)
     if (vm->string_arena_used == 0U) {
         return 1;
     }
-    live = (uint8_t*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(live[0]));
+    live = (uint8_t*)calloc(vm->node_capacity, sizeof(live[0]));
     live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
     new_arena = (char*)calloc(AIVM_VM_STRING_ARENA_CAPACITY, sizeof(new_arena[0]));
     if (live == NULL || live_pairs == NULL || new_arena == NULL) {
@@ -2583,7 +2595,7 @@ int aivm_compact_string_arena(AivmVm* vm)
             size_t attr_slot = 0U;
             AivmNodeAttr* attr;
             if (!aivm_size_add_checked(node->attr_start, attr_i, &attr_slot) ||
-                attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                attr_slot >= vm->node_attr_capacity) {
                 aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM004: node attr slot overflow during string compaction.");
                 goto fail;
             }
@@ -4579,6 +4591,40 @@ void aivm_step(AivmVm* vm)
             break;
         }
 
+        case AIVM_OP_VALUE_KIND: {
+            AivmValue value;
+            const char* kind;
+            if (!aivm_stack_pop(vm, &value)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            switch (value.type) {
+                case AIVM_VAL_VOID: kind = "void"; break;
+                case AIVM_VAL_INT: kind = "int"; break;
+                case AIVM_VAL_NUMBER: kind = "number"; break;
+                case AIVM_VAL_BOOL: kind = "bool"; break;
+                case AIVM_VAL_NULL: kind = "null"; break;
+                case AIVM_VAL_STRING: kind = "string"; break;
+                case AIVM_VAL_BYTES: kind = "bytes"; break;
+                case AIVM_VAL_NODE: kind = "node"; break;
+                case AIVM_VAL_PAIR: kind = "pair"; break;
+                case AIVM_VAL_UNKNOWN: kind = "unknown"; break;
+                default:
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "VALUE_KIND received invalid value type.");
+                    vm->instruction_pointer = vm->program->instruction_count;
+                    break;
+            }
+            if (vm->instruction_pointer == vm->program->instruction_count) {
+                break;
+            }
+            if (!push_string_copy(vm, kind)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
         case AIVM_OP_NODE_KIND: {
             AivmValue node_value;
             const AivmNodeRecord* node;
@@ -4836,9 +4882,9 @@ void aivm_step(AivmVm* vm)
                 break;
             }
             (void)child_node;
-            if (base_node->attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
+            if (base_node->attr_count > vm->node_attr_capacity ||
                 !aivm_size_add_checked(base_node->child_count, 1U, &needed_child_count) ||
-                needed_child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+                needed_child_count > vm->node_child_capacity) {
                 aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_CHILD exceeded VM node capacity.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -4855,7 +4901,7 @@ void aivm_step(AivmVm* vm)
             for (i = 0U; i < base_node->attr_count; i += 1U) {
                 size_t attr_slot = 0U;
                 if (!aivm_size_add_checked(base_node->attr_start, i, &attr_slot) ||
-                    attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    attr_slot >= vm->node_attr_capacity) {
                     free(new_children);
                     free(attrs);
                     new_children = NULL;
@@ -4878,7 +4924,7 @@ void aivm_step(AivmVm* vm)
             for (i = 0U; i < base_node->child_count; i += 1U) {
                 size_t child_slot = 0U;
                 if (!aivm_size_add_checked(base_node->child_start, i, &child_slot) ||
-                    child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    child_slot >= vm->node_child_capacity) {
                     free(new_children);
                     free(attrs);
                     new_children = NULL;
@@ -4946,8 +4992,8 @@ void aivm_step(AivmVm* vm)
             }
             if (attr_node->attr_count != 1U ||
                 !aivm_size_add_checked(base_node->attr_count, 1U, &needed_attr_count) ||
-                needed_attr_count > AIVM_VM_NODE_ATTR_CAPACITY ||
-                base_node->child_count > AIVM_VM_NODE_CHILD_CAPACITY) {
+                needed_attr_count > vm->node_attr_capacity ||
+                base_node->child_count > vm->node_child_capacity) {
                 aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "APPEND_ATTR requires single-attr node and capacity.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -4964,7 +5010,7 @@ void aivm_step(AivmVm* vm)
             for (i = 0U; i < base_node->attr_count; i += 1U) {
                 size_t attr_slot = 0U;
                 if (!aivm_size_add_checked(base_node->attr_start, i, &attr_slot) ||
-                    attr_slot >= AIVM_VM_NODE_ATTR_CAPACITY) {
+                    attr_slot >= vm->node_attr_capacity) {
                     free(attrs);
                     free(children);
                     attrs = NULL;
@@ -4989,7 +5035,7 @@ void aivm_step(AivmVm* vm)
             for (i = 0U; i < base_node->child_count; i += 1U) {
                 size_t child_slot = 0U;
                 if (!aivm_size_add_checked(base_node->child_start, i, &child_slot) ||
-                    child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+                    child_slot >= vm->node_child_capacity) {
                     free(attrs);
                     free(children);
                     attrs = NULL;

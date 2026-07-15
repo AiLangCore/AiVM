@@ -1,3 +1,8 @@
+/* Process exit is a guest request. Keep it inside the VM lifecycle so native
+ * cleanup and debug artifacts are always finalized before the host returns. */
+static int g_native_process_exit_requested;
+static int g_native_process_exit_code;
+
 static void native_process_init_slot(NativeProcessState* process)
 {
     if (process == NULL) {
@@ -914,9 +919,13 @@ static int native_syscall_process_exit(
     }
     code = (int)args[0].int_value;
     *result = aivm_value_void();
-    fflush(stdout);
-    fflush(stderr);
-    exit(code);
+    if (g_native_active_vm == NULL) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    g_native_process_exit_requested = 1;
+    g_native_process_exit_code = code;
+    aivm_halt(g_native_active_vm);
+    return AIVM_SYSCALL_OK;
 }
 
 static int native_syscall_process_stream_read(

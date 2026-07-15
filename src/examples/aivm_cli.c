@@ -242,6 +242,7 @@ static const char* cli_opcode_name(AivmOpcode opcode)
         case AIVM_OP_PAR_CANCEL: return "PAR_CANCEL";
         case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
         case AIVM_OP_STR_SCALAR_LENGTH: return "STR_SCALAR_LENGTH";
+        case AIVM_OP_VALUE_KIND: return "VALUE_KIND";
         case AIVM_OP_NODE_KIND: return "NODE_KIND";
         case AIVM_OP_NODE_ID: return "NODE_ID";
         case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
@@ -2082,6 +2083,8 @@ static int execute_bytes(
     }
 
     g_native_active_vm = &vm;
+    g_native_process_exit_requested = 0;
+    g_native_process_exit_code = 0;
 #if defined(AIVM_DEBUG_RUNTIME)
     profile_start = clock();
 #endif
@@ -2103,6 +2106,21 @@ static int execute_bytes(
     elapsed_seconds = (double)(profile_end - profile_start) / (double)CLOCKS_PER_SEC;
 #endif
     g_native_active_vm = NULL;
+
+    if (g_native_process_exit_requested) {
+#if defined(AIVM_DEBUG_RUNTIME)
+        write_debug_artifacts(
+            debug_artifact_dir,
+            program_path,
+            &program,
+            &vm,
+            1,
+            g_native_process_exit_code,
+            elapsed_seconds);
+#endif
+        g_native_process_exit_requested = 0;
+        return g_native_process_exit_code;
+    }
 
     if (!ok) {
 #if defined(AIVM_DEBUG_RUNTIME)

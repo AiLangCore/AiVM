@@ -48,6 +48,7 @@ static const PerfOpcodeCoverage g_opcode_coverage[] = {
     { AIVM_OP_PAR_CANCEL, "AIVM_OP_PAR_CANCEL", PERF_OPCODE_BENCHMARKED, "par join benchmark" },
     { AIVM_OP_STR_UTF8_BYTE_COUNT, "AIVM_OP_STR_UTF8_BYTE_COUNT", PERF_OPCODE_BENCHMARKED, "string benchmark" },
     { AIVM_OP_STR_SCALAR_LENGTH, "AIVM_OP_STR_SCALAR_LENGTH", PERF_OPCODE_BENCHMARKED, "string benchmark" },
+    { AIVM_OP_VALUE_KIND, "AIVM_OP_VALUE_KIND", PERF_OPCODE_TRACKED_GAP, "unit-covered; add mixed-value dispatch benchmark" },
     { AIVM_OP_NODE_KIND, "AIVM_OP_NODE_KIND", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node traversal benchmark" },
     { AIVM_OP_NODE_ID, "AIVM_OP_NODE_ID", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node traversal benchmark" },
     { AIVM_OP_ATTR_COUNT, "AIVM_OP_ATTR_COUNT", PERF_OPCODE_TRACKED_GAP, "unit-covered; add node attr benchmark" },

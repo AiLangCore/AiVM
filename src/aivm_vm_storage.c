@@ -15,6 +15,8 @@ int aivm_size_add_checked(size_t a, size_t b, size_t* out)
 
 int aivm_vm_ensure_storage(AivmVm* vm)
 {
+    size_t bytes_capacity;
+    uint8_t* resized_bytes;
     if (vm == NULL) {
         return 0;
     }
@@ -28,17 +30,30 @@ int aivm_vm_ensure_storage(AivmVm* vm)
     if (vm->string_arena == NULL) {
         vm->string_arena = (char*)calloc(AIVM_VM_STRING_ARENA_CAPACITY, sizeof(vm->string_arena[0]));
     }
+    if (vm->bytes_arena_capacity == 0U) {
+        vm->bytes_arena_capacity = AIVM_VM_BYTES_ARENA_CAPACITY;
+    }
+    bytes_capacity = vm->bytes_arena_capacity;
     if (vm->bytes_arena == NULL) {
-        vm->bytes_arena = (uint8_t*)calloc(AIVM_VM_BYTES_ARENA_CAPACITY, sizeof(vm->bytes_arena[0]));
+        vm->bytes_arena = (uint8_t*)calloc(bytes_capacity, sizeof(vm->bytes_arena[0]));
+        if (vm->bytes_arena != NULL) {
+            vm->bytes_arena_storage_capacity = bytes_capacity;
+        }
+    } else if (vm->bytes_arena_storage_capacity < bytes_capacity) {
+        resized_bytes = (uint8_t*)realloc(vm->bytes_arena, bytes_capacity * sizeof(vm->bytes_arena[0]));
+        if (resized_bytes != NULL) {
+            vm->bytes_arena = resized_bytes;
+            vm->bytes_arena_storage_capacity = bytes_capacity;
+        }
     }
     if (vm->nodes == NULL) {
-        vm->nodes = (AivmNodeRecord*)calloc(AIVM_VM_NODE_CAPACITY, sizeof(vm->nodes[0]));
+        vm->nodes = (AivmNodeRecord*)calloc(vm->node_capacity, sizeof(vm->nodes[0]));
     }
     if (vm->node_attrs == NULL) {
-        vm->node_attrs = (AivmNodeAttr*)calloc(AIVM_VM_NODE_ATTR_CAPACITY, sizeof(vm->node_attrs[0]));
+        vm->node_attrs = (AivmNodeAttr*)calloc(vm->node_attr_capacity, sizeof(vm->node_attrs[0]));
     }
     if (vm->node_children == NULL) {
-        vm->node_children = (int64_t*)calloc(AIVM_VM_NODE_CHILD_CAPACITY, sizeof(vm->node_children[0]));
+        vm->node_children = (int64_t*)calloc(vm->node_child_capacity, sizeof(vm->node_children[0]));
     }
     if (vm->scratch_pairs == NULL) {
         vm->scratch_pairs = (AivmScratchPair*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(vm->scratch_pairs[0]));
@@ -47,6 +62,7 @@ int aivm_vm_ensure_storage(AivmVm* vm)
         vm->locals == NULL ||
         vm->string_arena == NULL ||
         vm->bytes_arena == NULL ||
+        vm->bytes_arena_storage_capacity < bytes_capacity ||
         vm->nodes == NULL ||
         vm->node_attrs == NULL ||
         vm->node_children == NULL ||

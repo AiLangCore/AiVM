@@ -181,10 +181,14 @@ enum {
     AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
     AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
     AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
+    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 4 * 1024 * 1024,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 16384,
     AIVM_VM_NODE_ATTR_CAPACITY = 65536,
     AIVM_VM_NODE_CHILD_CAPACITY = 131072,
+    AIVM_VM_TOOLING_NODE_CAPACITY = 65536,
+    AIVM_VM_TOOLING_NODE_ATTR_CAPACITY = 262144,
+    AIVM_VM_TOOLING_NODE_CHILD_CAPACITY = 524288,
     AIVM_VM_TASK_CAPACITY = 256,
     AIVM_VM_PAR_CONTEXT_CAPACITY = 64,
     AIVM_VM_PAR_VALUE_CAPACITY = 1024,
@@ -254,7 +258,13 @@ typedef struct {
     char* string_arena;
     size_t string_arena_used;
     size_t string_arena_limit;
+    /* Mechanical UTF-8 traversal cache. It never changes string semantics. */
+    const char* utf8_offset_cache_text;
+    size_t utf8_offset_cache_rune;
+    size_t utf8_offset_cache_byte;
     uint8_t* bytes_arena;
+    size_t bytes_arena_capacity;
+    size_t bytes_arena_storage_capacity;
     size_t bytes_arena_used;
     size_t bytes_arena_limit;
     size_t bytes_arena_gc_threshold;
@@ -285,10 +295,13 @@ typedef struct {
     int64_t next_par_node_id;
     AivmNodeRecord* nodes;
     size_t node_count;
+    size_t node_capacity;
     AivmNodeAttr* node_attrs;
     size_t node_attr_count;
+    size_t node_attr_capacity;
     int64_t* node_children;
     size_t node_child_count;
+    size_t node_child_capacity;
     int64_t ui_default_window_size_node_handle;
     int64_t ui_empty_event_node_handle;
     size_t string_arena_high_water;
@@ -310,6 +323,7 @@ typedef struct {
 } AivmVm;
 
 void aivm_init(AivmVm* vm, const AivmProgram* program);
+void aivm_init_with_profile(AivmVm* vm, const AivmProgram* program, AivmRuntimeProfile profile);
 void aivm_init_with_syscalls(
     AivmVm* vm,
     const AivmProgram* program,
@@ -322,6 +336,14 @@ void aivm_init_with_syscalls_and_argv(
     size_t binding_count,
     const char* const* process_argv,
     size_t process_argv_count);
+void aivm_init_with_syscalls_and_argv_profile(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count,
+    AivmRuntimeProfile profile);
 void aivm_reset_state(AivmVm* vm);
 void aivm_dispose(AivmVm* vm);
 int aivm_collect_safe_point(AivmVm* vm);
