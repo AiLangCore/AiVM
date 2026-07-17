@@ -121,6 +121,14 @@ int aivm_vm_mark_live_node_handles(
             ENQUEUE_HANDLE(vm->scratch_pairs[i].second.node_handle);
         }
     }
+    for (i = 0U; i < AIVM_VM_NODE_BUILDER_CAPACITY; i += 1U) {
+        size_t child_index;
+        const AivmNodeBuilderRecord* builder = &vm->node_builders[i];
+        if (!builder->active) continue;
+        for (child_index = 0U; child_index < builder->child_count; child_index += 1U) {
+            ENQUEUE_HANDLE(builder->children[child_index]);
+        }
+    }
     if (extra_handles != NULL) {
         for (i = 0U; i < extra_handle_count; i += 1U) {
             int64_t handle = extra_handles[i];
@@ -357,6 +365,19 @@ int aivm_vm_compact_node_arenas_with_map(
         if (!remap_value_node_handle(vm, &vm->scratch_pairs[i].first, handle_map) ||
             !remap_value_node_handle(vm, &vm->scratch_pairs[i].second, handle_map)) {
             aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid scratch-pair node handle during node GC.");
+            goto fail;
+        }
+    }
+    for (i = 0U; i < AIVM_VM_NODE_BUILDER_CAPACITY; i += 1U) {
+        AivmNodeBuilderRecord* builder = &vm->node_builders[i];
+        if (builder->active &&
+            !aivm_vm_remap_child_handles_for_compaction(
+                vm,
+                builder->children,
+                builder->children,
+                builder->child_count,
+                handle_map)) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Invalid node-builder child handle during node GC.");
             goto fail;
         }
     }

@@ -4186,6 +4186,10 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_STR_UTF8_BYTE_COUNT: return "STR_UTF8_BYTE_COUNT";
         case AIVM_OP_STR_SCALAR_LENGTH: return "STR_SCALAR_LENGTH";
         case AIVM_OP_VALUE_KIND: return "VALUE_KIND";
+        case AIVM_OP_NODE_BUILDER_NEW: return "NODE_BUILDER_NEW";
+        case AIVM_OP_NODE_BUILDER_APPEND_CHILD: return "NODE_BUILDER_APPEND_CHILD";
+        case AIVM_OP_NODE_BUILDER_APPEND_ATTR: return "NODE_BUILDER_APPEND_ATTR";
+        case AIVM_OP_NODE_BUILDER_FINISH: return "NODE_BUILDER_FINISH";
         case AIVM_OP_NODE_KIND: return "NODE_KIND";
         case AIVM_OP_NODE_ID: return "NODE_ID";
         case AIVM_OP_ATTR_COUNT: return "ATTR_COUNT";
@@ -5094,6 +5098,10 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(STR_UTF8_BYTE_COUNT)
     MAP_OP(STR_SCALAR_LENGTH)
     MAP_OP(VALUE_KIND)
+    MAP_OP(NODE_BUILDER_NEW)
+    MAP_OP(NODE_BUILDER_APPEND_CHILD)
+    MAP_OP(NODE_BUILDER_APPEND_ATTR)
+    MAP_OP(NODE_BUILDER_FINISH)
     MAP_OP(NODE_KIND)
     MAP_OP(NODE_ID)
     MAP_OP(ATTR_COUNT)
@@ -7526,6 +7534,47 @@ static int simple_compile_expr_ext(
             return 0;
         }
         return 1;
+    }
+    if (starts_with(node->kind, "MakeNodeBuilder")) {
+        SimpleNodeView kind_expr;
+        SimpleNodeView id_expr;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &kind_expr) ||
+            !simple_parse_next_node(kind_expr.next, node->body_end, &id_expr) ||
+            !simple_compile_expr_ext(&kind_expr, program, locals, ctx) ||
+            !simple_compile_expr_ext(&id_expr, program, locals, ctx)) {
+            return simple_fail("MakeNodeBuilder requires (kind,id)");
+        }
+        return simple_emit_instruction(program, AIVM_OP_NODE_BUILDER_NEW, 0);
+    }
+    if (starts_with(node->kind, "BuilderAppendChild")) {
+        SimpleNodeView builder;
+        SimpleNodeView child;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &builder) ||
+            !simple_parse_next_node(builder.next, node->body_end, &child) ||
+            !simple_compile_expr_ext(&builder, program, locals, ctx) ||
+            !simple_compile_expr_ext(&child, program, locals, ctx)) {
+            return simple_fail("BuilderAppendChild requires (builder,child)");
+        }
+        return simple_emit_instruction(program, AIVM_OP_NODE_BUILDER_APPEND_CHILD, 0);
+    }
+    if (starts_with(node->kind, "BuilderAppendAttr")) {
+        SimpleNodeView builder;
+        SimpleNodeView attr;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &builder) ||
+            !simple_parse_next_node(builder.next, node->body_end, &attr) ||
+            !simple_compile_expr_ext(&builder, program, locals, ctx) ||
+            !simple_compile_expr_ext(&attr, program, locals, ctx)) {
+            return simple_fail("BuilderAppendAttr requires (builder,attr)");
+        }
+        return simple_emit_instruction(program, AIVM_OP_NODE_BUILDER_APPEND_ATTR, 0);
+    }
+    if (starts_with(node->kind, "FinishNodeBuilder")) {
+        SimpleNodeView builder;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &builder) ||
+            !simple_compile_expr_ext(&builder, program, locals, ctx)) {
+            return simple_fail("FinishNodeBuilder requires builder");
+        }
+        return simple_emit_instruction(program, AIVM_OP_NODE_BUILDER_FINISH, 0);
     }
     if (starts_with(node->kind, "MakeNode")) {
         SimpleNodeView kind_expr;

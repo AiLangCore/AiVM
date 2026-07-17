@@ -57,6 +57,7 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.node_attr_capacity = AIVM_VM_NODE_ATTR_CAPACITY;
     limits.node_child_capacity = AIVM_VM_NODE_CHILD_CAPACITY;
     if (profile == AIVM_RUNTIME_PROFILE_TOOLING) {
+        limits.string_arena_capacity = AIVM_VM_TOOLING_STRING_ARENA_CAPACITY;
         limits.bytes_arena_capacity = AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY;
         limits.node_capacity = AIVM_VM_TOOLING_NODE_CAPACITY;
         limits.node_attr_capacity = AIVM_VM_TOOLING_NODE_ATTR_CAPACITY;
@@ -88,6 +89,7 @@ void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile)
     }
     vm->runtime_profile = profile;
     limits = aivm_runtime_profile_limits(profile);
+    vm->string_arena_capacity = limits.string_arena_capacity;
     vm->bytes_arena_capacity = limits.bytes_arena_capacity;
     vm->node_capacity = limits.node_capacity;
     vm->node_attr_capacity = limits.node_attr_capacity;

@@ -21,8 +21,8 @@ static int ensure_string_arena_capacity(AivmVm* vm, size_t needed)
     if (vm == NULL) {
         return 0;
     }
-    while (needed > vm->string_arena_limit && vm->string_arena_limit < AIVM_VM_STRING_ARENA_CAPACITY) {
-        vm->string_arena_limit = arena_grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, AIVM_VM_STRING_ARENA_CAPACITY);
+    while (needed > vm->string_arena_limit && vm->string_arena_limit < vm->string_arena_capacity) {
+        vm->string_arena_limit = arena_grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, vm->string_arena_capacity);
     }
     return needed <= vm->string_arena_limit;
 }

@@ -3349,19 +3349,25 @@ static int test_value_kind_classifies_runtime_values(void)
         { .opcode = AIVM_OP_CONST, .operand_int = 3 },
         { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
         { .opcode = AIVM_OP_VALUE_KIND, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 4 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 5 },
+        { .opcode = AIVM_OP_NODE_BUILDER_NEW, .operand_int = 0 },
+        { .opcode = AIVM_OP_VALUE_KIND, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
         { .type = AIVM_VAL_INT, .int_value = 7 },
         { .type = AIVM_VAL_STRING, .string_value = "left" },
         { .type = AIVM_VAL_BOOL, .bool_value = 1 },
-        { .type = AIVM_VAL_STRING, .string_value = "node1" }
+        { .type = AIVM_VAL_STRING, .string_value = "node1" },
+        { .type = AIVM_VAL_STRING, .string_value = "Builder" },
+        { .type = AIVM_VAL_STRING, .string_value = "b1" }
     };
     static const AivmProgram program = {
         .instructions = instructions,
-        .instruction_count = 10U,
+        .instruction_count = 14U,
         .constants = constants,
-        .constant_count = 4U,
+        .constant_count = 6U,
         .format_version = 0U,
         .format_flags = 0U,
         .section_count = 0U
@@ -3370,6 +3376,10 @@ static int test_value_kind_classifies_runtime_values(void)
     aivm_init(&vm, &program);
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(aivm_value_equals(out, aivm_value_string("nodeBuilder")) == 1) != 0) {
         return 1;
     }
     if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
@@ -3715,6 +3725,69 @@ static int test_append_attr_adds_lit_attr_to_node(void)
     }
     if (expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
         expect(out.type == AIVM_VAL_INT && out.int_value == 1) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_node_builder_seals_children_and_attributes(void)
+{
+    static AivmVm vm;
+    AivmValue out;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_NODE_BUILDER_NEW, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_MAKE_BLOCK, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 1 },
+        { .opcode = AIVM_OP_NODE_BUILDER_APPEND_CHILD, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 4 },
+        { .opcode = AIVM_OP_MAKE_LIT_STRING, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 2 },
+        { .opcode = AIVM_OP_NODE_BUILDER_APPEND_ATTR, .operand_int = 0 },
+        { .opcode = AIVM_OP_NODE_BUILDER_FINISH, .operand_int = 0 },
+        { .opcode = AIVM_OP_STORE_LOCAL, .operand_int = 3 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 3 },
+        { .opcode = AIVM_OP_CHILD_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_LOAD_LOCAL, .operand_int = 3 },
+        { .opcode = AIVM_OP_ATTR_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "Program" },
+        { .type = AIVM_VAL_STRING, .string_value = "p1" },
+        { .type = AIVM_VAL_STRING, .string_value = "child" },
+        { .type = AIVM_VAL_STRING, .string_value = "name" },
+        { .type = AIVM_VAL_STRING, .string_value = "start" }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions, .instruction_count = 25U,
+        .constants = constants, .constant_count = 5U
+    };
+
+    aivm_init(&vm, &program);
+    for (size_t i = 0U; i < 11U; i += 1U) {
+        aivm_step(&vm);
+    }
+    vm.locals[1] = aivm_value_void();
+    if (expect(aivm_collect_safe_point(&vm) == 1) != 0) {
+        return 1;
+    }
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0 ||
+        expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(out.type == AIVM_VAL_INT && out.int_value == 1) != 0 ||
+        expect(aivm_stack_pop(&vm, &out) == 1) != 0 ||
+        expect(out.type == AIVM_VAL_INT && out.int_value == 1) != 0 ||
+        expect(vm.node_builders[0].active == 0) != 0) {
         return 1;
     }
     return 0;
@@ -4932,7 +5005,7 @@ static int test_pair_first_requires_pair(void)
     if (expect(vm.error == AIVM_VM_ERR_TYPE_MISMATCH) != 0) {
         return 1;
     }
-    if (expect(strcmp(aivm_vm_error_detail(&vm), "PAIR_FIRST requires pair operand.") == 0) != 0) {
+    if (expect(strstr(aivm_vm_error_detail(&vm), "PAIR_FIRST requires pair operand. actual=int") != NULL) != 0) {
         return 1;
     }
     return 0;
@@ -5175,6 +5248,9 @@ int main(void)
         return 1;
     }
     if (run_test("test_append_attr_adds_lit_attr_to_node", test_append_attr_adds_lit_attr_to_node) != 0) {
+        return 1;
+    }
+    if (run_test("test_node_builder_seals_children_and_attributes", test_node_builder_seals_children_and_attributes) != 0) {
         return 1;
     }
     if (run_test("test_make_node_converts_scalar_children_to_runtime_nodes", test_make_node_converts_scalar_children_to_runtime_nodes) != 0) {

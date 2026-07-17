@@ -2,6 +2,7 @@
 #define AIVM_VM_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "aivm_program.h"
 #include "sys/aivm_syscall.h"
@@ -158,6 +159,26 @@ typedef struct {
     AivmValue second;
 } AivmScratchPair;
 
+/* Mechanical index for content-addressable strings in the VM arena. */
+typedef struct {
+    uint64_t hash;
+    size_t offset;
+    size_t length;
+} AivmStringInternEntry;
+
+/* Temporary compiler construction state. Finishing produces an immutable node. */
+typedef struct {
+    int active;
+    char* kind;
+    char* id;
+    AivmNodeAttr* attrs;
+    size_t attr_count;
+    size_t attr_capacity;
+    int64_t* children;
+    size_t child_count;
+    size_t child_capacity;
+} AivmNodeBuilderRecord;
+
 typedef struct {
     int64_t handle;
     uint8_t* data;
@@ -178,14 +199,18 @@ enum {
     AIVM_VM_STRING_ARENA_CAPACITY = 2097152,
     AIVM_VM_STRING_ARENA_INITIAL_CAPACITY = 8192,
     AIVM_VM_STRING_ARENA_GROWTH_STEP = 16384,
+    /* Tooling keeps compiler source and syntax trees alive for an entire build. */
+    AIVM_VM_TOOLING_STRING_ARENA_CAPACITY = 16 * 1024 * 1024,
     AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
     AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
     AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
-    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 4 * 1024 * 1024,
+    /* Compiler object emission temporarily retains several source-sized byte values. */
+    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 16 * 1024 * 1024,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 16384,
     AIVM_VM_NODE_ATTR_CAPACITY = 65536,
     AIVM_VM_NODE_CHILD_CAPACITY = 131072,
+    AIVM_VM_NODE_BUILDER_CAPACITY = 512,
     AIVM_VM_TOOLING_NODE_CAPACITY = 65536,
     AIVM_VM_TOOLING_NODE_ATTR_CAPACITY = 262144,
     AIVM_VM_TOOLING_NODE_CHILD_CAPACITY = 524288,
@@ -258,6 +283,12 @@ typedef struct {
     char* string_arena;
     size_t string_arena_used;
     size_t string_arena_limit;
+    size_t string_arena_capacity;
+    size_t string_arena_storage_capacity;
+    AivmStringInternEntry* string_intern_entries;
+    size_t string_intern_capacity;
+    size_t string_intern_count;
+    int string_intern_complete;
     /* Mechanical UTF-8 traversal cache. It never changes string semantics. */
     const char* utf8_offset_cache_text;
     size_t utf8_offset_cache_rune;
@@ -302,6 +333,7 @@ typedef struct {
     int64_t* node_children;
     size_t node_child_count;
     size_t node_child_capacity;
+    AivmNodeBuilderRecord node_builders[AIVM_VM_NODE_BUILDER_CAPACITY];
     int64_t ui_default_window_size_node_handle;
     int64_t ui_empty_event_node_handle;
     size_t string_arena_high_water;

@@ -104,6 +104,14 @@ AivmValue aivm_value_pair(int64_t input)
     return value;
 }
 
+AivmValue aivm_value_node_builder(int64_t input)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_NODE_BUILDER;
+    value.node_builder_handle = input;
+    return value;
+}
+
 int aivm_value_equals(AivmValue left, AivmValue right)
 {
     if ((left.type == AIVM_VAL_INT || left.type == AIVM_VAL_NUMBER) &&
@@ -161,6 +169,9 @@ int aivm_value_equals(AivmValue left, AivmValue right)
         case AIVM_VAL_PAIR:
             return left.pair_handle == right.pair_handle ? 1 : 0;
 
+        case AIVM_VAL_NODE_BUILDER:
+            return left.node_builder_handle == right.node_builder_handle ? 1 : 0;
+
         case AIVM_VAL_UNKNOWN:
             return 1;
 
@@ -187,6 +198,7 @@ int aivm_value_is_immutable_message_payload(AivmValue value)
 
         case AIVM_VAL_NODE:
         case AIVM_VAL_PAIR:
+        case AIVM_VAL_NODE_BUILDER:
         case AIVM_VAL_UNKNOWN:
         default:
             return 0;

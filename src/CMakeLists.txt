@@ -90,6 +90,7 @@ set(AIVM_CORE_SOURCES
     aivm_vm_lifecycle.c
     aivm_vm_node.c
     aivm_vm_node_create.c
+    aivm_vm_node_builder.c
     aivm_vm_node_gc.c
     aivm_vm_profile.c
     aivm_vm_stack.c

@@ -24,6 +24,7 @@ void aivm_reset_state(AivmVm* vm)
     }
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
     aivm_release_all_blobs(vm);
+    aivm_vm_reset_node_builders(vm);
 
     vm->instruction_pointer = 0U;
     vm->status = AIVM_VM_STATUS_READY;
@@ -47,8 +48,11 @@ void aivm_reset_state(AivmVm* vm)
     vm->locals_count = 0U;
     vm->locals_limit = AIVM_VM_LOCALS_INITIAL_CAPACITY;
     vm->string_arena_used = 0U;
-    vm->string_arena_limit = AIVM_VM_STRING_ARENA_INITIAL_CAPACITY;
+    vm->string_arena_limit = vm->string_arena_capacity < AIVM_VM_STRING_ARENA_INITIAL_CAPACITY
+        ? vm->string_arena_capacity
+        : AIVM_VM_STRING_ARENA_INITIAL_CAPACITY;
     vm->string_arena[0] = '\0';
+    aivm_vm_reset_string_intern_index(vm);
     vm->utf8_offset_cache_text = NULL;
     vm->utf8_offset_cache_rune = 0U;
     vm->utf8_offset_cache_byte = 0U;
@@ -105,9 +109,11 @@ void aivm_dispose(AivmVm* vm)
     }
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
     aivm_release_all_blobs(vm);
+    aivm_vm_reset_node_builders(vm);
     free(vm->stack);
     free(vm->locals);
     free(vm->string_arena);
+    free(vm->string_intern_entries);
     free(vm->bytes_arena);
     free(vm->nodes);
     free(vm->node_attrs);
@@ -116,6 +122,12 @@ void aivm_dispose(AivmVm* vm)
     vm->stack = NULL;
     vm->locals = NULL;
     vm->string_arena = NULL;
+    vm->string_arena_capacity = 0U;
+    vm->string_arena_storage_capacity = 0U;
+    vm->string_intern_entries = NULL;
+    vm->string_intern_capacity = 0U;
+    vm->string_intern_count = 0U;
+    vm->string_intern_complete = 0;
     vm->bytes_arena = NULL;
     vm->bytes_arena_capacity = 0U;
     vm->bytes_arena_storage_capacity = 0U;

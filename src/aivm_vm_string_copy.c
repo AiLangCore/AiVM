@@ -3,10 +3,189 @@
 #include <stdlib.h>
 #include <string.h>
 
+static uint64_t string_hash(const char* input, size_t length)
+{
+    uint64_t hash = UINT64_C(1469598103934665603);
+    size_t i;
+
+    for (i = 0U; i < length; i += 1U) {
+        hash ^= (uint8_t)input[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash == 0U ? UINT64_C(1) : hash;
+}
+
+static size_t string_intern_slot(uint64_t hash, size_t capacity)
+{
+    return (size_t)(hash & (uint64_t)(capacity - 1U));
+}
+
+static int string_intern_insert(
+    AivmStringInternEntry* entries,
+    size_t capacity,
+    uint64_t hash,
+    size_t offset,
+    size_t length)
+{
+    size_t slot;
+    size_t probes;
+
+    if (entries == NULL || capacity == 0U) {
+        return 0;
+    }
+    slot = string_intern_slot(hash, capacity);
+    for (probes = 0U; probes < capacity; probes += 1U) {
+        AivmStringInternEntry* entry = &entries[slot];
+        if (entry->hash == 0U) {
+            entry->hash = hash;
+            entry->offset = offset;
+            entry->length = length;
+            return 1;
+        }
+        slot = (slot + 1U) & (capacity - 1U);
+    }
+    return 0;
+}
+
+static int string_intern_resize(AivmVm* vm, size_t requested_capacity)
+{
+    AivmStringInternEntry* entries;
+    size_t capacity = 1024U;
+    size_t i;
+
+    if (vm == NULL) {
+        return 0;
+    }
+    while (capacity < requested_capacity) {
+        if (capacity > ((size_t)-1 / 2U)) {
+            return 0;
+        }
+        capacity *= 2U;
+    }
+    entries = (AivmStringInternEntry*)calloc(capacity, sizeof(entries[0]));
+    if (entries == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < vm->string_intern_capacity; i += 1U) {
+        const AivmStringInternEntry* old_entry = &vm->string_intern_entries[i];
+        if (old_entry->hash != 0U &&
+            !string_intern_insert(entries, capacity, old_entry->hash, old_entry->offset, old_entry->length)) {
+            free(entries);
+            return 0;
+        }
+    }
+    free(vm->string_intern_entries);
+    vm->string_intern_entries = entries;
+    vm->string_intern_capacity = capacity;
+    return 1;
+}
+
+void aivm_vm_reset_string_intern_index(AivmVm* vm)
+{
+    if (vm == NULL) {
+        return;
+    }
+    if (vm->string_intern_entries != NULL && vm->string_intern_capacity > 0U) {
+        memset(vm->string_intern_entries, 0, vm->string_intern_capacity * sizeof(vm->string_intern_entries[0]));
+    }
+    vm->string_intern_count = 0U;
+    vm->string_intern_complete = 1;
+}
+
+void aivm_vm_rebuild_string_intern_index(AivmVm* vm)
+{
+    size_t offset = 0U;
+    size_t count = 0U;
+
+    if (vm == NULL) {
+        return;
+    }
+    while (offset < vm->string_arena_used) {
+        size_t length = strlen(&vm->string_arena[offset]);
+        if (length >= vm->string_arena_used - offset) {
+            vm->string_intern_complete = 0;
+            return;
+        }
+        count += 1U;
+        offset += length + 1U;
+    }
+    aivm_vm_reset_string_intern_index(vm);
+    if (count == 0U) {
+        return;
+    }
+    if (!string_intern_resize(vm, count * 2U)) {
+        vm->string_intern_complete = 0;
+        return;
+    }
+    offset = 0U;
+    while (offset < vm->string_arena_used) {
+        size_t length = strlen(&vm->string_arena[offset]);
+        uint64_t hash = string_hash(&vm->string_arena[offset], length);
+        if (!string_intern_insert(vm->string_intern_entries, vm->string_intern_capacity, hash, offset, length)) {
+            vm->string_intern_complete = 0;
+            return;
+        }
+        vm->string_intern_count += 1U;
+        offset += length + 1U;
+    }
+}
+
+static char* lookup_string_in_index(AivmVm* vm, const char* input, size_t length)
+{
+    uint64_t hash;
+    size_t slot;
+    size_t probes;
+
+    if (vm == NULL || input == NULL || !vm->string_intern_complete || vm->string_intern_capacity == 0U) {
+        return NULL;
+    }
+    hash = string_hash(input, length);
+    slot = string_intern_slot(hash, vm->string_intern_capacity);
+    for (probes = 0U; probes < vm->string_intern_capacity; probes += 1U) {
+        const AivmStringInternEntry* entry = &vm->string_intern_entries[slot];
+        if (entry->hash == 0U) {
+            return NULL;
+        }
+        if (entry->hash == hash && entry->length == length &&
+            memcmp(&vm->string_arena[entry->offset], input, length) == 0) {
+            return &vm->string_arena[entry->offset];
+        }
+        slot = (slot + 1U) & (vm->string_intern_capacity - 1U);
+    }
+    return NULL;
+}
+
+static void remember_string_in_index(AivmVm* vm, const char* input, size_t length)
+{
+    size_t offset;
+    uint64_t hash;
+
+    if (vm == NULL || input == NULL || !vm->string_intern_complete) {
+        return;
+    }
+    if (vm->string_intern_capacity == 0U ||
+        (vm->string_intern_count + 1U) * 10U >= vm->string_intern_capacity * 7U) {
+        size_t requested = vm->string_intern_capacity == 0U ? 1024U : vm->string_intern_capacity * 2U;
+        if (!string_intern_resize(vm, requested)) {
+            vm->string_intern_complete = 0;
+            return;
+        }
+    }
+    offset = (size_t)(input - vm->string_arena);
+    hash = string_hash(input, length);
+    if (string_intern_insert(vm->string_intern_entries, vm->string_intern_capacity, hash, offset, length)) {
+        vm->string_intern_count += 1U;
+    } else {
+        vm->string_intern_complete = 0;
+    }
+}
+
 static char* lookup_string_in_arena(AivmVm* vm, const char* input)
 {
     size_t offset = 0U;
     size_t next_offset;
+    size_t length;
+    char* indexed;
     if (vm == NULL || input == NULL) {
         return NULL;
     }
@@ -14,6 +193,11 @@ static char* lookup_string_in_arena(AivmVm* vm, const char* input)
         input >= vm->string_arena &&
         input < (vm->string_arena + vm->string_arena_used)) {
         return (char*)input;
+    }
+    length = strlen(input);
+    indexed = lookup_string_in_index(vm, input, length);
+    if (indexed != NULL || vm->string_intern_complete) {
+        return indexed;
     }
     while (offset < vm->string_arena_used) {
         const char* candidate = &vm->string_arena[offset];
@@ -42,6 +226,12 @@ static char* lookup_string_range_in_arena(AivmVm* vm, const char* input, size_t 
     size_t next_offset;
     if (vm == NULL || input == NULL) {
         return NULL;
+    }
+    {
+        char* indexed = lookup_string_in_index(vm, input, length);
+        if (indexed != NULL || vm->string_intern_complete) {
+            return indexed;
+        }
     }
     while (offset < vm->string_arena_used) {
         char* candidate = &vm->string_arena[offset];
@@ -146,6 +336,7 @@ char* aivm_vm_copy_string_to_arena(AivmVm* vm, const char* input)
         output[i] = source[i];
     }
     output[length] = '\0';
+    remember_string_in_index(vm, output, length);
     free(source_copy);
     return output;
 }
@@ -180,6 +371,7 @@ char* aivm_vm_copy_string_range_to_arena(AivmVm* vm, const char* input, size_t l
         output[i] = source[i];
     }
     output[length] = '\0';
+    remember_string_in_index(vm, output, length);
     free(source_copy);
     return output;
 }
@@ -248,6 +440,7 @@ char* aivm_vm_copy_string_splice_to_arena(
         output[prefix_length + i] = suffix_source[i];
     }
     output[total_length] = '\0';
+    remember_string_in_index(vm, output, total_length);
     free(prefix_copy);
     free(suffix_copy);
     return output;

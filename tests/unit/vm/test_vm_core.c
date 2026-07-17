@@ -52,6 +52,21 @@ static int host_core_bytes_large(
     return AIVM_SYSCALL_OK;
 }
 
+static int host_core_bytes_compiler_sized(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    static uint8_t payload[8U * 1024U * 1024U];
+    (void)target;
+    if (arg_count != 1U || args[0].type != AIVM_VAL_STRING) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_bytes(payload, sizeof(payload));
+    return AIVM_SYSCALL_OK;
+}
+
 static int test_run_nop_halt(void)
 {
     static AivmVm vm;
@@ -817,14 +832,26 @@ static int test_tooling_profile_allocates_tooling_node_arenas(void)
     if (expect(production_vm.node_capacity == AIVM_VM_NODE_CAPACITY) != 0 ||
         expect(production_vm.node_attr_capacity == AIVM_VM_NODE_ATTR_CAPACITY) != 0 ||
         expect(production_vm.node_child_capacity == AIVM_VM_NODE_CHILD_CAPACITY) != 0 ||
+        expect(production_vm.string_arena_capacity == AIVM_VM_STRING_ARENA_CAPACITY) != 0 ||
         expect(tooling_vm.runtime_profile == AIVM_RUNTIME_PROFILE_TOOLING) != 0 ||
         expect(tooling_vm.node_capacity == tooling_limits.node_capacity) != 0 ||
         expect(tooling_vm.node_attr_capacity == tooling_limits.node_attr_capacity) != 0 ||
         expect(tooling_vm.node_child_capacity == tooling_limits.node_child_capacity) != 0 ||
+        expect(tooling_vm.string_arena_capacity == tooling_limits.string_arena_capacity) != 0 ||
+        expect(tooling_vm.string_arena_storage_capacity == tooling_limits.string_arena_capacity) != 0 ||
         expect(production_vm.bytes_arena_capacity == AIVM_VM_BYTES_ARENA_CAPACITY) != 0 ||
         expect(tooling_vm.bytes_arena_capacity == tooling_limits.bytes_arena_capacity) != 0 ||
         expect(tooling_vm.bytes_arena_capacity > production_vm.bytes_arena_capacity) != 0 ||
+        expect(tooling_vm.string_arena_capacity > production_vm.string_arena_capacity) != 0 ||
         expect(tooling_vm.node_capacity > production_vm.node_capacity) != 0) {
+        return 1;
+    }
+
+    /* Reusing a VM for tooling must replace storage before parser values are rebuilt. */
+    aivm_init_with_profile(&production_vm, NULL, AIVM_RUNTIME_PROFILE_TOOLING);
+    if (expect(production_vm.string_arena_capacity == tooling_limits.string_arena_capacity) != 0 ||
+        expect(production_vm.string_arena_storage_capacity == tooling_limits.string_arena_capacity) != 0 ||
+        expect(production_vm.node_capacity == tooling_limits.node_capacity) != 0) {
         return 1;
     }
 
@@ -857,7 +884,7 @@ static int test_tooling_profile_materializes_large_bytes(void)
         .section_count = 0U
     };
     static const AivmSyscallBinding bindings[] = {
-        { "sys.fs.file.read", host_core_bytes_large }
+        { "sys.fs.file.read", host_core_bytes_compiler_sized }
     };
 
     aivm_init_with_syscalls_and_argv_profile(
@@ -873,7 +900,7 @@ static int test_tooling_profile_materializes_large_bytes(void)
         expect(vm.bytes_arena_pressure_count == 0U) != 0 ||
         expect(aivm_stack_pop(&vm, &result) == 1) != 0 ||
         expect(result.type == AIVM_VAL_BYTES) != 0 ||
-        expect(result.bytes_value.length == AIVM_VM_BYTES_ARENA_CAPACITY + 1U) != 0) {
+        expect(result.bytes_value.length == 8U * 1024U * 1024U) != 0) {
         aivm_dispose(&vm);
         return 1;
     }

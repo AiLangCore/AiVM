@@ -14,6 +14,7 @@ const char* aivm_vm_value_type_name(AivmValueType type)
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
         case AIVM_VAL_PAIR: return "pair";
+        case AIVM_VAL_NODE_BUILDER: return "nodeBuilder";
         default: return "unknown";
     }
 }

@@ -28,6 +28,8 @@ char* aivm_vm_copy_string_splice_to_arena(
     const char* suffix,
     size_t suffix_length);
 int aivm_pointer_in_string_arena(const AivmVm* vm, const char* text);
+void aivm_vm_reset_string_intern_index(AivmVm* vm);
+void aivm_vm_rebuild_string_intern_index(AivmVm* vm);
 int aivm_vm_mark_live_scratch_pair_handles(AivmVm* vm, uint8_t* live_pairs);
 int aivm_vm_compact_scratch_pairs(AivmVm* vm);
 int aivm_vm_lookup_node(const AivmVm* vm, int64_t handle, const AivmNodeRecord** out_node);
@@ -42,6 +44,11 @@ int aivm_vm_create_node_record(
     const int64_t* children,
     size_t child_count,
     int64_t* out_handle);
+void aivm_vm_reset_node_builders(AivmVm* vm);
+int aivm_vm_node_builder_new(AivmVm* vm, const char* kind, const char* id, int64_t* out_handle);
+int aivm_vm_node_builder_append_child(AivmVm* vm, int64_t builder_handle, int64_t child_handle);
+int aivm_vm_node_builder_append_attr(AivmVm* vm, int64_t builder_handle, int64_t attr_handle);
+int aivm_vm_node_builder_finish(AivmVm* vm, int64_t builder_handle, int64_t* out_node_handle);
 int aivm_vm_mark_live_node_handles(
     AivmVm* vm,
     uint8_t* live,

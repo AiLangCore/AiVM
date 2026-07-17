@@ -28,7 +28,7 @@ profile limit record.
 | `stack_capacity` | 20000 | Maximum VM stack values. |
 | `call_frame_capacity` | 2048 | Maximum active call frames. |
 | `locals_capacity` | 16384 | Maximum VM local slots. |
-| `string_arena_capacity` | 2097152 | Maximum VM-owned string arena bytes. |
+| `string_arena_capacity` | profile-dependent | Maximum VM-owned string arena bytes. |
 | `bytes_arena_capacity` | profile-dependent | Maximum VM-owned byte arena bytes. |
 | `node_capacity` | 16384 | Maximum semantic node records. |
 | `node_attr_capacity` | 65536 | Maximum semantic node attributes. |
@@ -54,14 +54,15 @@ retained roots and reduce temporary structures.
 ### Profile-Specific Arena Limits
 
 The production VM remains bounded for deployed applications. The tooling
-profile has a separately bounded byte arena because compiler and package
-workloads must hold source modules larger than the production payload budget.
+profile has separately bounded string and byte arenas because compiler and
+package workloads retain source modules and intermediate artifacts larger than
+the production payload budget.
 
-| Profile | `bytes_arena_capacity` | Intended workload |
-| --- | ---: | --- |
-| `production` | 131072 | Published application execution. |
-| `debug` | 131072 | Diagnostic execution with production-sized memory behavior. |
-| `tooling` | 4194304 | Compiler, parser, linker, package, and SDK execution. |
+| Profile | `string_arena_capacity` | `bytes_arena_capacity` | Intended workload |
+| --- | ---: | ---: | --- |
+| `production` | 2097152 | 131072 | Published application execution. |
+| `debug` | 2097152 | 131072 | Diagnostic execution with production-sized memory behavior. |
+| `tooling` | 16777216 | 16777216 | Compiler, parser, linker, package, and SDK execution. |
 
 The `ailang` tool host defaults to `tooling`. `AILANG_VM_PROFILE` may select a
 different named profile explicitly. This changes only bounded runtime resource
