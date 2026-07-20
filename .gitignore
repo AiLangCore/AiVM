@@ -9,3 +9,5 @@ Testing/
 *.local.*
 config.local.toml
 .DS_Store
+
+.toolchain/
