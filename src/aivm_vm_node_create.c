@@ -109,6 +109,7 @@ int aivm_vm_create_node_record(
     size_t needed_attr_count = 0U;
     size_t needed_child_count = 0U;
     size_t needed_node_count = 0U;
+    size_t string_reserve = 0U;
     size_t i;
     if (vm == NULL || kind == NULL || id == NULL || out_handle == NULL) {
         return 0;
@@ -153,6 +154,30 @@ int aivm_vm_create_node_record(
                 goto fail;
             }
         }
+    }
+    if (!aivm_size_add_checked(strlen(kind_source), 1U, &string_reserve) ||
+        !aivm_size_add_checked(string_reserve, strlen(id_source), &string_reserve) ||
+        !aivm_size_add_checked(string_reserve, 1U, &string_reserve)) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: node string reservation overflow.");
+        goto fail;
+    }
+    for (i = 0U; i < attr_count; i += 1U) {
+        size_t attr_bytes = 0U;
+        if (!aivm_size_add_checked(strlen(stable_attrs[i].key), 1U, &attr_bytes) ||
+            !aivm_size_add_checked(string_reserve, attr_bytes, &string_reserve)) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: node string reservation overflow.");
+            goto fail;
+        }
+        if (stable_attrs[i].kind == AIVM_NODE_ATTR_IDENTIFIER || stable_attrs[i].kind == AIVM_NODE_ATTR_STRING) {
+            if (!aivm_size_add_checked(strlen(stable_attrs[i].string_value), 1U, &attr_bytes) ||
+                !aivm_size_add_checked(string_reserve, attr_bytes, &string_reserve)) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: node string reservation overflow.");
+                goto fail;
+            }
+        }
+    }
+    if (!aivm_string_arena_reserve(vm, string_reserve)) {
+        goto fail;
     }
     if (aivm_vm_should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
         if (!prepare_compaction_scratch(vm, &remapped_children, &handle_map, child_count)) {

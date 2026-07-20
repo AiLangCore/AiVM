@@ -7,12 +7,14 @@
 
 void aivm_set_vm_error(AivmVm* vm, AivmVmError error, const char* detail);
 int aivm_size_add_checked(size_t a, size_t b, size_t* out);
+int aivm_vm_admit_host_memory_growth(AivmVm* vm, size_t growth_bytes);
 int aivm_vm_ensure_storage(AivmVm* vm);
 void aivm_counter_increment_saturating(size_t* counter);
 void aivm_release_all_blobs(AivmVm* vm);
 int aivm_compact_string_arena(AivmVm* vm);
 int aivm_compact_bytes_arena(AivmVm* vm);
 char* aivm_string_arena_alloc(AivmVm* vm, size_t size);
+int aivm_string_arena_reserve(AivmVm* vm, size_t additional_size);
 uint8_t* aivm_bytes_arena_alloc(AivmVm* vm, size_t size);
 const char* aivm_vm_snapshot_arena_backed_string(
     AivmVm* vm,

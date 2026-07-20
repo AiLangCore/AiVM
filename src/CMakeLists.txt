@@ -84,6 +84,7 @@ set(AIVM_CORE_SOURCES
     aivm_types.c
     aivm_vm.c
     aivm_vm_arena.c
+    aivm_host_memory.c
     aivm_vm_blob.c
     aivm_vm_error.c
     aivm_vm_history.c

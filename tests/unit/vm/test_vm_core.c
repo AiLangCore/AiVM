@@ -4,6 +4,7 @@
 
 #include "aivm_program.h"
 #include "aivm_vm.h"
+#include "aivm_host_memory.h"
 
 static int expect_line(int condition, int line)
 {
@@ -908,6 +909,23 @@ static int test_tooling_profile_materializes_large_bytes(void)
     return 0;
 }
 
+static int test_host_memory_growth_reserve_and_hysteresis(void)
+{
+    int suspended = 0;
+    size_t gib = 1024U * 1024U * 1024U;
+    if (expect(aivm_host_memory_growth_allowed(16U * gib, 4U * gib, 16U * 1024U, 0, &suspended) == 1) != 0 ||
+        expect(suspended == 0) != 0 ||
+        expect(aivm_host_memory_growth_allowed(16U * gib, 1U * gib, 16U * 1024U, 0, &suspended) == 0) != 0 ||
+        expect(suspended == 1) != 0 ||
+        expect(aivm_host_memory_growth_allowed(16U * gib, 2U * gib, 16U * 1024U, 1, &suspended) == 0) != 0 ||
+        expect(suspended == 1) != 0 ||
+        expect(aivm_host_memory_growth_allowed(16U * gib, 3U * gib, 16U * 1024U, 1, &suspended) == 1) != 0 ||
+        expect(suspended == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_run_nop_halt() != 0) {
@@ -965,6 +983,9 @@ int main(void)
         return 1;
     }
     if (test_tooling_profile_materializes_large_bytes() != 0) {
+        return 1;
+    }
+    if (test_host_memory_growth_reserve_and_hysteresis() != 0) {
         return 1;
     }
 

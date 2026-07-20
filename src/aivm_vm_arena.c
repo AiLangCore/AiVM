@@ -18,22 +18,28 @@ static size_t arena_grow_limit(size_t current, size_t step, size_t max_value)
 
 static int ensure_string_arena_capacity(AivmVm* vm, size_t needed)
 {
+    size_t next;
     if (vm == NULL) {
         return 0;
     }
     while (needed > vm->string_arena_limit && vm->string_arena_limit < vm->string_arena_capacity) {
-        vm->string_arena_limit = arena_grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, vm->string_arena_capacity);
+        next = arena_grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, vm->string_arena_capacity);
+        if (!aivm_vm_admit_host_memory_growth(vm, next - vm->string_arena_limit)) return 0;
+        vm->string_arena_limit = next;
     }
     return needed <= vm->string_arena_limit;
 }
 
 static int ensure_bytes_arena_capacity(AivmVm* vm, size_t needed)
 {
+    size_t next;
     if (vm == NULL) {
         return 0;
     }
     while (needed > vm->bytes_arena_limit && vm->bytes_arena_limit < vm->bytes_arena_capacity) {
-        vm->bytes_arena_limit = arena_grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, vm->bytes_arena_capacity);
+        next = arena_grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, vm->bytes_arena_capacity);
+        if (!aivm_vm_admit_host_memory_growth(vm, next - vm->bytes_arena_limit)) return 0;
+        vm->bytes_arena_limit = next;
     }
     return needed <= vm->bytes_arena_limit;
 }
@@ -76,7 +82,9 @@ char* aivm_string_arena_alloc(AivmVm* vm, size_t size)
     if (needed > vm->string_arena_limit &&
         !ensure_string_arena_capacity(vm, needed)) {
         aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
-        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        if (vm->status != AIVM_VM_STATUS_ERROR) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        }
         return NULL;
     }
 
@@ -86,6 +94,41 @@ char* aivm_string_arena_alloc(AivmVm* vm, size_t size)
         vm->string_arena_high_water = vm->string_arena_used;
     }
     return start;
+}
+
+int aivm_string_arena_reserve(AivmVm* vm, size_t additional_size)
+{
+    size_t needed = 0U;
+    if (vm == NULL) {
+        return 0;
+    }
+    if (!aivm_size_add_checked(vm->string_arena_used, additional_size, &needed)) {
+        aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        return 0;
+    }
+    if (needed > vm->string_arena_limit) {
+        if (!aivm_compact_string_arena(vm)) {
+            aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
+            if (vm->status != AIVM_VM_STATUS_ERROR) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+            }
+            return 0;
+        }
+        if (!aivm_size_add_checked(vm->string_arena_used, additional_size, &needed)) {
+            aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+            return 0;
+        }
+    }
+    if (needed > vm->string_arena_limit && !ensure_string_arena_capacity(vm, needed)) {
+        aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
+        if (vm->status != AIVM_VM_STATUS_ERROR) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
+        }
+        return 0;
+    }
+    return 1;
 }
 
 uint8_t* aivm_bytes_arena_alloc(AivmVm* vm, size_t size)
@@ -103,7 +146,9 @@ uint8_t* aivm_bytes_arena_alloc(AivmVm* vm, size_t size)
     if (needed > vm->bytes_arena_limit &&
         !ensure_bytes_arena_capacity(vm, needed)) {
         aivm_counter_increment_saturating(&vm->bytes_arena_pressure_count);
-        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
+        if (vm->status != AIVM_VM_STATUS_ERROR) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
+        }
         return NULL;
     }
     start = &vm->bytes_arena[vm->bytes_arena_used];
