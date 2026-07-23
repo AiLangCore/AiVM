@@ -479,10 +479,30 @@ int aivm_vm_should_attempt_proactive_node_gc(
 
 int aivm_vm_should_attempt_return_safe_point(const AivmVm* vm)
 {
+    size_t node_threshold;
+    size_t attr_threshold;
+    size_t child_threshold;
     if (vm == NULL) {
         return 0;
     }
-    return vm->node_allocations_since_gc >= AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS;
+    if (vm->node_allocations_since_gc < AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS) {
+        return 0;
+    }
+    if (vm->runtime_profile != AIVM_RUNTIME_PROFILE_TOOLING) {
+        return 1;
+    }
+    node_threshold =
+        (vm->node_capacity / AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR) *
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR;
+    attr_threshold =
+        (vm->node_attr_capacity / AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR) *
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR;
+    child_threshold =
+        (vm->node_child_capacity / AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR) *
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR;
+    return vm->node_count >= node_threshold ||
+           vm->node_attr_count >= attr_threshold ||
+           vm->node_child_count >= child_threshold;
 }
 
 int aivm_vm_should_attempt_bytes_return_safe_point(const AivmVm* vm)
