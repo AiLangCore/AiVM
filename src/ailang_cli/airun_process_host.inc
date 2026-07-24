@@ -52,6 +52,7 @@ static AivmValue native_process_consume_buffer(
     size_t* length,
     size_t* position)
 {
+    size_t copy_len;
     size_t unread_len;
     AivmValue value;
     value = aivm_value_bytes(NULL, 0U);
@@ -59,8 +60,13 @@ static AivmValue native_process_consume_buffer(
         return value;
     }
     unread_len = *length - *position;
-    value = aivm_value_bytes(*buffer + *position, unread_len);
-    *position = *length;
+    copy_len = unread_len;
+    if (copy_len > NATIVE_PROCESS_READ_CHUNK) {
+        copy_len = NATIVE_PROCESS_READ_CHUNK;
+    }
+    memcpy(g_native_process_read_scratch, *buffer + *position, copy_len);
+    value = aivm_value_bytes(g_native_process_read_scratch, copy_len);
+    *position += copy_len;
     return value;
 }
 

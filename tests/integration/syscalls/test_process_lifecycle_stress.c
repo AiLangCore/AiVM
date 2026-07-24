@@ -395,6 +395,7 @@ static int wait_drains_child_output_without_deadlock(void)
     CHECK(status == AIVM_SYSCALL_OK);
     CHECK(result.type == AIVM_VAL_BYTES);
     CHECK(result.bytes_value.data != NULL);
+    CHECK(result.bytes_value.data == g_native_process_read_scratch);
     CHECK(result.bytes_value.length > 0U);
     CHECK(bytes_contains(result.bytes_value.data, result.bytes_value.length, "child-output-line"));
 
