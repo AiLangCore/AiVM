@@ -24,7 +24,8 @@ static int ensure_string_arena_capacity(AivmVm* vm, size_t needed)
     }
     while (needed > vm->string_arena_limit && vm->string_arena_limit < vm->string_arena_capacity) {
         next = arena_grow_limit(vm->string_arena_limit, AIVM_VM_STRING_ARENA_GROWTH_STEP, vm->string_arena_capacity);
-        if (!aivm_vm_admit_host_memory_growth(vm, next - vm->string_arena_limit)) return 0;
+        if (vm->runtime_profile == AIVM_RUNTIME_PROFILE_TOOLING &&
+            !aivm_vm_host_memory_growth_available(vm, next - vm->string_arena_limit)) return 0;
         vm->string_arena_limit = next;
     }
     return needed <= vm->string_arena_limit;
@@ -65,7 +66,8 @@ char* aivm_string_arena_alloc(AivmVm* vm, size_t size)
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return NULL;
     }
-    if (needed > vm->string_arena_limit) {
+    if (needed > vm->string_arena_limit &&
+        !ensure_string_arena_capacity(vm, needed)) {
         if (!aivm_compact_string_arena(vm)) {
             aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
             if (vm->status != AIVM_VM_STATUS_ERROR) {
@@ -107,7 +109,8 @@ int aivm_string_arena_reserve(AivmVm* vm, size_t additional_size)
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM001: string arena capacity exceeded.");
         return 0;
     }
-    if (needed > vm->string_arena_limit) {
+    if (needed > vm->string_arena_limit &&
+        !ensure_string_arena_capacity(vm, needed)) {
         if (!aivm_compact_string_arena(vm)) {
             aivm_counter_increment_saturating(&vm->string_arena_pressure_count);
             if (vm->status != AIVM_VM_STATUS_ERROR) {

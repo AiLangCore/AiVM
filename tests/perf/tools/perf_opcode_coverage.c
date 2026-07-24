@@ -93,7 +93,17 @@ static const PerfOpcodeCoverage g_opcode_coverage[] = {
     { AIVM_OP_LT_NUM, "AIVM_OP_LT_NUM", PERF_OPCODE_BENCHMARKED, "numeric benchmark" },
     { AIVM_OP_BYTES_FROM_BYTE, "AIVM_OP_BYTES_FROM_BYTE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" },
     { AIVM_OP_BYTES_U32_LE, "AIVM_OP_BYTES_U32_LE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" },
-    { AIVM_OP_BYTES_I64_LE, "AIVM_OP_BYTES_I64_LE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" }
+    { AIVM_OP_BYTES_I64_LE, "AIVM_OP_BYTES_I64_LE", PERF_OPCODE_TRACKED_GAP, "stdlib-covered; add byte construction benchmark" },
+    { AIVM_OP_NODE_BUILDER_NEW, "AIVM_OP_NODE_BUILDER_NEW", PERF_OPCODE_TRACKED_GAP, "unit-covered; add AST builder benchmark" },
+    { AIVM_OP_NODE_BUILDER_APPEND_CHILD, "AIVM_OP_NODE_BUILDER_APPEND_CHILD", PERF_OPCODE_TRACKED_GAP, "unit-covered; add AST builder benchmark" },
+    { AIVM_OP_NODE_BUILDER_APPEND_ATTR, "AIVM_OP_NODE_BUILDER_APPEND_ATTR", PERF_OPCODE_TRACKED_GAP, "unit-covered; add AST builder benchmark" },
+    { AIVM_OP_NODE_BUILDER_FINISH, "AIVM_OP_NODE_BUILDER_FINISH", PERF_OPCODE_TRACKED_GAP, "unit-covered; add AST builder benchmark" },
+    { AIVM_OP_MAP_BUILDER_NEW, "AIVM_OP_MAP_BUILDER_NEW", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" },
+    { AIVM_OP_MAP_BUILDER_PUT_STRING_INT, "AIVM_OP_MAP_BUILDER_PUT_STRING_INT", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" },
+    { AIVM_OP_MAP_BUILDER_FINISH, "AIVM_OP_MAP_BUILDER_FINISH", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" },
+    { AIVM_OP_MAP_COUNT, "AIVM_OP_MAP_COUNT", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" },
+    { AIVM_OP_MAP_HAS_STRING, "AIVM_OP_MAP_HAS_STRING", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" },
+    { AIVM_OP_MAP_GET_STRING_INT_OR, "AIVM_OP_MAP_GET_STRING_INT_OR", PERF_OPCODE_TRACKED_GAP, "storage benchmarked; add opcode perf row" }
 };
 
 int main(void)

@@ -92,3 +92,19 @@ int aivm_vm_admit_host_memory_growth(AivmVm* vm, size_t growth_bytes)
     vm->host_memory_growth_suspended = suspended;
     return 1;
 }
+
+int aivm_vm_host_memory_growth_available(AivmVm* vm, size_t growth_bytes)
+{
+    size_t total_bytes = 0U;
+    size_t available_bytes = 0U;
+    int suspended = 0;
+    if (vm == NULL || vm->runtime_profile != AIVM_RUNTIME_PROFILE_TOOLING) return 0;
+    if (!host_memory_snapshot(&total_bytes, &available_bytes)) return 1;
+    if (!aivm_host_memory_growth_allowed(total_bytes, available_bytes, growth_bytes,
+            vm->host_memory_growth_suspended, &suspended)) {
+        vm->host_memory_growth_suspended = suspended;
+        return 0;
+    }
+    vm->host_memory_growth_suspended = suspended;
+    return 1;
+}

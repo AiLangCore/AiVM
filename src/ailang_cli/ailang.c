@@ -4226,6 +4226,12 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_FROM_BYTE: return "BYTES_FROM_BYTE";
         case AIVM_OP_BYTES_U32_LE: return "BYTES_U32_LE";
         case AIVM_OP_BYTES_I64_LE: return "BYTES_I64_LE";
+        case AIVM_OP_MAP_BUILDER_NEW: return "MAP_BUILDER_NEW";
+        case AIVM_OP_MAP_BUILDER_PUT_STRING_INT: return "MAP_BUILDER_PUT_STRING_INT";
+        case AIVM_OP_MAP_BUILDER_FINISH: return "MAP_BUILDER_FINISH";
+        case AIVM_OP_MAP_COUNT: return "MAP_COUNT";
+        case AIVM_OP_MAP_HAS_STRING: return "MAP_HAS_STRING";
+        case AIVM_OP_MAP_GET_STRING_INT_OR: return "MAP_GET_STRING_INT_OR";
         case AIVM_OP_MAKE_PAIR: return "MAKE_PAIR";
         case AIVM_OP_PAIR_FIRST: return "PAIR_FIRST";
         case AIVM_OP_PAIR_SECOND: return "PAIR_SECOND";
@@ -4322,7 +4328,11 @@ static int emit_vm_error_with_context(const AivmProgram* program, const AivmVm* 
     pc = vm->instruction_pointer;
     display_pc = pc;
     if (program->instruction_count > 0U && display_pc >= program->instruction_count) {
-        display_pc = program->instruction_count - 1U;
+        if (vm->recent_opcode_count > 0U) {
+            display_pc = vm->recent_opcodes[0].instruction_pointer;
+        } else {
+            display_pc = program->instruction_count - 1U;
+        }
     }
     if (vm->error == AIVM_VM_ERR_SYSCALL) {
         phase = "syscall";
@@ -5129,6 +5139,12 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(BYTES_FROM_BYTE)
     MAP_OP(BYTES_U32_LE)
     MAP_OP(BYTES_I64_LE)
+    MAP_OP(MAP_BUILDER_NEW)
+    MAP_OP(MAP_BUILDER_PUT_STRING_INT)
+    MAP_OP(MAP_BUILDER_FINISH)
+    MAP_OP(MAP_COUNT)
+    MAP_OP(MAP_HAS_STRING)
+    MAP_OP(MAP_GET_STRING_INT_OR)
     MAP_OP(MAKE_PAIR)
     MAP_OP(PAIR_FIRST)
     MAP_OP(PAIR_SECOND)
@@ -7503,6 +7519,54 @@ static int simple_compile_expr_ext(
             return 0;
         }
         return 1;
+    }
+    if (strcmp(node->kind, "MapBuilderNew") == 0) {
+        return simple_emit_instruction(program, AIVM_OP_MAP_BUILDER_NEW, 0);
+    }
+    if (strcmp(node->kind, "MapBuilderFinish") == 0 ||
+        strcmp(node->kind, "MapCount") == 0) {
+        SimpleNodeView value;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &value) ||
+            !simple_compile_expr_ext(&value, program, locals, ctx)) {
+            return simple_failf("%s requires one argument", node->kind);
+        }
+        return simple_emit_instruction(
+            program,
+            strcmp(node->kind, "MapBuilderFinish") == 0
+                ? AIVM_OP_MAP_BUILDER_FINISH
+                : AIVM_OP_MAP_COUNT,
+            0);
+    }
+    if (strcmp(node->kind, "MapHasString") == 0) {
+        SimpleNodeView map;
+        SimpleNodeView key;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &map) ||
+            !simple_parse_next_node(map.next, node->body_end, &key) ||
+            !simple_compile_expr_ext(&map, program, locals, ctx) ||
+            !simple_compile_expr_ext(&key, program, locals, ctx)) {
+            return simple_fail("MapHasString requires (map,key)");
+        }
+        return simple_emit_instruction(program, AIVM_OP_MAP_HAS_STRING, 0);
+    }
+    if (strcmp(node->kind, "MapBuilderPutStringInt") == 0 ||
+        strcmp(node->kind, "MapGetStringIntOr") == 0) {
+        SimpleNodeView first;
+        SimpleNodeView second;
+        SimpleNodeView third;
+        if (!simple_parse_next_node(node->body_start, node->body_end, &first) ||
+            !simple_parse_next_node(first.next, node->body_end, &second) ||
+            !simple_parse_next_node(second.next, node->body_end, &third) ||
+            !simple_compile_expr_ext(&first, program, locals, ctx) ||
+            !simple_compile_expr_ext(&second, program, locals, ctx) ||
+            !simple_compile_expr_ext(&third, program, locals, ctx)) {
+            return simple_failf("%s requires three arguments", node->kind);
+        }
+        return simple_emit_instruction(
+            program,
+            strcmp(node->kind, "MapBuilderPutStringInt") == 0
+                ? AIVM_OP_MAP_BUILDER_PUT_STRING_INT
+                : AIVM_OP_MAP_GET_STRING_INT_OR,
+            0);
     }
     if (starts_with(node->kind, "Map")) {
         const char* c = node->body_start;

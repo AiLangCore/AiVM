@@ -21,7 +21,9 @@ typedef enum {
     AIVM_VAL_PAIR = 8,
     AIVM_VAL_UNKNOWN = 9,
     /* Compiler-internal mutable construction state; never crosses a boundary. */
-    AIVM_VAL_NODE_BUILDER = 10
+    AIVM_VAL_NODE_BUILDER = 10,
+    AIVM_VAL_MAP_BUILDER = 11,
+    AIVM_VAL_MAP = 12
 } AivmValueType;
 
 typedef struct {
@@ -35,6 +37,7 @@ typedef struct {
         int64_t node_handle;
         int64_t pair_handle;
         int64_t node_builder_handle;
+        int64_t map_handle;
     };
 } AivmValue;
 
@@ -49,6 +52,8 @@ AivmValue aivm_value_bytes(const uint8_t* data, size_t length);
 AivmValue aivm_value_node(int64_t handle);
 AivmValue aivm_value_pair(int64_t handle);
 AivmValue aivm_value_node_builder(int64_t handle);
+AivmValue aivm_value_map_builder(int64_t handle);
+AivmValue aivm_value_map(int64_t handle);
 int aivm_value_equals(AivmValue left, AivmValue right);
 int aivm_value_is_immutable_message_payload(AivmValue value);
 

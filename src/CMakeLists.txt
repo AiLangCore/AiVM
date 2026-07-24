@@ -89,7 +89,9 @@ set(AIVM_CORE_SOURCES
     aivm_vm_error.c
     aivm_vm_history.c
     aivm_vm_lifecycle.c
+    aivm_vm_map.c
     aivm_vm_node.c
+    aivm_vm_node_arena.c
     aivm_vm_node_create.c
     aivm_vm_node_builder.c
     aivm_vm_node_gc.c
@@ -378,6 +380,11 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_blob_storage PRIVATE aivm_core)
 
+    add_executable(aivm_test_map_storage
+        ../tests/unit/collections/test_map_storage.c
+    )
+    target_link_libraries(aivm_test_map_storage PRIVATE aivm_core)
+
     add_executable(aivm_test_spec_coverage
         ../tests/spec/test_spec_coverage.c
     )
@@ -571,6 +578,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_cycle PRIVATE /W4)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE /W4)
         target_compile_options(aivm_test_blob_storage PRIVATE /W4)
+        target_compile_options(aivm_test_map_storage PRIVATE /W4)
         target_compile_options(aivm_test_spec_coverage PRIVATE /W4)
         target_compile_options(aivm_test_loader_fuzz PRIVATE /W4)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE /W4)
@@ -615,6 +623,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_memory_cycle PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_debug_artifact_budget PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_blob_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_map_storage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_spec_coverage PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_loader_fuzz PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_security_malformed_inputs PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -660,6 +669,7 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_memory_cycle COMMAND aivm_test_memory_cycle)
     add_test(NAME aivm_test_debug_artifact_budget COMMAND aivm_test_debug_artifact_budget)
     add_test(NAME aivm_test_blob_storage COMMAND aivm_test_blob_storage)
+    add_test(NAME aivm_test_map_storage COMMAND aivm_test_map_storage)
     add_test(NAME aivm_test_spec_coverage COMMAND aivm_test_spec_coverage ${CMAKE_CURRENT_SOURCE_DIR}/..)
     add_test(NAME aivm_test_loader_fuzz COMMAND aivm_test_loader_fuzz)
     add_test(NAME aivm_test_security_malformed_inputs COMMAND aivm_test_security_malformed_inputs)
@@ -792,6 +802,7 @@ if (BUILD_TESTING)
         aivm_test_memory_cycle
         aivm_test_debug_artifact_budget
         aivm_test_blob_storage
+        aivm_test_map_storage
         PROPERTIES LABELS "unit;memory"
     )
     set_tests_properties(

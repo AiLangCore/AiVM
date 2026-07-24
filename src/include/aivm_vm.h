@@ -179,6 +179,22 @@ typedef struct {
     size_t child_capacity;
 } AivmNodeBuilderRecord;
 
+/* Mechanical string-to-int bulk map storage. Finished records are immutable. */
+typedef struct {
+    uint64_t hash;
+    char* key;
+    int64_t value;
+    int occupied;
+} AivmMapSlot;
+
+typedef struct {
+    int active;
+    int frozen;
+    AivmMapSlot* slots;
+    size_t slot_capacity;
+    size_t count;
+} AivmMapRecord;
+
 typedef struct {
     int64_t handle;
     uint8_t* data;
@@ -211,6 +227,7 @@ enum {
     AIVM_VM_NODE_ATTR_CAPACITY = 65536,
     AIVM_VM_NODE_CHILD_CAPACITY = 131072,
     AIVM_VM_NODE_BUILDER_CAPACITY = 512,
+    AIVM_VM_MAP_CAPACITY = 128,
     AIVM_VM_TOOLING_NODE_CAPACITY = 65536,
     AIVM_VM_TOOLING_NODE_ATTR_CAPACITY = 262144,
     AIVM_VM_TOOLING_NODE_CHILD_CAPACITY = 524288,
@@ -334,6 +351,7 @@ typedef struct {
     size_t node_child_count;
     size_t node_child_capacity;
     AivmNodeBuilderRecord node_builders[AIVM_VM_NODE_BUILDER_CAPACITY];
+    AivmMapRecord maps[AIVM_VM_MAP_CAPACITY];
     int64_t ui_default_window_size_node_handle;
     int64_t ui_empty_event_node_handle;
     size_t string_arena_high_water;

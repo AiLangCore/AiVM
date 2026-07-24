@@ -179,7 +179,12 @@ int aivm_vm_create_node_record(
     if (!aivm_string_arena_reserve(vm, string_reserve)) {
         goto fail;
     }
-    if (aivm_vm_should_attempt_proactive_node_gc(vm, attr_count, child_count)) {
+    if (aivm_vm_should_attempt_proactive_node_gc(vm, attr_count, child_count) &&
+        !aivm_vm_try_grow_node_arenas(
+            vm,
+            vm->node_count + 1U,
+            vm->node_attr_count + attr_count,
+            vm->node_child_count + child_count)) {
         if (!prepare_compaction_scratch(vm, &remapped_children, &handle_map, child_count)) {
             goto fail;
         }

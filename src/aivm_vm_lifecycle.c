@@ -25,6 +25,7 @@ void aivm_reset_state(AivmVm* vm)
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
     aivm_release_all_blobs(vm);
     aivm_vm_reset_node_builders(vm);
+    aivm_vm_reset_maps(vm);
 
     vm->instruction_pointer = 0U;
     vm->status = AIVM_VM_STATUS_READY;
@@ -111,6 +112,7 @@ void aivm_dispose(AivmVm* vm)
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
     aivm_release_all_blobs(vm);
     aivm_vm_reset_node_builders(vm);
+    aivm_vm_reset_maps(vm);
     free(vm->stack);
     free(vm->locals);
     free(vm->string_arena);

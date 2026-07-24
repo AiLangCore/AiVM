@@ -4,6 +4,7 @@
 
 #include "aivm_program.h"
 #include "aivm_vm.h"
+#include "../../../src/aivm_vm_internal.h"
 
 static int expect_line(int condition, int line)
 {
@@ -3659,7 +3660,9 @@ static int test_string_compaction_preserves_live_node_strings(void)
         return 1;
     }
     arena_before_compaction = vm.string_arena;
-    vm.string_arena_limit = vm.string_arena_used + 1U;
+    if (expect(aivm_compact_string_arena(&vm) == 1) != 0) {
+        return 1;
+    }
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
         return 1;

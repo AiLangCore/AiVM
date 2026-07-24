@@ -2860,21 +2860,25 @@ int aivm_vm_initialize_process_argv_node(AivmVm* vm)
     return 1;
 }
 
-static int collect_safe_point_internal(AivmVm* vm, int collect_bytes)
+static int collect_safe_point_internal(AivmVm* vm, int collect_nodes, int collect_bytes)
 {
     if (vm == NULL) {
         return 0;
     }
-    if (vm->node_count > 0U) {
+    if (collect_nodes != 0 && vm->node_count > 0U) {
         if (!aivm_vm_compact_node_arenas_with_map(vm, NULL, 0U, NULL)) {
             return 0;
         }
         vm->node_allocations_since_gc = 0U;
     }
-    if (vm->scratch_pair_count > 0U && !aivm_vm_compact_scratch_pairs(vm)) {
+    if (collect_nodes != 0 &&
+        vm->scratch_pair_count > 0U &&
+        !aivm_vm_compact_scratch_pairs(vm)) {
         return 0;
     }
-    if (vm->string_arena_used > 0U && !aivm_compact_string_arena(vm)) {
+    if (collect_nodes != 0 &&
+        vm->string_arena_used > 0U &&
+        !aivm_compact_string_arena(vm)) {
         return 0;
     }
     if (collect_bytes != 0 && vm->bytes_arena_used > 0U && !aivm_compact_bytes_arena(vm)) {
@@ -2885,7 +2889,7 @@ static int collect_safe_point_internal(AivmVm* vm, int collect_bytes)
 
 int aivm_collect_safe_point(AivmVm* vm)
 {
-    return collect_safe_point_internal(vm, 1);
+    return collect_safe_point_internal(vm, 1, 1);
 }
 
 void aivm_halt(AivmVm* vm)
@@ -3405,7 +3409,11 @@ void aivm_step(AivmVm* vm)
             {
                 int collect_nodes = aivm_vm_should_attempt_return_safe_point(vm);
                 int collect_bytes = aivm_vm_should_attempt_bytes_return_safe_point(vm);
-                if ((collect_nodes || collect_bytes) && !collect_safe_point_internal(vm, collect_bytes)) {
+                if (collect_nodes && aivm_vm_try_grow_pressure_node_arenas(vm)) {
+                    collect_nodes = 0;
+                }
+                if ((collect_nodes || collect_bytes) &&
+                    !collect_safe_point_internal(vm, collect_nodes, collect_bytes)) {
                     vm->instruction_pointer = vm->program->instruction_count;
                     break;
                 }
@@ -4636,6 +4644,8 @@ void aivm_step(AivmVm* vm)
                 case AIVM_VAL_NODE: kind = "node"; break;
                 case AIVM_VAL_PAIR: kind = "pair"; break;
                 case AIVM_VAL_NODE_BUILDER: kind = "nodeBuilder"; break;
+                case AIVM_VAL_MAP_BUILDER: kind = "mapBuilder"; break;
+                case AIVM_VAL_MAP: kind = "map"; break;
                 case AIVM_VAL_UNKNOWN: kind = "unknown"; break;
                 default:
                     aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "VALUE_KIND received invalid value type.");
@@ -5387,6 +5397,100 @@ void aivm_step(AivmVm* vm)
                 !aivm_vm_node_builder_finish(vm, builder_value.node_builder_handle, &node_handle) ||
                 !aivm_stack_push(vm, aivm_value_node(node_handle))) {
                 if (vm->status != AIVM_VM_STATUS_ERROR) aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "NODE_BUILDER_FINISH requires builder operand.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAP_BUILDER_NEW: {
+            int64_t handle;
+            if (!aivm_vm_map_builder_new(vm, &handle) ||
+                !aivm_stack_push(vm, aivm_value_map_builder(handle))) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAP_BUILDER_PUT_STRING_INT: {
+            AivmValue value;
+            AivmValue key;
+            AivmValue builder;
+            if (!aivm_stack_pop(vm, &value) || !aivm_stack_pop(vm, &key) || !aivm_stack_pop(vm, &builder) ||
+                builder.type != AIVM_VAL_MAP_BUILDER ||
+                key.type != AIVM_VAL_STRING || key.string_value == NULL ||
+                value.type != AIVM_VAL_INT ||
+                !aivm_vm_map_builder_put_string_int(vm, builder.map_handle, key.string_value, value.int_value) ||
+                !aivm_stack_push(vm, builder)) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAP_BUILDER_PUT_STRING_INT requires (mapBuilder,string,int).");
+                }
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAP_BUILDER_FINISH: {
+            AivmValue builder;
+            if (!aivm_stack_pop(vm, &builder) || builder.type != AIVM_VAL_MAP_BUILDER ||
+                !aivm_vm_map_builder_finish(vm, builder.map_handle) ||
+                !aivm_stack_push(vm, aivm_value_map(builder.map_handle))) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAP_BUILDER_FINISH requires mapBuilder operand.");
+                }
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAP_COUNT: {
+            AivmValue map;
+            size_t count;
+            if (!aivm_stack_pop(vm, &map) || map.type != AIVM_VAL_MAP ||
+                !aivm_vm_map_count(vm, map.map_handle, &count) ||
+                !aivm_stack_push(vm, aivm_value_int((int64_t)count))) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAP_COUNT requires map operand.");
+                }
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_MAP_HAS_STRING:
+        case AIVM_OP_MAP_GET_STRING_INT_OR: {
+            AivmValue fallback = aivm_value_int(0);
+            AivmValue key;
+            AivmValue map;
+            int64_t value;
+            int found;
+            if (instruction->opcode == AIVM_OP_MAP_GET_STRING_INT_OR &&
+                (!aivm_stack_pop(vm, &fallback) || fallback.type != AIVM_VAL_INT)) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "MAP_GET_STRING_INT_OR requires integer fallback.");
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            if (!aivm_stack_pop(vm, &key) || !aivm_stack_pop(vm, &map) ||
+                map.type != AIVM_VAL_MAP || key.type != AIVM_VAL_STRING || key.string_value == NULL ||
+                !aivm_vm_map_get_string_int(
+                    vm, map.map_handle, key.string_value, fallback.int_value, &value, &found) ||
+                !aivm_stack_push(
+                    vm,
+                    instruction->opcode == AIVM_OP_MAP_HAS_STRING
+                        ? aivm_value_bool(found)
+                        : aivm_value_int(value))) {
+                if (vm->status != AIVM_VM_STATUS_ERROR) {
+                    aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "Map lookup requires (map,string).");
+                }
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }

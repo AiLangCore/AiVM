@@ -276,6 +276,12 @@ static const char* cli_opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_FROM_BYTE: return "BYTES_FROM_BYTE";
         case AIVM_OP_BYTES_U32_LE: return "BYTES_U32_LE";
         case AIVM_OP_BYTES_I64_LE: return "BYTES_I64_LE";
+        case AIVM_OP_MAP_BUILDER_NEW: return "MAP_BUILDER_NEW";
+        case AIVM_OP_MAP_BUILDER_PUT_STRING_INT: return "MAP_BUILDER_PUT_STRING_INT";
+        case AIVM_OP_MAP_BUILDER_FINISH: return "MAP_BUILDER_FINISH";
+        case AIVM_OP_MAP_COUNT: return "MAP_COUNT";
+        case AIVM_OP_MAP_HAS_STRING: return "MAP_HAS_STRING";
+        case AIVM_OP_MAP_GET_STRING_INT_OR: return "MAP_GET_STRING_INT_OR";
         default: return "UNKNOWN";
     }
 }
@@ -292,6 +298,9 @@ static const char* cli_value_type_name(AivmValueType type)
         case AIVM_VAL_BYTES: return "bytes";
         case AIVM_VAL_NODE: return "node";
         case AIVM_VAL_PAIR: return "pair";
+        case AIVM_VAL_NODE_BUILDER: return "nodeBuilder";
+        case AIVM_VAL_MAP_BUILDER: return "mapBuilder";
+        case AIVM_VAL_MAP: return "map";
         default: return "unknown";
     }
 }
@@ -1159,7 +1168,7 @@ static size_t debug_current_pc(const AivmProgram* program, const AivmVm* vm)
         return vm->instruction_pointer;
     }
     if (vm->recent_opcode_count > 0U) {
-        return vm->recent_opcodes[vm->recent_opcode_count - 1U].instruction_pointer;
+        return vm->recent_opcodes[0].instruction_pointer;
     }
     return vm->instruction_pointer;
 }
@@ -1173,7 +1182,7 @@ static const char* debug_current_opcode_name(const AivmProgram* program, const A
         return cli_opcode_name(program->instructions[vm->instruction_pointer].opcode);
     }
     if (vm->recent_opcode_count > 0U) {
-        return cli_opcode_name((AivmOpcode)vm->recent_opcodes[vm->recent_opcode_count - 1U].opcode);
+        return cli_opcode_name((AivmOpcode)vm->recent_opcodes[0].opcode);
     }
     return "UNKNOWN";
 }

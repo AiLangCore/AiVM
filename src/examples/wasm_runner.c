@@ -87,6 +87,12 @@ static const char* opcode_name(AivmOpcode opcode)
         case AIVM_OP_BYTES_FROM_BYTE: return "BYTES_FROM_BYTE";
         case AIVM_OP_BYTES_U32_LE: return "BYTES_U32_LE";
         case AIVM_OP_BYTES_I64_LE: return "BYTES_I64_LE";
+        case AIVM_OP_MAP_BUILDER_NEW: return "MAP_BUILDER_NEW";
+        case AIVM_OP_MAP_BUILDER_PUT_STRING_INT: return "MAP_BUILDER_PUT_STRING_INT";
+        case AIVM_OP_MAP_BUILDER_FINISH: return "MAP_BUILDER_FINISH";
+        case AIVM_OP_MAP_COUNT: return "MAP_COUNT";
+        case AIVM_OP_MAP_HAS_STRING: return "MAP_HAS_STRING";
+        case AIVM_OP_MAP_GET_STRING_INT_OR: return "MAP_GET_STRING_INT_OR";
         default: return "UNKNOWN";
     }
 }

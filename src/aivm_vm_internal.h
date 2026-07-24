@@ -8,6 +8,13 @@
 void aivm_set_vm_error(AivmVm* vm, AivmVmError error, const char* detail);
 int aivm_size_add_checked(size_t a, size_t b, size_t* out);
 int aivm_vm_admit_host_memory_growth(AivmVm* vm, size_t growth_bytes);
+int aivm_vm_host_memory_growth_available(AivmVm* vm, size_t growth_bytes);
+int aivm_vm_try_grow_node_arenas(
+    AivmVm* vm,
+    size_t needed_node_count,
+    size_t needed_attr_count,
+    size_t needed_child_count);
+int aivm_vm_try_grow_pressure_node_arenas(AivmVm* vm);
 int aivm_vm_ensure_storage(AivmVm* vm);
 void aivm_counter_increment_saturating(size_t* counter);
 void aivm_release_all_blobs(AivmVm* vm);
@@ -51,6 +58,18 @@ int aivm_vm_node_builder_new(AivmVm* vm, const char* kind, const char* id, int64
 int aivm_vm_node_builder_append_child(AivmVm* vm, int64_t builder_handle, int64_t child_handle);
 int aivm_vm_node_builder_append_attr(AivmVm* vm, int64_t builder_handle, int64_t attr_handle);
 int aivm_vm_node_builder_finish(AivmVm* vm, int64_t builder_handle, int64_t* out_node_handle);
+void aivm_vm_reset_maps(AivmVm* vm);
+int aivm_vm_map_builder_new(AivmVm* vm, int64_t* out_handle);
+int aivm_vm_map_builder_put_string_int(AivmVm* vm, int64_t handle, const char* key, int64_t value);
+int aivm_vm_map_builder_finish(AivmVm* vm, int64_t handle);
+int aivm_vm_map_count(const AivmVm* vm, int64_t handle, size_t* out_count);
+int aivm_vm_map_get_string_int(
+    const AivmVm* vm,
+    int64_t handle,
+    const char* key,
+    int64_t fallback,
+    int64_t* out_value,
+    int* out_found);
 int aivm_vm_mark_live_node_handles(
     AivmVm* vm,
     uint8_t* live,
