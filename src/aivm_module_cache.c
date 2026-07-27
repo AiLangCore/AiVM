@@ -1,4 +1,5 @@
 #include "aivm_module_cache.h"
+#include "aivm_program_constants.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -27,7 +28,12 @@ static int valid_name(const char* name)
 
 static size_t estimate_program_bytes(const AivmProgram* program)
 {
-    size_t total = sizeof(AivmProgram);
+    size_t total =
+        sizeof(AivmProgram) -
+        sizeof(program->instruction_storage) -
+        sizeof(program->constant_storage) -
+        sizeof(program->string_storage) -
+        sizeof(program->bytes_storage);
     size_t add = 0U;
     if (program == NULL) {
         return 0U;
@@ -73,7 +79,6 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
         return 0;
     }
     if (source->instruction_count > AIVM_PROGRAM_MAX_INSTRUCTIONS ||
-        source->constant_count > AIVM_PROGRAM_MAX_CONSTANTS ||
         source->section_count > AIVM_PROGRAM_MAX_SECTIONS ||
         source->string_storage_used > AIVM_PROGRAM_MAX_STRING_BYTES ||
         source->bytes_storage_used > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
@@ -88,6 +93,9 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
     destination->constant_count = source->constant_count;
     destination->string_storage_used = source->string_storage_used;
     destination->bytes_storage_used = source->bytes_storage_used;
+    if (!aivm_program_constants_reserve(destination, source->constant_count)) {
+        return 0;
+    }
 
     for (index = 0U; index < source->section_count; index += 1U) {
         destination->sections[index] = source->sections[index];
@@ -117,10 +125,9 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
             }
             value.bytes_value.data = value.bytes_value.length == 0U ? NULL : &destination->bytes_storage[offset];
         }
-        destination->constant_storage[index] = value;
+        aivm_program_constants_mutable(destination)[index] = value;
     }
     destination->instructions = destination->instruction_count == 0U ? NULL : destination->instruction_storage;
-    destination->constants = destination->constant_count == 0U ? NULL : destination->constant_storage;
     return 1;
 }
 
@@ -162,8 +169,14 @@ void aivm_module_cache_init(AivmModuleCache* cache)
 
 void aivm_module_cache_clear(AivmModuleCache* cache)
 {
+    size_t index;
     if (cache == NULL) {
         return;
+    }
+    for (index = 0U; index < AIVM_MODULE_CACHE_MAX_MODULES; index += 1U) {
+        if (cache->entries[index].active != 0) {
+            aivm_program_release(&cache->entries[index].program);
+        }
     }
     aivm_module_cache_init(cache);
 }
@@ -203,6 +216,7 @@ AivmModuleCacheStatus aivm_module_cache_put(
     }
     memset(slot, 0, sizeof(*slot));
     if (!copy_program(&slot->program, program)) {
+        aivm_program_release(&slot->program);
         memset(slot, 0, sizeof(*slot));
         return AIVM_MODULE_CACHE_ERR_INVALID;
     }
@@ -255,7 +269,11 @@ AivmModuleCacheStatus aivm_module_cache_load_aibc1(
     if (load_result.status != AIVM_PROGRAM_OK) {
         return AIVM_MODULE_CACHE_ERR_INVALID;
     }
-    return aivm_module_cache_put(cache, name, &loaded);
+    {
+        AivmModuleCacheStatus status = aivm_module_cache_put(cache, name, &loaded);
+        aivm_program_release(&loaded);
+        return status;
+    }
 }
 
 size_t aivm_module_cache_count(const AivmModuleCache* cache)

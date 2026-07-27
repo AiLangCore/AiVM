@@ -144,7 +144,7 @@ static void native_debug_mark_node_handle(
         return;
     }
     idx = (size_t)(handle - 1);
-    if (live[idx] != 0U || *queue_write >= AIVM_VM_NODE_CAPACITY) {
+    if (live[idx] != 0U || *queue_write >= vm->node_capacity) {
         return;
     }
     live[idx] = 1U;
@@ -152,16 +152,20 @@ static void native_debug_mark_node_handle(
     *queue_write += 1U;
 }
 
-static void native_debug_mark_live_nodes(const AivmVm* vm, uint8_t* live)
+static int native_debug_mark_live_nodes(const AivmVm* vm, uint8_t* live)
 {
-    int64_t queue[AIVM_VM_NODE_CAPACITY];
+    int64_t* queue;
     size_t queue_read = 0U;
     size_t queue_write = 0U;
     size_t i;
     if (vm == NULL || live == NULL) {
-        return;
+        return 0;
     }
-    memset(live, 0, AIVM_VM_NODE_CAPACITY * sizeof(live[0]));
+    queue = (int64_t*)calloc(vm->node_capacity, sizeof(queue[0]));
+    if (queue == NULL) {
+        return 0;
+    }
+    memset(live, 0, vm->node_capacity * sizeof(live[0]));
     native_debug_mark_node_handle(vm, vm->process_argv_node_handle, live, queue, &queue_write);
     native_debug_mark_node_handle(vm, vm->ui_default_window_size_node_handle, live, queue, &queue_write);
     native_debug_mark_node_handle(vm, vm->ui_empty_event_node_handle, live, queue, &queue_write);
@@ -196,12 +200,14 @@ static void native_debug_mark_live_nodes(const AivmVm* vm, uint8_t* live)
         node = &vm->nodes[(size_t)(handle - 1)];
         for (child_index = 0U; child_index < node->child_count; child_index += 1U) {
             size_t child_slot = node->child_start + child_index;
-            if (child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+            if (child_slot >= vm->node_child_capacity) {
                 continue;
             }
             native_debug_mark_node_handle(vm, vm->node_children[child_slot], live, queue, &queue_write);
         }
     }
+    free(queue);
+    return 1;
 }
 
 static void native_debug_write_toml_string(FILE* f, const char* value)
@@ -240,7 +246,7 @@ static int native_debug_collect_node_kind_counts(
     size_t summary_capacity,
     size_t* out_summary_count)
 {
-    uint8_t live[AIVM_VM_NODE_CAPACITY];
+    uint8_t* live;
     size_t i;
     if (out_summary_count != NULL) {
         *out_summary_count = 0U;
@@ -248,7 +254,11 @@ static int native_debug_collect_node_kind_counts(
     if (vm == NULL || summaries == NULL || summary_capacity == 0U || out_summary_count == NULL) {
         return 0;
     }
-    native_debug_mark_live_nodes(vm, live);
+    live = (uint8_t*)calloc(vm->node_capacity, sizeof(live[0]));
+    if (live == NULL || !native_debug_mark_live_nodes(vm, live)) {
+        free(live);
+        return 0;
+    }
     for (i = 0U; i < vm->node_count; i += 1U) {
         const AivmNodeRecord* node = &vm->nodes[i];
         const char* kind = (node->kind == NULL || node->kind[0] == '\0') ? "unknown" : node->kind;
@@ -288,6 +298,7 @@ static int native_debug_collect_node_kind_counts(
         summaries[summary_index].attrs += node->attr_count;
         summaries[summary_index].children += node->child_count;
     }
+    free(live);
     return 1;
 }
 
@@ -358,7 +369,7 @@ static void native_debug_enqueue_root_handle(
     }
     summary->root_slots += 1U;
     idx = (size_t)(handle - 1);
-    if (live[idx] != 0U || *queue_write >= AIVM_VM_NODE_CAPACITY) {
+    if (live[idx] != 0U || *queue_write >= vm->node_capacity) {
         return;
     }
     live[idx] = 1U;
@@ -371,8 +382,8 @@ static void native_debug_collect_root_reachability(
     int root_kind,
     NativeNodeRootSummary* summary)
 {
-    uint8_t live[AIVM_VM_NODE_CAPACITY];
-    int64_t queue[AIVM_VM_NODE_CAPACITY];
+    uint8_t* live;
+    int64_t* queue;
     size_t queue_read = 0U;
     size_t queue_write = 0U;
     size_t i;
@@ -383,7 +394,13 @@ static void native_debug_collect_root_reachability(
     if (vm == NULL || vm->node_count == 0U) {
         return;
     }
-    memset(live, 0, sizeof(live));
+    live = (uint8_t*)calloc(vm->node_capacity, sizeof(live[0]));
+    queue = (int64_t*)calloc(vm->node_capacity, sizeof(queue[0]));
+    if (live == NULL || queue == NULL) {
+        free(live);
+        free(queue);
+        return;
+    }
     switch (root_kind) {
         case 0:
             for (i = 0U; i < vm->stack_count; i += 1U) {
@@ -442,7 +459,7 @@ static void native_debug_collect_root_reachability(
             size_t child_slot = node->child_start + child_index;
             int64_t child_handle;
             size_t child_idx;
-            if (child_slot >= AIVM_VM_NODE_CHILD_CAPACITY) {
+            if (child_slot >= vm->node_child_capacity) {
                 continue;
             }
             child_handle = vm->node_children[child_slot];
@@ -450,7 +467,7 @@ static void native_debug_collect_root_reachability(
                 continue;
             }
             child_idx = (size_t)(child_handle - 1);
-            if (live[child_idx] != 0U || queue_write >= AIVM_VM_NODE_CAPACITY) {
+            if (live[child_idx] != 0U || queue_write >= vm->node_capacity) {
                 continue;
             }
             live[child_idx] = 1U;
@@ -458,6 +475,8 @@ static void native_debug_collect_root_reachability(
             queue_write += 1U;
         }
     }
+    free(queue);
+    free(live);
 }
 
 static int write_native_debug_bundle(

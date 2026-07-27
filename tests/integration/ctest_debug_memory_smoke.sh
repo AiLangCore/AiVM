@@ -39,8 +39,8 @@ mkdir -p "${TMP_NATIVE_DEBUG_MEM_DIR}"
   echo '}'
 } > "${TMP_NATIVE_DEBUG_MEM_APP}"
 
-if "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_MEM_APP}" --out "${TMP_NATIVE_DEBUG_MEM_OUT}" >/dev/null 2>&1; then
-  echo "debug memory smoke: expected memory-pressure failure" >&2
+if ! "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_MEM_APP}" --out "${TMP_NATIVE_DEBUG_MEM_OUT}" >/dev/null 2>&1; then
+  echo "debug memory smoke: expected dynamic node arena success" >&2
   exit 1
 fi
 
@@ -48,16 +48,12 @@ if [[ ! -f "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml" || ! -f "${TMP_NATIVE_
   echo "debug memory smoke: expected debug artifacts missing" >&2
   exit 1
 fi
-if ! grep -q 'status = "error"' "${TMP_NATIVE_DEBUG_MEM_OUT}/config.toml"; then
-  echo "debug memory smoke: expected status=error in config.toml" >&2
+if ! grep -q 'status = "ok"' "${TMP_NATIVE_DEBUG_MEM_OUT}/config.toml"; then
+  echo "debug memory smoke: expected status=ok in config.toml" >&2
   exit 1
 fi
-if ! grep -q "vm_code=AIVM011" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected vm_code=AIVM011" >&2
-  exit 1
-fi
-if ! grep -Eq "detail=(AIVMM005: )?node arena capacity exceeded\\." "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node arena capacity detail" >&2
+if ! grep -q "vm_code=AIVM000" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected vm_code=AIVM000" >&2
   exit 1
 fi
 if ! grep -Eq "node_gc_compactions = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
@@ -68,12 +64,12 @@ if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diag
   echo "debug memory smoke: expected gc attempt activity" >&2
   exit 1
 fi
-if ! grep -q "node_count = 16384" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_count=16384 in diagnostics.toml" >&2
+if ! grep -q "node_count = 17001" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_count=17001 in diagnostics.toml" >&2
   exit 1
 fi
-if ! grep -q "node_high_water = 16384" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_high_water=16384 in diagnostics.toml" >&2
+if ! grep -q "node_high_water = 17001" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_high_water=17001 in diagnostics.toml" >&2
   exit 1
 fi
 if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
@@ -108,8 +104,8 @@ if ! grep -q "bytes_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagn
   echo "debug memory smoke: expected bytes_arena_pressure_count in diagnostics.toml" >&2
   exit 1
 fi
-if ! grep -Eq "node_arena_pressure_count = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
-  echo "debug memory smoke: expected node_arena_pressure_count>0 in diagnostics.toml" >&2
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in diagnostics.toml" >&2
   exit 1
 fi
 if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
@@ -120,8 +116,8 @@ if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshot
   echo "debug memory smoke: expected node_root_stack_slots in state snapshots" >&2
   exit 1
 fi
-if ! grep -Eq "node_arena_pressure_count = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
-  echo "debug memory smoke: expected node_arena_pressure_count>0 in state snapshots" >&2
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in state snapshots" >&2
   exit 1
 fi
 if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
@@ -186,4 +182,4 @@ if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnos
   exit 1
 fi
 
-echo "debug memory smoke: PASS"
+echo "debug dynamic node memory smoke: PASS"

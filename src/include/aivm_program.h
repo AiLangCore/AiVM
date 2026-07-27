@@ -112,7 +112,7 @@ typedef struct {
 enum {
     AIVM_PROGRAM_MAX_SECTIONS = 32,
     AIVM_PROGRAM_MAX_INSTRUCTIONS = 32768,
-    AIVM_PROGRAM_MAX_CONSTANTS = 1024,
+    AIVM_PROGRAM_INLINE_CONSTANTS = 1024,
     AIVM_PROGRAM_MAX_STRING_BYTES = 65536,
     AIVM_PROGRAM_MAX_BYTES_STORAGE = 32768,
     AIVM_PROGRAM_SECTION_INSTRUCTIONS = 1,
@@ -129,7 +129,9 @@ typedef struct {
     uint32_t section_count;
     AivmProgramSection sections[AIVM_PROGRAM_MAX_SECTIONS];
     AivmInstruction instruction_storage[AIVM_PROGRAM_MAX_INSTRUCTIONS];
-    AivmValue constant_storage[AIVM_PROGRAM_MAX_CONSTANTS];
+    AivmValue constant_storage[AIVM_PROGRAM_INLINE_CONSTANTS];
+    AivmValue* allocated_constant_storage;
+    size_t constant_capacity;
     char string_storage[AIVM_PROGRAM_MAX_STRING_BYTES];
     size_t string_storage_used;
     uint8_t bytes_storage[AIVM_PROGRAM_MAX_BYTES_STORAGE];
@@ -149,7 +151,8 @@ typedef enum {
     AIVM_PROGRAM_ERR_INVALID_OPCODE = 9,
     AIVM_PROGRAM_ERR_CONSTANT_LIMIT = 10,
     AIVM_PROGRAM_ERR_INVALID_CONSTANT = 11,
-    AIVM_PROGRAM_ERR_STRING_LIMIT = 12
+    AIVM_PROGRAM_ERR_STRING_LIMIT = 12,
+    AIVM_PROGRAM_ERR_MEMORY = 13
 } AivmProgramStatus;
 
 typedef struct {
@@ -158,6 +161,7 @@ typedef struct {
 } AivmProgramLoadResult;
 
 void aivm_program_clear(AivmProgram* program);
+void aivm_program_release(AivmProgram* program);
 void aivm_program_init(AivmProgram* program, const AivmInstruction* instructions, size_t instruction_count);
 AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_count, AivmProgram* out_program);
 const char* aivm_program_status_code(AivmProgramStatus status);

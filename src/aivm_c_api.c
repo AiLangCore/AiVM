@@ -115,6 +115,7 @@ AivmCResult aivm_c_execute_instructions_with_syscalls(
     capture_exit_code(&result, vm);
     aivm_dispose(vm);
     free(vm);
+    aivm_program_release(&program);
     return result;
 }
 

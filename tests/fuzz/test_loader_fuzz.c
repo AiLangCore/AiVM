@@ -82,6 +82,7 @@ static int is_known_status(AivmProgramStatus status)
         case AIVM_PROGRAM_ERR_CONSTANT_LIMIT:
         case AIVM_PROGRAM_ERR_INVALID_CONSTANT:
         case AIVM_PROGRAM_ERR_STRING_LIMIT:
+        case AIVM_PROGRAM_ERR_MEMORY:
             return 1;
         default:
             return 0;
@@ -99,9 +100,6 @@ static int validate_loaded_program(const AivmProgram* program)
     if (expect(program->instruction_count <= AIVM_PROGRAM_MAX_INSTRUCTIONS) != 0) {
         return 1;
     }
-    if (expect(program->constant_count <= AIVM_PROGRAM_MAX_CONSTANTS) != 0) {
-        return 1;
-    }
     if (expect(program->string_storage_used <= AIVM_PROGRAM_MAX_STRING_BYTES) != 0) {
         return 1;
     }
@@ -112,9 +110,15 @@ static int validate_loaded_program(const AivmProgram* program)
         expect(program->instructions == program->instruction_storage) != 0) {
         return 1;
     }
-    if (program->constant_count > 0U &&
-        expect(program->constants == program->constant_storage) != 0) {
-        return 1;
+    if (program->constant_count > 0U) {
+        if (program->constant_count <= AIVM_PROGRAM_INLINE_CONSTANTS &&
+            expect(program->constants == program->constant_storage) != 0) {
+            return 1;
+        }
+        if (program->constant_count > AIVM_PROGRAM_INLINE_CONSTANTS &&
+            expect(program->constants == program->allocated_constant_storage) != 0) {
+            return 1;
+        }
     }
     return 0;
 }
@@ -135,7 +139,7 @@ static int load_and_validate(const uint8_t* bytes, size_t byte_count)
         return 1;
     }
 
-    aivm_program_clear(&program);
+    aivm_program_release(&program);
     return 0;
 }
 

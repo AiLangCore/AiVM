@@ -43,7 +43,8 @@ Additional bytecode loader limits:
 | --- | ---: | --- |
 | `program_section_capacity` | 32 | Maximum AiBC1 sections. |
 | `program_instruction_capacity` | 32768 | Maximum AiBC1 instructions. This leaves sufficient bounded capacity for the self-hosted compiler and linker while preserving deterministic loader failure above the limit. |
-| `program_constant_capacity` | 1024 | Maximum AiBC1 constants. |
+| `program_constant_inline_capacity` | 1024 | AiBC1 constants stored without allocation. Larger pools use loader-owned storage sized to the encoded `u32` count. |
+| `program_constant_capacity` | dynamic | Bounded by valid AiBC1 section bytes, addressable `size_t`, and successful loader allocation. |
 | `program_string_storage_capacity` | 8192 | Maximum loaded program string bytes. |
 | `program_bytes_storage_capacity` | 32768 | Maximum loaded program byte storage. |
 
@@ -201,6 +202,7 @@ explicit syscall boundary; it is not currently a general-purpose sandbox.
 | `AIVMP010` | Program constant count exceeded the loader limit. |
 | `AIVMP011` | Program constant encoding was invalid. |
 | `AIVMP012` | Program string storage exceeded the loader limit. |
+| `AIVMP013` | Program storage allocation failed. |
 | `AIVMP999` | Unknown program load status. |
 
 ## Blob Storage Error Codes

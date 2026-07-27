@@ -5174,7 +5174,7 @@ static int bytecode_add_string_const(AivmProgram* program, const char* value, in
             return 1;
         }
     }
-    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+    if (program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS) {
         return 0;
     }
     len = strlen(value);
@@ -5217,7 +5217,7 @@ static int parse_bytecode_aos_to_program_text(
         char attrs[512];
         char kind[32];
         size_t n;
-        if (out_program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS || lparen == NULL) {
+        if (out_program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS || lparen == NULL) {
             return 0;
         }
         rparen = strchr(lparen, ')');
@@ -5633,7 +5633,7 @@ static int simple_add_string_const(AivmProgram* program, const char* value, size
             return 1;
         }
     }
-    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+    if (program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS) {
         simple_fail("add string const: constant capacity exceeded");
         return 0;
     }
@@ -5665,7 +5665,7 @@ static int simple_add_number_const(AivmProgram* program, double value, size_t* o
             return 1;
         }
     }
-    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+    if (program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS) {
         simple_fail("add number const: constant capacity exceeded");
         return 0;
     }
@@ -5690,7 +5690,7 @@ static int simple_compile_expr_node(const SimpleNodeView* node, AivmProgram* pro
             return simple_emit_instruction(program, AIVM_OP_PUSH_BOOL, (strcmp(value, "true") == 0) ? 1 : 0);
         }
         if (!value_is_quoted && strcmp(value, "null") == 0) {
-            if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+            if (program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS) {
                 return simple_fail("lit null constant capacity exceeded");
             }
             program->constant_storage[program->constant_count] = aivm_value_null();
@@ -6056,7 +6056,7 @@ static int simple_add_void_const(AivmProgram* program, size_t* out_idx)
             return 1;
         }
     }
-    if (program->constant_count >= AIVM_PROGRAM_MAX_CONSTANTS) {
+    if (program->constant_count >= AIVM_PROGRAM_INLINE_CONSTANTS) {
         return simple_fail("add void const: constant capacity exceeded");
     }
     *out_idx = program->constant_count;

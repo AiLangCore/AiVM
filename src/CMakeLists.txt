@@ -102,6 +102,7 @@ set(AIVM_CORE_SOURCES
     aivm_vm_text.c
     aivm_vm_value.c
     aivm_program.c
+    aivm_program_constants.c
     aivm_host_abi.c
     aivm_debugger.c
     aivm_module_cache.c
@@ -274,6 +275,11 @@ if (BUILD_TESTING)
         ../tests/unit/bytecode/test_program_loader.c
     )
     target_link_libraries(aivm_test_program_loader PRIVATE aivm_core)
+
+    add_executable(aivm_test_dynamic_constants
+        ../tests/unit/bytecode/test_dynamic_constants.c
+    )
+    target_link_libraries(aivm_test_dynamic_constants PRIVATE aivm_core)
 
     add_executable(aivm_test_vm_core
         ../tests/unit/vm/test_vm_core.c
@@ -648,6 +654,7 @@ if (BUILD_TESTING)
     endif()
 
     add_test(NAME aivm_test_program_loader COMMAND aivm_test_program_loader)
+    add_test(NAME aivm_test_dynamic_constants COMMAND aivm_test_dynamic_constants)
     add_test(NAME aivm_test_vm_core COMMAND aivm_test_vm_core)
     add_test(NAME aivm_test_values COMMAND aivm_test_values)
     add_test(NAME aivm_test_module_cache COMMAND aivm_test_module_cache)
