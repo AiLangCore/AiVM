@@ -80,51 +80,9 @@ if (NOT MSVC)
     endif()
 endif()
 
-set(AIVM_CORE_SOURCES
-    aivm_types.c
-    aivm_vm.c
-    aivm_vm_arena.c
-    aivm_host_memory.c
-    aivm_vm_blob.c
-    aivm_vm_error.c
-    aivm_vm_history.c
-    aivm_vm_lifecycle.c
-    aivm_vm_map.c
-    aivm_vm_node.c
-    aivm_vm_node_arena.c
-    aivm_vm_node_create.c
-    aivm_vm_node_builder.c
-    aivm_vm_node_gc.c
-    aivm_vm_profile.c
-    aivm_vm_stack.c
-    aivm_vm_storage.c
-    aivm_vm_string_copy.c
-    aivm_vm_text.c
-    aivm_vm_value.c
-    aivm_vm_worker_batches.c
-    aivm_vm_worker_tasks.c
-    aivm_worker_capacity.c
-    aivm_worker_capabilities.c
-    aivm_worker_catalog.c
-    aivm_worker_invocation.c
-    aivm_worker_program.c
-    aivm_worker_runtime.c
-    aivm_worker_scheduler.c
-    aivm_program.c
-    aivm_program_constants.c
-    aivm_program_instructions.c
-    aivm_host_abi.c
-    aivm_debugger.c
-    aivm_module_cache.c
-    sys/aivm_syscall.c
-    sys/aivm_syscall_contracts.c
-    aivm_parity.c
-    aivm_runtime.c
-    aivm_c_api.c
-    remote/aivm_remote_channel.c
-    remote/aivm_remote_session.c
-    remote/aivm_remote_transport.c
-    remote/aivm_remote_ws_frame.c
+file(STRINGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/aivm_core_sources.txt"
+    AIVM_CORE_SOURCES
 )
 
 add_library(aivm_core STATIC ${AIVM_CORE_SOURCES})
