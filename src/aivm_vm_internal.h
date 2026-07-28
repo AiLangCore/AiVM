@@ -132,6 +132,21 @@ void aivm_vm_record_recent_opcode(
     int opcode,
     size_t stack_count);
 void aivm_vm_cleanup_bytecode_worker_tasks(AivmVm* vm);
+void aivm_vm_cleanup_worker_runtime(AivmVm* vm);
+int aivm_vm_ensure_worker_runtime(AivmVm* vm);
+int aivm_vm_push_worker_ref(AivmVm* vm, size_t catalog_index);
+int aivm_vm_submit_worker_task(AivmVm* vm);
+int aivm_vm_submit_worker_tasks(AivmVm* vm, size_t transport_version);
+int aivm_vm_worker_task_at(AivmVm* vm);
+int aivm_vm_refill_worker_task_groups(AivmVm* vm);
+void aivm_vm_cleanup_worker_task_groups(AivmVm* vm);
+int aivm_vm_complete_worker_task(AivmVm* vm, AivmCompletedTask* task);
+int aivm_vm_cancel_task(AivmVm* vm);
+int aivm_vm_allocate_worker_task(
+    AivmVm* vm,
+    size_t worker_catalog_index,
+    int64_t* out_handle);
+void aivm_vm_discard_worker_task(AivmVm* vm, int64_t handle);
 int aivm_vm_initialize_process_argv_node(AivmVm* vm);
 
 #endif

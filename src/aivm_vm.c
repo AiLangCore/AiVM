@@ -1574,7 +1574,7 @@ static int transition_task_state(AivmVm* vm, AivmCompletedTask* task, AivmTaskSt
 
 static int value_matches_task_handle(AivmValue value, int64_t handle)
 {
-    return value.type == AIVM_VAL_INT && value.int_value == handle;
+    return value.type == AIVM_VAL_TASK && value.task_handle == handle;
 }
 
 static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
@@ -1605,6 +1605,34 @@ static int is_task_handle_pinned(const AivmVm* vm, int64_t handle)
         }
     }
     return 0;
+}
+
+static int is_consumed_task_handle(const AivmVm* vm, int64_t handle)
+{
+    size_t i;
+    if (vm == NULL) {
+        return 0;
+    }
+    for (i = 0U; i < vm->consumed_task_handle_count; i += 1U) {
+        if (vm->consumed_task_handles[i] == handle) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int retain_consumed_task_tombstone(AivmVm* vm, int64_t handle)
+{
+    if (vm == NULL || is_consumed_task_handle(vm, handle)) {
+        return vm != NULL;
+    }
+    if (vm->consumed_task_handle_count >= AIVM_VM_TASK_CAPACITY) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "Task consumed tombstone capacity exceeded.");
+        return 0;
+    }
+    vm->consumed_task_handles[vm->consumed_task_handle_count] = handle;
+    vm->consumed_task_handle_count += 1U;
+    return 1;
 }
 
 static int reclaim_oldest_completed_task_slot(AivmVm* vm)
@@ -1693,10 +1721,20 @@ static int release_consumed_task_result(AivmVm* vm, int64_t handle)
         return 0;
     }
     if (is_task_handle_pinned(vm, handle)) {
+        if (!retain_consumed_task_tombstone(vm, handle)) {
+            return 0;
+        }
         aivm_counter_increment_saturating(&vm->task_reclaim_skip_pinned_count);
+        (void)remove_completed_task_slot(vm, handle);
+        if (!aivm_vm_refill_worker_task_groups(vm)) {
+            return 0;
+        }
         return aivm_collect_safe_point(vm);
     }
     (void)remove_completed_task_slot(vm, handle);
+    if (!aivm_vm_refill_worker_task_groups(vm)) {
+        return 0;
+    }
     return aivm_collect_safe_point(vm);
 }
 
@@ -1731,11 +1769,59 @@ static int push_completed_task(AivmVm* vm, AivmValue result)
     task->handle = handle;
     task->result = result;
     task->worker_context = NULL;
+    task->worker_catalog_index = 0U;
+    task->is_worker_task = 0;
     if (!transition_task_state(vm, task, AIVM_TASK_STATE_COMPLETED)) {
         return 0;
     }
     vm->completed_task_count = needed;
-    return aivm_stack_push(vm, aivm_value_int(handle));
+    return aivm_stack_push(vm, aivm_value_task(handle));
+}
+
+int aivm_vm_allocate_worker_task(
+    AivmVm* vm,
+    size_t worker_catalog_index,
+    int64_t* out_handle)
+{
+    AivmCompletedTask* task;
+    size_t needed = 0U;
+    int64_t handle;
+    if (vm == NULL || out_handle == NULL) {
+        return 0;
+    }
+    if (vm->completed_task_count >= AIVM_VM_TASK_CAPACITY &&
+        !reclaim_oldest_completed_task_slot(vm)) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+            "Task table capacity exceeded.");
+        return 0;
+    }
+    if (vm->next_task_handle == INT64_MAX ||
+        !aivm_size_add_checked(vm->completed_task_count, 1U, &needed) ||
+        needed > AIVM_VM_TASK_CAPACITY) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+            vm->next_task_handle == INT64_MAX
+                ? "Task handle overflow." : "Task table capacity exceeded.");
+        return 0;
+    }
+    handle = vm->next_task_handle;
+    vm->next_task_handle += 1;
+    task = &vm->completed_tasks[vm->completed_task_count];
+    task->state = AIVM_TASK_STATE_PENDING;
+    task->handle = handle;
+    task->result = aivm_value_void();
+    task->worker_context = NULL;
+    task->worker_catalog_index = worker_catalog_index;
+    task->is_worker_task = 1;
+    vm->completed_task_count = needed;
+    *out_handle = handle;
+    return 1;
+}
+
+void aivm_vm_discard_worker_task(AivmVm* vm, int64_t handle)
+{
+    if (vm != NULL) {
+        (void)remove_completed_task_slot(vm, handle);
+    }
 }
 
 #if defined(_WIN32)
@@ -2234,6 +2320,8 @@ static int start_call_subroutine_worker(AivmVm* vm, size_t target, int64_t* out_
     task->handle = handle;
     task->result = aivm_value_void();
     task->worker_context = context;
+    task->worker_catalog_index = 0U;
+    task->is_worker_task = 0;
     vm->completed_task_count = needed;
     vm->stack_count = frame_base;
     *out_handle = handle;
@@ -2310,6 +2398,9 @@ static int complete_pending_bytecode_task(AivmVm* vm, AivmCompletedTask* task)
     if (vm == NULL || task == NULL) {
         return 0;
     }
+    if (task->state == AIVM_TASK_STATE_PENDING && task->is_worker_task != 0) {
+        return aivm_vm_complete_worker_task(vm, task);
+    }
     if (task->state != AIVM_TASK_STATE_PENDING || task->worker_context == NULL) {
         return 1;
     }
@@ -2353,6 +2444,9 @@ static int find_terminal_task_result(AivmVm* vm, int64_t handle, AivmValue* out_
             *out_result = vm->completed_tasks[i].result;
             return 1;
         }
+    }
+    if (is_consumed_task_handle(vm, handle)) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "TASK_CONSUMED");
     }
     return 0;
 }
@@ -4352,7 +4446,7 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!aivm_stack_push(vm, aivm_value_int(handle))) {
+            if (!aivm_stack_push(vm, aivm_value_task(handle))) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
@@ -4385,12 +4479,12 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (handle_value.type != AIVM_VAL_INT) {
+            if (handle_value.type != AIVM_VAL_TASK) {
                 aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!find_terminal_task_result(vm, handle_value.int_value, &completed)) {
+            if (!find_terminal_task_result(vm, handle_value.task_handle, &completed)) {
                 if (vm->status != AIVM_VM_STATUS_ERROR) {
                     aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM, "AWAIT requires valid task handle.");
                 }
@@ -4401,13 +4495,59 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
-            if (!release_consumed_task_result(vm, handle_value.int_value)) {
+            if (!release_consumed_task_result(vm, handle_value.task_handle)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
             vm->instruction_pointer += 1U;
             break;
         }
+
+        case AIVM_OP_WORKER_REF: {
+            size_t catalog_index;
+            if (!operand_to_index(vm, instruction->operand_int, &catalog_index) ||
+                !aivm_vm_push_worker_ref(vm, catalog_index)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_WORKER_RUN:
+            if (!aivm_vm_submit_worker_task(vm)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+
+        case AIVM_OP_WORKER_RUN_ALL: {
+            size_t payload_count;
+            if (!operand_to_index(vm, instruction->operand_int, &payload_count) ||
+                !aivm_vm_submit_worker_tasks(vm, payload_count)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+        }
+
+        case AIVM_OP_WORKER_TASK_AT:
+            if (!aivm_vm_worker_task_at(vm)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
+
+        case AIVM_OP_TASK_CANCEL:
+            if (!aivm_vm_cancel_task(vm)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            vm->instruction_pointer += 1U;
+            break;
 
         case AIVM_OP_PAR_BEGIN: {
             size_t expected_count;
@@ -4497,9 +4637,9 @@ void aivm_step(AivmVm* vm)
                     break;
                 }
                 value = vm->par_values[par_index];
-                if (value.type == AIVM_VAL_INT &&
-                    find_terminal_task_result(vm, value.int_value, &task_result)) {
-                    consumed_task_handles[consumed_task_count] = value.int_value;
+                if (value.type == AIVM_VAL_TASK &&
+                    find_terminal_task_result(vm, value.task_handle, &task_result)) {
+                    consumed_task_handles[consumed_task_count] = value.task_handle;
                     consumed_task_count += 1U;
                     value = task_result;
                 }

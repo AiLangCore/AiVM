@@ -23,7 +23,12 @@ typedef enum {
     /* Compiler-internal mutable construction state; never crosses a boundary. */
     AIVM_VAL_NODE_BUILDER = 10,
     AIVM_VAL_MAP_BUILDER = 11,
-    AIVM_VAL_MAP = 12
+    AIVM_VAL_MAP = 12,
+    /* Opaque owner-VM task identity; never serializable or transportable. */
+    AIVM_VAL_TASK = 13,
+    /* Opaque build-resolved worker identity; never forgeable or transportable. */
+    AIVM_VAL_WORKER_REF = 14,
+    AIVM_VAL_WORKER_TASKS = 15
 } AivmValueType;
 
 typedef struct {
@@ -38,6 +43,9 @@ typedef struct {
         int64_t pair_handle;
         int64_t node_builder_handle;
         int64_t map_handle;
+        int64_t task_handle;
+        int64_t worker_ref_handle;
+        int64_t worker_tasks_handle;
     };
 } AivmValue;
 
@@ -54,6 +62,9 @@ AivmValue aivm_value_pair(int64_t handle);
 AivmValue aivm_value_node_builder(int64_t handle);
 AivmValue aivm_value_map_builder(int64_t handle);
 AivmValue aivm_value_map(int64_t handle);
+AivmValue aivm_value_task(int64_t handle);
+AivmValue aivm_value_worker_ref(int64_t handle);
+AivmValue aivm_value_worker_tasks(int64_t handle);
 int aivm_value_equals(AivmValue left, AivmValue right);
 int aivm_value_is_immutable_message_payload(AivmValue value);
 

@@ -17,6 +17,9 @@ const char* aivm_vm_value_type_name(AivmValueType type)
         case AIVM_VAL_NODE_BUILDER: return "nodeBuilder";
         case AIVM_VAL_MAP_BUILDER: return "mapBuilder";
         case AIVM_VAL_MAP: return "map";
+        case AIVM_VAL_TASK: return "task";
+        case AIVM_VAL_WORKER_REF: return "workerRef";
+        case AIVM_VAL_WORKER_TASKS: return "workerTasks";
         default: return "unknown";
     }
 }

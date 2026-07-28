@@ -1,5 +1,6 @@
 #include "aivm_module_cache.h"
 #include "aivm_program_constants.h"
+#include "aivm_program_instructions.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -78,8 +79,7 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
     if (destination == NULL || source == NULL) {
         return 0;
     }
-    if (source->instruction_count > AIVM_PROGRAM_MAX_INSTRUCTIONS ||
-        source->section_count > AIVM_PROGRAM_MAX_SECTIONS ||
+    if (source->section_count > AIVM_PROGRAM_MAX_SECTIONS ||
         source->string_storage_used > AIVM_PROGRAM_MAX_STRING_BYTES ||
         source->bytes_storage_used > AIVM_PROGRAM_MAX_BYTES_STORAGE) {
         return 0;
@@ -93,7 +93,14 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
     destination->constant_count = source->constant_count;
     destination->string_storage_used = source->string_storage_used;
     destination->bytes_storage_used = source->bytes_storage_used;
+    if (!aivm_program_instructions_reserve(destination, source->instruction_count)) {
+        return 0;
+    }
     if (!aivm_program_constants_reserve(destination, source->constant_count)) {
+        return 0;
+    }
+    if (!aivm_worker_catalog_copy(&destination->worker_catalog, &source->worker_catalog)) {
+        aivm_program_release(destination);
         return 0;
     }
 
@@ -101,7 +108,8 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
         destination->sections[index] = source->sections[index];
     }
     for (index = 0U; index < source->instruction_count; index += 1U) {
-        destination->instruction_storage[index] = source->instructions[index];
+        aivm_program_instructions_mutable(destination)[index] =
+            source->instructions[index];
     }
     if (source->string_storage_used > 0U) {
         memcpy(destination->string_storage, source->string_storage, source->string_storage_used);
@@ -127,7 +135,6 @@ static int copy_program(AivmProgram* destination, const AivmProgram* source)
         }
         aivm_program_constants_mutable(destination)[index] = value;
     }
-    destination->instructions = destination->instruction_count == 0U ? NULL : destination->instruction_storage;
     return 1;
 }
 

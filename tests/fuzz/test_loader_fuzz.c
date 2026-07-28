@@ -97,18 +97,21 @@ static int validate_loaded_program(const AivmProgram* program)
     if (expect(program->section_count <= AIVM_PROGRAM_MAX_SECTIONS) != 0) {
         return 1;
     }
-    if (expect(program->instruction_count <= AIVM_PROGRAM_MAX_INSTRUCTIONS) != 0) {
-        return 1;
-    }
     if (expect(program->string_storage_used <= AIVM_PROGRAM_MAX_STRING_BYTES) != 0) {
         return 1;
     }
     if (expect(program->bytes_storage_used <= AIVM_PROGRAM_MAX_BYTES_STORAGE) != 0) {
         return 1;
     }
-    if (program->instruction_count > 0U &&
-        expect(program->instructions == program->instruction_storage) != 0) {
-        return 1;
+    if (program->instruction_count > 0U) {
+        if (program->instruction_count <= AIVM_PROGRAM_INLINE_INSTRUCTIONS &&
+            expect(program->instructions == program->instruction_storage) != 0) {
+            return 1;
+        }
+        if (program->instruction_count > AIVM_PROGRAM_INLINE_INSTRUCTIONS &&
+            expect(program->instructions == program->allocated_instruction_storage) != 0) {
+            return 1;
+        }
     }
     if (program->constant_count > 0U) {
         if (program->constant_count <= AIVM_PROGRAM_INLINE_CONSTANTS &&

@@ -4179,6 +4179,11 @@ static const char* aivm_opcode_name(AivmOpcode opcode)
         case AIVM_OP_ASYNC_CALL: return "ASYNC_CALL";
         case AIVM_OP_ASYNC_CALL_SYS: return "ASYNC_CALL_SYS";
         case AIVM_OP_AWAIT: return "AWAIT";
+        case AIVM_OP_WORKER_REF: return "WORKER_REF";
+        case AIVM_OP_WORKER_RUN: return "WORKER_RUN";
+        case AIVM_OP_TASK_CANCEL: return "TASK_CANCEL";
+        case AIVM_OP_WORKER_RUN_ALL: return "WORKER_RUN_ALL";
+        case AIVM_OP_WORKER_TASK_AT: return "WORKER_TASK_AT";
         case AIVM_OP_PAR_BEGIN: return "PAR_BEGIN";
         case AIVM_OP_PAR_FORK: return "PAR_FORK";
         case AIVM_OP_PAR_JOIN: return "PAR_JOIN";
@@ -5101,6 +5106,11 @@ static int opcode_from_text(const char* op_text, AivmOpcode* out_opcode)
     MAP_OP(ASYNC_CALL)
     MAP_OP(ASYNC_CALL_SYS)
     MAP_OP(AWAIT)
+    MAP_OP(WORKER_REF)
+    MAP_OP(WORKER_RUN)
+    MAP_OP(TASK_CANCEL)
+    MAP_OP(WORKER_RUN_ALL)
+    MAP_OP(WORKER_TASK_AT)
     MAP_OP(PAR_BEGIN)
     MAP_OP(PAR_FORK)
     MAP_OP(PAR_JOIN)

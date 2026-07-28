@@ -42,7 +42,7 @@ Additional bytecode loader limits:
 | Loader limit | Current value | Notes |
 | --- | ---: | --- |
 | `program_section_capacity` | 32 | Maximum AiBC1 sections. |
-| `program_instruction_capacity` | 32768 | Maximum AiBC1 instructions. This leaves sufficient bounded capacity for the self-hosted compiler and linker while preserving deterministic loader failure above the limit. |
+| `program_inline_instruction_capacity` | 32768 | Instructions retained inline without allocation. Larger validated AiBC1 instruction sections allocate exactly the declared instruction count, subject to checked-size arithmetic and host memory availability. |
 | `program_constant_inline_capacity` | 1024 | AiBC1 constants stored without allocation. Larger pools use loader-owned storage sized to the encoded `u32` count. |
 | `program_constant_capacity` | dynamic | Bounded by valid AiBC1 section bytes, addressable `size_t`, and successful loader allocation. |
 | `program_string_storage_capacity` | 8192 | Maximum loaded program string bytes. |
@@ -118,7 +118,13 @@ Tracked host-resource limit records:
 | `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as max read request size per call and cumulative bytes returned per VM run. |
 | `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as max write payload size per call and cumulative bytes written per VM run. |
 | `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
-| `worker_count` | 64 | `sys.worker.start` retained worker handles | Enforced before worker allocation. |
+| `worker_logical_tasks` | profile-controlled | Accepted logical tasks per owner workload | Checked atomically before workload acceptance. |
+| `worker_logical_input_bytes` | profile-controlled | Aggregate immutable input bytes per workload | Checked atomically before workload acceptance. |
+| `worker_active_ceiling` | profile-controlled | Maximum simultaneously active isolated invocations | Combined with discovered CPU/container and memory capacity. |
+| `worker_pending_materialized` | profile-controlled | Materialized runnable/pending descriptors | Lazy materialization keeps larger accepted workloads bounded. |
+| `worker_retained_results` | profile-controlled | Terminal unconsumed results | Includes results hidden behind a canonical straggler. |
+| `worker_retained_result_bytes` | profile-controlled | Aggregate terminal result bytes | Reserved before dispatch. |
+| `worker_intermediate_bytes` | profile-controlled | Dependency-stage intermediate bytes | Enforces stage backpressure. |
 | `ui_window_count` | 16 | `sys.ui.createWindow` active windows | Enforced before host window creation. |
 | `debug_artifact_bytes` | 67108864 | `aivm-debug` artifact output | Enforced across the debug artifact bundle. |
 | `syscall_elapsed_ms` | 30000 | VM syscall dispatch calls | Enforced after host syscall dispatch returns. |
@@ -145,7 +151,37 @@ where required by the selected profile, and deterministic failure behavior.
   fail with `AIVMS007`; async network operations complete as failed operations
   with a resource-limit error string.
 - `sys.process.spawn` enforces `process_count` before host process creation.
-- `sys.worker.start` enforces `worker_count` before worker allocation.
+- Worker workload admission checks logical task and input-byte ceilings using
+  owner-visible state only. Rejection allocates no failed Task or scheduler
+  record.
+
+## Adaptive Worker Execution
+
+The physical active-worker target is derived mechanically from the runtime
+profile, discovered CPU/container allocation, and memory-safe worker capacity.
+The production default targets at most 96 percent of the available logical CPU
+allocation, rounded down with a minimum of one execution slot:
+
+```text
+cpu_target = max(1, floor(available_logical_cpu * 0.96))
+active_target = min(cpu_target, profile_ceiling, memory_safe_capacity)
+```
+
+The 96 percent value is an operational default, not language semantics and not
+a promise of literal CPU utilization. Runtime profiles may override it.
+Adaptive scheduling may change performance only. It cannot change accepted
+logical work, semantic resource failures, observation order, diagnostics, or
+result bytes.
+
+Background completion never restores owner-visible admission capacity. An
+already accepted workload may lazily materialize and refill internal work
+within its reservations. Task/result accounting is released exactly once by
+deterministic owner Await/release or owner shutdown.
+
+Result and intermediate byte capacity is reserved before dispatch. Saturated
+buffers apply backpressure; AiVM never creates unbounded completion overflow.
+Wall-clock watchdogs are operational aborts and cannot become canonical Task or
+compiler failures.
 - `sys.ui.createWindow` enforces `ui_window_count` before host window creation.
 - `syscall_elapsed_ms` is a deterministic post-call failure signal; it does not
   currently interrupt a blocking host syscall while it is still running.
@@ -196,7 +232,7 @@ explicit syscall boundary; it is not currently a general-purpose sandbox.
 | `AIVMP004` | Program version or feature is unsupported. |
 | `AIVMP005` | Program section exceeded byte bounds. |
 | `AIVMP006` | Program section count exceeded the loader limit. |
-| `AIVMP007` | Program instruction count exceeded the loader limit. |
+| `AIVMP007` | Program instruction count exceeded an explicitly configured loader/profile limit. The default native loader uses checked artifact-sized instruction allocation instead of a fixed semantic ceiling. |
 | `AIVMP008` | Program section encoding was invalid. |
 | `AIVMP009` | Program instruction opcode was invalid. |
 | `AIVMP010` | Program constant count exceeded the loader limit. |

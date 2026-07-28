@@ -190,11 +190,7 @@ two to remain in sync.
 | 143 | `sys.ui.popClipPath` |
 | 129 | `sys.ui.measureText` |
 | 72 | `sys.ui.waitFrame` |
-| 73 | `sys.worker.start` |
-| 74 | `sys.worker.poll` |
-| 75 | `sys.worker.result` |
-| 76 | `sys.worker.error` |
-| 77 | `sys.worker.cancel` |
+| 73-77 | Reserved after removal of the beta string-name worker simulation |
 | 78 | `sys.debug.emit` |
 | 79 | `sys.debug.mode` |
 | 80 | `sys.debug.captureFrameBegin` |
@@ -267,3 +263,21 @@ baseline.
 - Known-but-unbound syscalls fail deterministically with `AIVMS006`.
 - Capability-denied syscalls fail deterministically with `AIVMS008`.
 - Resource-limit failures fail deterministically with `AIVMS007`.
+
+## Worker Scheduler Boundary
+
+Worker invocation is not selected by a host path, package path, task-name
+string, or raw function-name string. The AiBC1 loader validates an embedded
+worker catalog and creates opaque WorkerRef capabilities. Task creation,
+dependency readiness, Await, cancellation, and workload indexing are VM
+operations over opaque values rather than public physical-worker syscalls.
+
+The removed `sys.worker.start/poll/result/error/cancel` family must not be used
+as a compatibility path. Normal AiLang code uses `std.worker` and `std.task`.
+Any internal host adapter used by the scheduler is private mechanical runtime
+plumbing and is not an AiLang semantic API.
+
+AiVM may choose threads, processes, or another isolated mechanism. It performs
+no package resolution, filesystem artifact search, compiler selection,
+function-name lookup, payload interpretation, validation policy, linker
+behavior, diagnostic selection, or canonical ordering.

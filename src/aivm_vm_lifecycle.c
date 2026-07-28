@@ -23,6 +23,8 @@ void aivm_reset_state(AivmVm* vm)
         return;
     }
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
+    aivm_vm_cleanup_worker_runtime(vm);
+    aivm_vm_cleanup_worker_task_groups(vm);
     aivm_release_all_blobs(vm);
     aivm_vm_reset_node_builders(vm);
     aivm_vm_reset_maps(vm);
@@ -65,6 +67,8 @@ void aivm_reset_state(AivmVm* vm)
     vm->bytes_arena[0] = 0U;
     vm->completed_task_count = 0U;
     vm->next_task_handle = 1;
+    vm->worker_task_group_count = 0U;
+    vm->next_worker_task_group_handle = 1;
     vm->task_reclaim_count = 0U;
     vm->task_reclaim_skip_pinned_count = 0U;
     vm->task_reclaim_exhausted_count = 0U;
@@ -110,6 +114,8 @@ void aivm_dispose(AivmVm* vm)
         return;
     }
     aivm_vm_cleanup_bytecode_worker_tasks(vm);
+    aivm_vm_cleanup_worker_runtime(vm);
+    aivm_vm_cleanup_worker_task_groups(vm);
     aivm_release_all_blobs(vm);
     aivm_vm_reset_node_builders(vm);
     aivm_vm_reset_maps(vm);

@@ -8,6 +8,8 @@
 #include "sys/aivm_syscall.h"
 #include "aivm_types.h"
 
+typedef struct AivmWorkerRuntime AivmWorkerRuntime;
+
 typedef enum {
     AIVM_VM_STATUS_READY = 0,
     AIVM_VM_STATUS_RUNNING = 1,
@@ -147,7 +149,21 @@ typedef struct {
     int64_t handle;
     AivmValue result;
     void* worker_context;
+    size_t worker_catalog_index;
+    int is_worker_task;
 } AivmCompletedTask;
+
+typedef struct {
+    int64_t handle;
+    size_t worker_catalog_index;
+    size_t task_count;
+    size_t next_materialize_index;
+    uint8_t* batch_bytes;
+    size_t batch_length;
+    size_t* payload_offsets;
+    size_t* payload_lengths;
+    int64_t* task_handles;
+} AivmWorkerTaskGroup;
 
 typedef struct {
     size_t expected_count;
@@ -324,10 +340,16 @@ typedef struct {
     int64_t process_argv_node_handle;
     AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
     size_t completed_task_count;
+    int64_t consumed_task_handles[AIVM_VM_TASK_CAPACITY];
+    size_t consumed_task_handle_count;
     int64_t next_task_handle;
     size_t task_reclaim_count;
     size_t task_reclaim_skip_pinned_count;
     size_t task_reclaim_exhausted_count;
+    AivmWorkerRuntime* worker_runtime;
+    AivmWorkerTaskGroup worker_task_groups[AIVM_VM_TASK_CAPACITY];
+    size_t worker_task_group_count;
+    int64_t next_worker_task_group_handle;
     AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
     size_t par_context_count;
     AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];

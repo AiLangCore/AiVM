@@ -128,6 +128,30 @@ AivmValue aivm_value_map(int64_t input)
     return value;
 }
 
+AivmValue aivm_value_task(int64_t input)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_TASK;
+    value.task_handle = input;
+    return value;
+}
+
+AivmValue aivm_value_worker_ref(int64_t input)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_WORKER_REF;
+    value.worker_ref_handle = input;
+    return value;
+}
+
+AivmValue aivm_value_worker_tasks(int64_t input)
+{
+    AivmValue value;
+    value.type = AIVM_VAL_WORKER_TASKS;
+    value.worker_tasks_handle = input;
+    return value;
+}
+
 int aivm_value_equals(AivmValue left, AivmValue right)
 {
     if ((left.type == AIVM_VAL_INT || left.type == AIVM_VAL_NUMBER) &&
@@ -192,6 +216,15 @@ int aivm_value_equals(AivmValue left, AivmValue right)
         case AIVM_VAL_MAP:
             return left.map_handle == right.map_handle ? 1 : 0;
 
+        case AIVM_VAL_TASK:
+            /* Task identity is intentionally not an AiLang equality relation. */
+            return 0;
+        case AIVM_VAL_WORKER_REF:
+            /* WorkerRef identity is intentionally not an AiLang equality relation. */
+            return 0;
+        case AIVM_VAL_WORKER_TASKS:
+            return 0;
+
         case AIVM_VAL_UNKNOWN:
             return 1;
 
@@ -221,6 +254,9 @@ int aivm_value_is_immutable_message_payload(AivmValue value)
         case AIVM_VAL_NODE_BUILDER:
         case AIVM_VAL_MAP_BUILDER:
         case AIVM_VAL_MAP:
+        case AIVM_VAL_TASK:
+        case AIVM_VAL_WORKER_REF:
+        case AIVM_VAL_WORKER_TASKS:
         case AIVM_VAL_UNKNOWN:
         default:
             return 0;

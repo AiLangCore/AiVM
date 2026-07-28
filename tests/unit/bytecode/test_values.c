@@ -25,6 +25,8 @@ int main(void)
     AivmValue node_b;
     AivmValue pair_a;
     AivmValue pair_b;
+    AivmValue task_a;
+    AivmValue task_alias;
     const char hello_chars[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
     const char hello_chars_copy[] = { 'h', 'e', 'l', 'l', 'o', '\0' };
     const uint8_t bytes_raw[] = { 0x00U, 0x01U, 0x7fU, 0xffU };
@@ -142,6 +144,17 @@ int main(void)
         return 1;
     }
     if (expect(aivm_value_equals(pair_a, aivm_value_pair(4)) == 0) != 0) {
+        return 1;
+    }
+    task_a = aivm_value_task(7);
+    task_alias = aivm_value_task(7);
+    if (expect(task_a.type == AIVM_VAL_TASK && task_a.task_handle == 7) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_equals(task_a, task_alias) == 0) != 0) {
+        return 1;
+    }
+    if (expect(aivm_value_is_immutable_message_payload(task_a) == 0) != 0) {
         return 1;
     }
 

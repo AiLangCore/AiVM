@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "aivm_types.h"
+#include "aivm_worker_catalog.h"
 
 typedef enum {
     AIVM_OP_NOP = 0,
@@ -95,7 +96,12 @@ typedef enum {
     AIVM_OP_MAP_COUNT = 85,
     AIVM_OP_MAP_HAS_STRING = 86,
     AIVM_OP_MAP_GET_STRING_INT_OR = 87,
-    AIVM_OP_MAX = AIVM_OP_MAP_GET_STRING_INT_OR
+    AIVM_OP_WORKER_REF = 88,
+    AIVM_OP_WORKER_RUN = 89,
+    AIVM_OP_TASK_CANCEL = 90,
+    AIVM_OP_WORKER_RUN_ALL = 91,
+    AIVM_OP_WORKER_TASK_AT = 92,
+    AIVM_OP_MAX = AIVM_OP_WORKER_TASK_AT
 } AivmOpcode;
 
 typedef struct {
@@ -111,12 +117,14 @@ typedef struct {
 
 enum {
     AIVM_PROGRAM_MAX_SECTIONS = 32,
-    AIVM_PROGRAM_MAX_INSTRUCTIONS = 32768,
+    AIVM_PROGRAM_INLINE_INSTRUCTIONS = 32768,
+    AIVM_PROGRAM_MAX_INSTRUCTIONS = AIVM_PROGRAM_INLINE_INSTRUCTIONS,
     AIVM_PROGRAM_INLINE_CONSTANTS = 1024,
     AIVM_PROGRAM_MAX_STRING_BYTES = 65536,
     AIVM_PROGRAM_MAX_BYTES_STORAGE = 32768,
     AIVM_PROGRAM_SECTION_INSTRUCTIONS = 1,
-    AIVM_PROGRAM_SECTION_CONSTANTS = 2
+    AIVM_PROGRAM_SECTION_CONSTANTS = 2,
+    AIVM_PROGRAM_SECTION_WORKER_CATALOG = 3
 };
 
 typedef struct {
@@ -129,6 +137,8 @@ typedef struct {
     uint32_t section_count;
     AivmProgramSection sections[AIVM_PROGRAM_MAX_SECTIONS];
     AivmInstruction instruction_storage[AIVM_PROGRAM_MAX_INSTRUCTIONS];
+    AivmInstruction* allocated_instruction_storage;
+    size_t instruction_capacity;
     AivmValue constant_storage[AIVM_PROGRAM_INLINE_CONSTANTS];
     AivmValue* allocated_constant_storage;
     size_t constant_capacity;
@@ -136,6 +146,7 @@ typedef struct {
     size_t string_storage_used;
     uint8_t bytes_storage[AIVM_PROGRAM_MAX_BYTES_STORAGE];
     size_t bytes_storage_used;
+    AivmWorkerCatalog worker_catalog;
 } AivmProgram;
 
 typedef enum {
@@ -152,7 +163,8 @@ typedef enum {
     AIVM_PROGRAM_ERR_CONSTANT_LIMIT = 10,
     AIVM_PROGRAM_ERR_INVALID_CONSTANT = 11,
     AIVM_PROGRAM_ERR_STRING_LIMIT = 12,
-    AIVM_PROGRAM_ERR_MEMORY = 13
+    AIVM_PROGRAM_ERR_MEMORY = 13,
+    AIVM_PROGRAM_ERR_WORKER_CATALOG = 14
 } AivmProgramStatus;
 
 typedef struct {

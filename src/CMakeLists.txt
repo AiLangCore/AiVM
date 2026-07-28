@@ -101,8 +101,18 @@ set(AIVM_CORE_SOURCES
     aivm_vm_string_copy.c
     aivm_vm_text.c
     aivm_vm_value.c
+    aivm_vm_worker_batches.c
+    aivm_vm_worker_tasks.c
+    aivm_worker_capacity.c
+    aivm_worker_capabilities.c
+    aivm_worker_catalog.c
+    aivm_worker_invocation.c
+    aivm_worker_program.c
+    aivm_worker_runtime.c
+    aivm_worker_scheduler.c
     aivm_program.c
     aivm_program_constants.c
+    aivm_program_instructions.c
     aivm_host_abi.c
     aivm_debugger.c
     aivm_module_cache.c
@@ -276,15 +286,45 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_program_loader PRIVATE aivm_core)
 
+    add_executable(aivm_test_worker_catalog
+        ../tests/unit/bytecode/test_worker_catalog.c
+    )
+    target_link_libraries(aivm_test_worker_catalog PRIVATE aivm_core)
+
     add_executable(aivm_test_dynamic_constants
         ../tests/unit/bytecode/test_dynamic_constants.c
     )
     target_link_libraries(aivm_test_dynamic_constants PRIVATE aivm_core)
 
+    add_executable(aivm_test_dynamic_instructions
+        ../tests/unit/bytecode/test_dynamic_instructions.c
+    )
+    target_link_libraries(aivm_test_dynamic_instructions PRIVATE aivm_core)
+
     add_executable(aivm_test_vm_core
         ../tests/unit/vm/test_vm_core.c
     )
     target_link_libraries(aivm_test_vm_core PRIVATE aivm_core)
+
+    add_executable(aivm_test_worker_capacity
+        ../tests/unit/vm/test_worker_capacity.c
+    )
+    target_link_libraries(aivm_test_worker_capacity PRIVATE aivm_core)
+
+    add_executable(aivm_test_worker_scheduler
+        ../tests/unit/vm/test_worker_scheduler.c
+    )
+    target_link_libraries(aivm_test_worker_scheduler PRIVATE aivm_core)
+
+    add_executable(aivm_test_worker_runtime
+        ../tests/unit/vm/test_worker_runtime.c
+    )
+    target_link_libraries(aivm_test_worker_runtime PRIVATE aivm_core)
+
+    add_executable(aivm_test_vm_worker_tasks
+        ../tests/unit/vm/test_vm_worker_tasks.c
+    )
+    target_link_libraries(aivm_test_vm_worker_tasks PRIVATE aivm_core)
 
     add_executable(aivm_test_values
         ../tests/unit/bytecode/test_values.c
@@ -563,6 +603,10 @@ if (BUILD_TESTING)
 
     if (MSVC)
         target_compile_options(aivm_test_program_loader PRIVATE /W4)
+        target_compile_options(aivm_test_worker_catalog PRIVATE /W4)
+        target_compile_options(aivm_test_worker_scheduler PRIVATE /W4)
+        target_compile_options(aivm_test_worker_runtime PRIVATE /W4)
+        target_compile_options(aivm_test_vm_worker_tasks PRIVATE /W4)
         target_compile_options(aivm_test_vm_core PRIVATE /W4)
         target_compile_options(aivm_test_values PRIVATE /W4)
         target_compile_options(aivm_test_module_cache PRIVATE /W4)
@@ -608,6 +652,10 @@ if (BUILD_TESTING)
         endif()
     else()
         target_compile_options(aivm_test_program_loader PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_worker_catalog PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_worker_scheduler PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_worker_runtime PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_vm_worker_tasks PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_values PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_module_cache PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -654,8 +702,14 @@ if (BUILD_TESTING)
     endif()
 
     add_test(NAME aivm_test_program_loader COMMAND aivm_test_program_loader)
+    add_test(NAME aivm_test_worker_catalog COMMAND aivm_test_worker_catalog)
     add_test(NAME aivm_test_dynamic_constants COMMAND aivm_test_dynamic_constants)
+    add_test(NAME aivm_test_dynamic_instructions COMMAND aivm_test_dynamic_instructions)
     add_test(NAME aivm_test_vm_core COMMAND aivm_test_vm_core)
+    add_test(NAME aivm_test_worker_capacity COMMAND aivm_test_worker_capacity)
+    add_test(NAME aivm_test_worker_scheduler COMMAND aivm_test_worker_scheduler)
+    add_test(NAME aivm_test_worker_runtime COMMAND aivm_test_worker_runtime)
+    add_test(NAME aivm_test_vm_worker_tasks COMMAND aivm_test_vm_worker_tasks)
     add_test(NAME aivm_test_values COMMAND aivm_test_values)
     add_test(NAME aivm_test_module_cache COMMAND aivm_test_module_cache)
     add_test(NAME aivm_test_syscall COMMAND aivm_test_syscall)
@@ -779,6 +833,10 @@ if (BUILD_TESTING)
     )
     set_tests_properties(
         aivm_test_vm_core
+        aivm_test_worker_capacity
+        aivm_test_worker_scheduler
+        aivm_test_worker_runtime
+        aivm_test_vm_worker_tasks
         aivm_test_vm_stack
         aivm_test_vm_frames_locals
         aivm_test_vm_ops

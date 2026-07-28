@@ -1,5 +1,6 @@
 #include "aivm_program.h"
 #include "aivm_program_constants.h"
+#include "aivm_program_instructions.h"
 
 #include <string.h>
 
@@ -131,6 +132,8 @@ void aivm_program_clear(AivmProgram* program)
 
     program->instructions = NULL;
     program->instruction_count = 0U;
+    program->allocated_instruction_storage = NULL;
+    program->instruction_capacity = AIVM_PROGRAM_INLINE_INSTRUCTIONS;
     program->constants = NULL;
     program->constant_count = 0U;
     program->allocated_constant_storage = NULL;
@@ -140,6 +143,7 @@ void aivm_program_clear(AivmProgram* program)
     program->section_count = 0U;
     program->string_storage_used = 0U;
     program->bytes_storage_used = 0U;
+    aivm_worker_catalog_clear(&program->worker_catalog);
     for (index = 0U; index < AIVM_PROGRAM_MAX_INSTRUCTIONS; index += 1U) {
         program->instruction_storage[index].opcode = AIVM_OP_NOP;
         program->instruction_storage[index].operand_int = 0;
@@ -166,6 +170,8 @@ void aivm_program_release(AivmProgram* program)
         return;
     }
     aivm_program_constants_release(program);
+    aivm_program_instructions_release(program);
+    aivm_worker_catalog_release(&program->worker_catalog);
 }
 
 void aivm_program_init(AivmProgram* program, const AivmInstruction* instructions, size_t instruction_count)
@@ -186,6 +192,7 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
     uint32_t section_index;
     int has_instruction_section = 0;
     int has_constants_section = 0;
+    int has_worker_catalog_section = 0;
 
     if (out_program != NULL) {
         aivm_program_clear(out_program);
@@ -277,18 +284,17 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             }
 
             instruction_count = read_u32_le(bytes, section_payload_start);
-            if (instruction_count > AIVM_PROGRAM_MAX_INSTRUCTIONS) {
-                result.status = AIVM_PROGRAM_ERR_INSTRUCTION_LIMIT;
-                result.error_offset = section_payload_start;
-                return result;
-            }
-
             if (!size_mul_checked((size_t)instruction_count, 12U, &expected_instruction_bytes) ||
                 !size_add_checked(4U, expected_instruction_bytes, &expected_section_size) ||
                 (size_t)section_size != expected_section_size) {
                 result.status = AIVM_PROGRAM_ERR_INVALID_SECTION;
                 result.error_offset = section_payload_start;
                 return result;
+            }
+            if (!aivm_program_instructions_reserve(
+                    out_program, (size_t)instruction_count)) {
+                return constant_load_error(
+                    out_program, AIVM_PROGRAM_ERR_MEMORY, section_payload_start);
             }
 
             instruction_cursor = section_payload_start + 4U;
@@ -301,12 +307,13 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
                     return result;
                 }
 
-                out_program->instruction_storage[instruction_index].opcode = (AivmOpcode)raw_opcode;
-                out_program->instruction_storage[instruction_index].operand_int = operand_int;
+                aivm_program_instructions_mutable(out_program)[instruction_index].opcode =
+                    (AivmOpcode)raw_opcode;
+                aivm_program_instructions_mutable(out_program)[instruction_index].operand_int =
+                    operand_int;
                 instruction_cursor += 12U;
             }
 
-            out_program->instructions = out_program->instruction_storage;
             out_program->instruction_count = (size_t)instruction_count;
         } else if (section_type == AIVM_PROGRAM_SECTION_CONSTANTS) {
             uint32_t constant_count;
@@ -448,6 +455,21 @@ AivmProgramLoadResult aivm_program_load_aibc1(const uint8_t* bytes, size_t byte_
             }
 
             out_program->constant_count = (size_t)constant_count;
+        } else if (section_type == AIVM_PROGRAM_SECTION_WORKER_CATALOG) {
+            AivmWorkerCatalogStatus catalog_status;
+            if (has_worker_catalog_section != 0) {
+                return constant_load_error(
+                    out_program, AIVM_PROGRAM_ERR_INVALID_SECTION, section_payload_start);
+            }
+            has_worker_catalog_section = 1;
+            catalog_status = aivm_worker_catalog_load(
+                bytes + section_payload_start,
+                (size_t)section_size,
+                &out_program->worker_catalog);
+            if (catalog_status != AIVM_WORKER_CATALOG_OK) {
+                return constant_load_error(
+                    out_program, AIVM_PROGRAM_ERR_WORKER_CATALOG, section_payload_start);
+            }
         }
 
         cursor = section_end;
@@ -489,6 +511,8 @@ const char* aivm_program_status_code(AivmProgramStatus status)
             return "AIVMP012";
         case AIVM_PROGRAM_ERR_MEMORY:
             return "AIVMP013";
+        case AIVM_PROGRAM_ERR_WORKER_CATALOG:
+            return "AIVMP014";
         default:
             return "AIVMP999";
     }
@@ -525,6 +549,8 @@ const char* aivm_program_status_message(AivmProgramStatus status)
             return "Program string storage exceeded limit.";
         case AIVM_PROGRAM_ERR_MEMORY:
             return "Program storage allocation failed.";
+        case AIVM_PROGRAM_ERR_WORKER_CATALOG:
+            return "Program worker catalog was invalid.";
         default:
             return "Unknown program load status.";
     }

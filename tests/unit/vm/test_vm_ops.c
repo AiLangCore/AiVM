@@ -2154,7 +2154,7 @@ static int test_async_call_starts_pending_worker_task(void)
     if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
         return 1;
     }
-    if (expect(out.type == AIVM_VAL_INT && out.int_value == vm.completed_tasks[0].handle) != 0) {
+    if (expect(out.type == AIVM_VAL_TASK && out.task_handle == vm.completed_tasks[0].handle) != 0) {
         return 1;
     }
     aivm_dispose(&vm);
@@ -2443,7 +2443,7 @@ static int test_async_call_reclaims_oldest_task_slot_when_full(void)
     if (expect(aivm_stack_pop(&vm, &out) == 1) != 0) {
         return 1;
     }
-    if (expect(out.type == AIVM_VAL_INT && out.int_value == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
+    if (expect(out.type == AIVM_VAL_TASK && out.task_handle == (int64_t)AIVM_VM_TASK_CAPACITY + 1) != 0) {
         return 1;
     }
     aivm_dispose(&vm);
@@ -2536,7 +2536,7 @@ static int test_async_call_reclaim_skips_pinned_oldest_handle(void)
         vm.completed_tasks[i].worker_context = NULL;
     }
     vm.stack_count = 1U;
-    vm.stack[0] = aivm_value_int(1);
+    vm.stack[0] = aivm_value_task(1);
 
     aivm_run(&vm);
     if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
@@ -2588,7 +2588,7 @@ static int test_async_call_full_table_all_pinned_sets_capacity_error(void)
         vm.completed_tasks[i].handle = (int64_t)i + 1;
         vm.completed_tasks[i].result = aivm_value_int(-((int64_t)i + 1));
         vm.completed_tasks[i].worker_context = NULL;
-        vm.stack[i] = aivm_value_int((int64_t)i + 1);
+        vm.stack[i] = aivm_value_task((int64_t)i + 1);
     }
 
     aivm_run(&vm);
@@ -2704,7 +2704,7 @@ static int test_await_pending_task_handle_sets_error(void)
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -2746,7 +2746,7 @@ static int test_await_failed_task_handle_returns_terminal_result(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -2793,7 +2793,7 @@ static int test_await_failed_task_non_err_result_sets_error(void)
         { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -2836,7 +2836,7 @@ static int test_terminal_task_cleanup_stress(void)
     size_t i;
 
     for (i = 0U; i < terminal_task_count; i += 1U) {
-        constants[i] = aivm_value_int((int64_t)i + 1);
+        constants[i] = aivm_value_task((int64_t)i + 1);
         instructions[ip].opcode = AIVM_OP_CONST;
         instructions[ip].operand_int = (int64_t)i;
         ip += 1U;
@@ -2919,7 +2919,7 @@ static int test_parallel_join_resolves_canceled_task_handles(void)
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -2976,7 +2976,7 @@ static int test_parallel_join_failed_task_non_err_result_sets_error(void)
         { .opcode = AIVM_OP_PAR_JOIN, .operand_int = 1 }
     };
     static const AivmValue constants[] = {
-        { .type = AIVM_VAL_INT, .int_value = 1 }
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
     };
     static const AivmProgram program = {
         .instructions = instructions,
@@ -5014,6 +5014,45 @@ static int test_pair_first_requires_pair(void)
     return 0;
 }
 
+static int test_repeated_await_alias_reports_task_consumed(void)
+{
+    static AivmVm vm;
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_TASK, .task_handle = 1 }
+    };
+    static const AivmProgram program = {
+        .instructions = instructions,
+        .instruction_count = 5U,
+        .constants = constants,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    aivm_init(&vm, &program);
+    vm.completed_task_count = 1U;
+    vm.completed_tasks[0].state = AIVM_TASK_STATE_COMPLETED;
+    vm.completed_tasks[0].handle = 1;
+    vm.completed_tasks[0].result = aivm_value_int(42);
+    vm.completed_tasks[0].worker_context = NULL;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+    if (expect(strcmp(aivm_vm_error_detail(&vm), "TASK_CONSUMED") == 0) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (run_test("test_push_store_load_pop", test_push_store_load_pop) != 0) {
@@ -5197,6 +5236,9 @@ int main(void)
         return 1;
     }
     if (run_test("test_await_failed_task_non_err_result_sets_error", test_await_failed_task_non_err_result_sets_error) != 0) {
+        return 1;
+    }
+    if (run_test("test_repeated_await_alias_reports_task_consumed", test_repeated_await_alias_reports_task_consumed) != 0) {
         return 1;
     }
     if (run_test("test_terminal_task_cleanup_stress", test_terminal_task_cleanup_stress) != 0) {

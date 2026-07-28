@@ -183,11 +183,38 @@ destination VM with child handles remapped to copied destination handles.
 Scratch pairs are copied recursively so pair contents never expose worker-local
 handles. Unknown values are rejected at the boundary.
 
-The isolated worker VM runs on a native worker thread. `AIVM_OP_ASYNC_CALL`
-creates a pending task record and returns its task handle to the parent VM.
-`AIVM_OP_AWAIT` joins the pending worker, copies the frozen result into the
-parent VM, marks the task completed, and then consumes the task result. VM reset
-and disposal join and release any unconsumed pending bytecode workers.
+The current isolated `AIVM_OP_ASYNC_CALL` implementation uses a native worker
+thread. The target Task contract returns an opaque owner-bound Task value,
+never an integer handle. `AIVM_OP_AWAIT` consumes the terminal result into the
+owner VM. VM reset and disposal release unconsumed work.
+
+## Opaque Worker Tasks and Workloads
+
+The worker scheduler replaces string task names and integer worker handles with
+loader-created WorkerRef capabilities, opaque owner-bound Task values, and
+opaque ordered workload values.
+
+A Task may internally identify its owner, slot, and generation. Those fields
+are never language-visible, serializable, comparable, hashable, transportable,
+or canonical data. First Await consumes a terminal result exactly once.
+Aliases retained after consumption observe `TASK_CONSUMED`; generation checks
+prevent stale aliases from observing reused slots.
+
+Task records own their payload/result reservations and source-specific cleanup.
+Cancellation does not consume a Task. Queued, active, terminal, canceled, and
+abandoned tasks are reclaimed through deterministic Await/release safe points
+or owner shutdown.
+
+One accepted workload may describe more logical tasks than the materialized
+pending queue. Compact canonical-index state and immutable ordered input
+references represent the remaining logical work. Active VM state, materialized
+pending descriptors, intermediate bytes, retained results, and result bytes
+remain independently bounded.
+
+Immutable validated worker programs may be shared by invocations. Every
+invocation receives fresh mutable stacks, locals, frames, heaps, globals,
+handles, Tasks, syscall state, and capability state. No mutable pointer crosses
+the worker boundary.
 
 ## Immutable Shared Memory
 
