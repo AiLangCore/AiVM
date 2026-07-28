@@ -5,6 +5,9 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
+#define _DARWIN_C_SOURCE
+#endif
 #else
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
@@ -648,47 +651,66 @@ static int aivm_cli_dir_delete_recursive(const char* path)
     return ok && RemoveDirectoryA(path) != 0;
 }
 #else
-static int aivm_cli_join_path(char* out_path, size_t out_size, const char* parent, const char* child)
-{
-    int written = snprintf(out_path, out_size, "%s/%s", parent, child);
-    return written > 0 && (size_t)written < out_size;
-}
-
-static int aivm_cli_dir_delete_recursive(const char* path)
+static int aivm_cli_dir_delete_contents(int directory_fd)
 {
     DIR* dir;
     struct dirent* entry;
     int ok = 1;
+    int iteration_fd = dup(directory_fd);
 
-    dir = opendir(path);
+    if (iteration_fd < 0) {
+        return 0;
+    }
+    dir = fdopendir(iteration_fd);
     if (dir == NULL) {
-        return rmdir(path) == 0;
+        close(iteration_fd);
+        return 0;
     }
     while ((entry = readdir(dir)) != NULL) {
-        char child[PATH_MAX];
         struct stat st;
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        if (!aivm_cli_join_path(child, sizeof(child), path, entry->d_name)) {
-            ok = 0;
-            break;
-        }
-        if (lstat(child, &st) != 0) {
+        if (fstatat(directory_fd, entry->d_name, &st, AT_SYMLINK_NOFOLLOW) != 0) {
             ok = 0;
             break;
         }
         if (S_ISDIR(st.st_mode)) {
-            if (!aivm_cli_dir_delete_recursive(child)) {
+            int child_fd = openat(directory_fd, entry->d_name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+            int child_ok;
+            if (child_fd < 0) {
                 ok = 0;
                 break;
             }
-        } else if (unlink(child) != 0) {
+            child_ok = aivm_cli_dir_delete_contents(child_fd);
+            if (close(child_fd) != 0) {
+                child_ok = 0;
+            }
+            if (!child_ok ||
+                unlinkat(directory_fd, entry->d_name, AT_REMOVEDIR) != 0) {
+                ok = 0;
+                break;
+            }
+        } else if (unlinkat(directory_fd, entry->d_name, 0) != 0) {
             ok = 0;
             break;
         }
     }
     closedir(dir);
+    return ok;
+}
+
+static int aivm_cli_dir_delete_recursive(const char* path)
+{
+    int directory_fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    int ok;
+    if (directory_fd < 0) {
+        return rmdir(path) == 0;
+    }
+    ok = aivm_cli_dir_delete_contents(directory_fd);
+    if (close(directory_fd) != 0) {
+        ok = 0;
+    }
     return ok && rmdir(path) == 0;
 }
 #endif
