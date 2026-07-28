@@ -326,6 +326,10 @@ if (BUILD_TESTING)
     )
     target_link_libraries(aivm_test_vm_worker_tasks PRIVATE aivm_core)
 
+    add_executable(aivm_test_storage_path
+        ../tests/unit/host/test_storage_path.c
+    )
+
     add_executable(aivm_test_values
         ../tests/unit/bytecode/test_values.c
     )
@@ -607,6 +611,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_worker_scheduler PRIVATE /W4)
         target_compile_options(aivm_test_worker_runtime PRIVATE /W4)
         target_compile_options(aivm_test_vm_worker_tasks PRIVATE /W4)
+        target_compile_options(aivm_test_storage_path PRIVATE /W4)
         target_compile_options(aivm_test_vm_core PRIVATE /W4)
         target_compile_options(aivm_test_values PRIVATE /W4)
         target_compile_options(aivm_test_module_cache PRIVATE /W4)
@@ -656,6 +661,7 @@ if (BUILD_TESTING)
         target_compile_options(aivm_test_worker_scheduler PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_worker_runtime PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_worker_tasks PRIVATE -Wall -Wextra -Wpedantic -Werror)
+        target_compile_options(aivm_test_storage_path PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_vm_core PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_values PRIVATE -Wall -Wextra -Wpedantic -Werror)
         target_compile_options(aivm_test_module_cache PRIVATE -Wall -Wextra -Wpedantic -Werror)
@@ -709,6 +715,11 @@ if (BUILD_TESTING)
     add_test(NAME aivm_test_worker_capacity COMMAND aivm_test_worker_capacity)
     add_test(NAME aivm_test_worker_scheduler COMMAND aivm_test_worker_scheduler)
     add_test(NAME aivm_test_worker_runtime COMMAND aivm_test_worker_runtime)
+    add_test(NAME aivm_test_storage_path COMMAND aivm_test_storage_path)
+    set_tests_properties(
+        aivm_test_storage_path
+        PROPERTIES LABELS "unit;host;security"
+    )
     add_test(NAME aivm_test_vm_worker_tasks COMMAND aivm_test_vm_worker_tasks)
     add_test(NAME aivm_test_values COMMAND aivm_test_values)
     add_test(NAME aivm_test_module_cache COMMAND aivm_test_module_cache)

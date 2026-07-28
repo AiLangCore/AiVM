@@ -76,8 +76,10 @@ int main(void)
     owner.worker_catalog.count = 1U;
     aivm_syscall_policy_allow_none(&parent_policy);
     if (expect(aivm_worker_capability_syscall_mask(
-        AIVM_WORKER_CAPABILITY_FILESYSTEM) ==
-        aivm_syscall_capability_mask(AIVM_SYSCALL_CAPABILITY_FILESYSTEM)) != 0 ||
+        AIVM_WORKER_CAPABILITY_FILESYSTEM) == 0U) != 0 ||
+        expect(aivm_worker_capability_syscall_mask(
+        AIVM_WORKER_CAPABILITY_ENVIRONMENT) ==
+        aivm_syscall_capability_mask(AIVM_SYSCALL_CAPABILITY_PROCESS)) != 0 ||
         expect(aivm_worker_capability_syscall_mask(
         AIVM_WORKER_CAPABILITY_STANDARD_STREAMS) ==
         aivm_syscall_capability_mask(AIVM_SYSCALL_CAPABILITY_CONSOLE)) != 0) {

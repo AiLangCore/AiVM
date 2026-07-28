@@ -281,3 +281,9 @@ AiVM may choose threads, processes, or another isolated mechanism. It performs
 no package resolution, filesystem artifact search, compiler selection,
 function-name lookup, payload interpretation, validation policy, linker
 behavior, diagnostic selection, or canonical ordering.
+
+Worker environment capability maps to the process syscall group used by
+`sys.process.env.get` and `sys.process.cwd`. Filesystem syscall capability is
+not granted to concurrent worker VMs while the native CLI filesystem binding
+retains process-global scratch buffers and handle tables; it must remain denied
+until those bindings are isolated per invocation or mechanically synchronized.

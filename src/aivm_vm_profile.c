@@ -72,6 +72,8 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.network_write_bytes = AIVM_VM_NETWORK_WRITE_BYTES;
     limits.process_count = AIVM_VM_PROCESS_COUNT;
     limits.worker_count = AIVM_VM_WORKER_COUNT;
+    limits.worker_logical_task_capacity = 4096U;
+    limits.worker_logical_input_bytes = limits.bytes_arena_capacity;
     limits.ui_window_count = AIVM_VM_UI_WINDOW_COUNT;
     limits.debug_artifact_bytes = AIVM_VM_DEBUG_ARTIFACT_BYTES;
     limits.blob_capacity = AIVM_VM_BLOB_CAPACITY;
@@ -95,6 +97,8 @@ void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile)
     vm->node_attr_capacity = limits.node_attr_capacity;
     vm->node_child_capacity = limits.node_child_capacity;
     vm->syscall_elapsed_limit_ms = limits.syscall_elapsed_ms;
+    vm->worker_logical_task_limit = limits.worker_logical_task_capacity;
+    vm->worker_logical_input_limit = limits.worker_logical_input_bytes;
     if (profile == AIVM_RUNTIME_PROFILE_PRODUCTION) {
         aivm_syscall_policy_allow_production_default(&vm->syscall_policy);
     } else {

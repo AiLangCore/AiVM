@@ -1,6 +1,8 @@
 static char* g_native_storage_value_scratch = NULL;
 static size_t g_native_storage_value_scratch_capacity = 0U;
 
+#include "airun_storage_path.h"
+
 static int native_storage_scratch_ensure_capacity(size_t required_capacity)
 {
     char* grown;
@@ -26,34 +28,6 @@ static int native_storage_scratch_ensure_capacity(size_t required_capacity)
     }
     g_native_storage_value_scratch = grown;
     g_native_storage_value_scratch_capacity = new_capacity;
-    return 1;
-}
-
-static int native_storage_sanitize_segment(const char* input, char* out, size_t out_len)
-{
-    size_t input_index;
-    size_t out_index = 0U;
-    if (input == NULL || out == NULL || out_len < 2U || input[0] == '\0') {
-        return 0;
-    }
-    for (input_index = 0U; input[input_index] != '\0'; input_index += 1U) {
-        unsigned char ch = (unsigned char)input[input_index];
-        if (out_index + 1U >= out_len) {
-            return 0;
-        }
-        if ((ch >= (unsigned char)'a' && ch <= (unsigned char)'z') ||
-            (ch >= (unsigned char)'A' && ch <= (unsigned char)'Z') ||
-            (ch >= (unsigned char)'0' && ch <= (unsigned char)'9') ||
-            ch == (unsigned char)'.' ||
-            ch == (unsigned char)'_' ||
-            ch == (unsigned char)'-') {
-            out[out_index] = (char)ch;
-        } else {
-            out[out_index] = '_';
-        }
-        out_index += 1U;
-    }
-    out[out_index] = '\0';
     return 1;
 }
 

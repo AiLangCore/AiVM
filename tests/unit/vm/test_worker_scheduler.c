@@ -1,19 +1,45 @@
 #include "aivm_worker_scheduler.h"
 
-#include <stdatomic.h>
 #include <stdio.h>
 
 #if defined(_WIN32)
 #include <windows.h>
+typedef volatile LONG ProbeCount;
+static size_t probe_count_increment(ProbeCount* value)
+{
+    return (size_t)InterlockedIncrement(value);
+}
+static size_t probe_count_load(ProbeCount* value)
+{
+    return (size_t)InterlockedCompareExchange(value, 0, 0);
+}
+static void probe_count_store(ProbeCount* value, LONG next)
+{
+    (void)InterlockedExchange(value, next);
+}
 static void yield_thread(void) { Sleep(0U); }
 #else
+#include <stdatomic.h>
 #include <sched.h>
+typedef atomic_size_t ProbeCount;
+static size_t probe_count_increment(ProbeCount* value)
+{
+    return atomic_fetch_add_explicit(value, 1U, memory_order_release) + 1U;
+}
+static size_t probe_count_load(ProbeCount* value)
+{
+    return atomic_load_explicit(value, memory_order_acquire);
+}
+static void probe_count_store(ProbeCount* value, size_t next)
+{
+    atomic_store_explicit(value, next, memory_order_release);
+}
 static void yield_thread(void) { (void)sched_yield(); }
 #endif
 
 typedef struct {
-    atomic_size_t* started;
-    atomic_int* release;
+    ProbeCount* started;
+    ProbeCount* release;
 } SchedulerProbe;
 
 static int expect(int condition)
@@ -24,8 +50,8 @@ static int expect(int condition)
 static void run_probe(void* raw_probe)
 {
     SchedulerProbe* probe = (SchedulerProbe*)raw_probe;
-    (void)atomic_fetch_add_explicit(probe->started, 1U, memory_order_release);
-    while (atomic_load_explicit(probe->release, memory_order_acquire) == 0) {
+    (void)probe_count_increment(probe->started);
+    while (probe_count_load(probe->release) == 0U) {
         yield_thread();
     }
 }
@@ -34,8 +60,8 @@ int main(void)
 {
     AivmWorkerScheduler* scheduler = NULL;
     SchedulerProbe probes[8];
-    atomic_size_t started = 0U;
-    atomic_int release = 0;
+    ProbeCount started = 0;
+    ProbeCount release = 0;
     AivmWorkerTaskStatus status;
     size_t index;
 
@@ -57,7 +83,7 @@ int main(void)
             return 1;
         }
     }
-    while (atomic_load_explicit(&started, memory_order_acquire) < 4U) {
+    while (probe_count_load(&started) < 4U) {
         yield_thread();
     }
     if (expect(aivm_worker_scheduler_outstanding_count(scheduler) == 7U) != 0) {
@@ -69,7 +95,7 @@ int main(void)
         return 1;
     }
 
-    atomic_store_explicit(&release, 1, memory_order_release);
+    probe_count_store(&release, 1);
     for (index = 0U; index < 7U; index += 1U) {
         if (expect(aivm_worker_scheduler_await(
             scheduler, (uint64_t)(index + 1U), &status) ==
@@ -78,7 +104,7 @@ int main(void)
             return 1;
         }
     }
-    if (expect(atomic_load_explicit(&started, memory_order_acquire) == 7U) != 0) {
+    if (expect(probe_count_load(&started) == 7U) != 0) {
         return 1;
     }
     /* Completion alone does not alter owner-visible admission credit. */

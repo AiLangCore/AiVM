@@ -56,6 +56,8 @@ typedef struct {
     size_t network_write_bytes;
     size_t process_count;
     size_t worker_count;
+    size_t worker_logical_task_capacity;
+    size_t worker_logical_input_bytes;
     size_t ui_window_count;
     size_t debug_artifact_bytes;
     size_t blob_capacity;
@@ -349,6 +351,10 @@ typedef struct {
     AivmWorkerRuntime* worker_runtime;
     AivmWorkerTaskGroup worker_task_groups[AIVM_VM_TASK_CAPACITY];
     size_t worker_task_group_count;
+    size_t worker_logical_task_count;
+    size_t worker_logical_input_bytes;
+    size_t worker_logical_task_limit;
+    size_t worker_logical_input_limit;
     int64_t next_worker_task_group_handle;
     AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
     size_t par_context_count;

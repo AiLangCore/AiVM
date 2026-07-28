@@ -3023,7 +3023,7 @@ static int validate_call_target_layout(
     size_t arg_count)
 {
     size_t i;
-    size_t seen[64];
+    size_t seen[64] = {0U};
     size_t seen_count = 0U;
     size_t next_seen_count;
     if (vm == NULL || program == NULL || program->instructions == NULL) {
@@ -4768,7 +4768,7 @@ void aivm_step(AivmVm* vm)
 
         case AIVM_OP_VALUE_KIND: {
             AivmValue value;
-            const char* kind;
+            const char* kind = NULL;
             if (!aivm_stack_pop(vm, &value)) {
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
@@ -5493,8 +5493,8 @@ void aivm_step(AivmVm* vm)
         }
 
         case AIVM_OP_NODE_BUILDER_APPEND_CHILD: {
-            AivmValue child_value;
-            AivmValue builder_value;
+            AivmValue child_value = aivm_value_void();
+            AivmValue builder_value = aivm_value_void();
             if (!aivm_stack_pop(vm, &child_value) || !aivm_stack_pop(vm, &builder_value) ||
                 builder_value.type != AIVM_VAL_NODE_BUILDER || child_value.type != AIVM_VAL_NODE ||
                 !aivm_vm_node_builder_append_child(vm, builder_value.node_builder_handle, child_value.node_handle) ||

@@ -36,6 +36,8 @@ void aivm_vm_cleanup_worker_task_groups(AivmVm* vm)
         clear_worker_task_group(&vm->worker_task_groups[index]);
     }
     vm->worker_task_group_count = 0U;
+    vm->worker_logical_task_count = 0U;
+    vm->worker_logical_input_bytes = 0U;
 }
 
 static int materialize_worker_task(
@@ -115,6 +117,11 @@ static int validate_batch(
             return 0;
         }
         offset += (size_t)payload_length;
+        if (payload_count == SIZE_MAX) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE,
+                "WORKER_RUN_ALL logical task count overflow.");
+            return 0;
+        }
         payload_count += 1U;
     }
     if (payload_count == 0U) {
@@ -133,6 +140,8 @@ int aivm_vm_submit_worker_tasks(AivmVm* vm, size_t transport_version)
     size_t catalog_index;
     size_t offset;
     size_t payload_count;
+    size_t accepted_task_count;
+    size_t accepted_input_bytes;
     AivmWorkerTaskGroup* group;
     int64_t group_handle;
     if (vm == NULL || transport_version != 1U ||
@@ -152,6 +161,18 @@ int aivm_vm_submit_worker_tasks(AivmVm* vm, size_t transport_version)
         return 0;
     }
     if (!validate_batch(vm, batch, &payload_count)) {
+        return 0;
+    }
+    if (!aivm_size_add_checked(
+            vm->worker_logical_task_count, payload_count,
+            &accepted_task_count) ||
+        !aivm_size_add_checked(
+            vm->worker_logical_input_bytes, batch.bytes_value.length,
+            &accepted_input_bytes) ||
+        accepted_task_count > vm->worker_logical_task_limit ||
+        accepted_input_bytes > vm->worker_logical_input_limit) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE,
+            "WORKER_RUN_ALL exceeds the runtime-profile logical workload bound.");
         return 0;
     }
     if (vm->worker_task_group_count >= AIVM_VM_TASK_CAPACITY ||
@@ -198,6 +219,8 @@ int aivm_vm_submit_worker_tasks(AivmVm* vm, size_t transport_version)
     }
     vm->next_worker_task_group_handle += 1;
     vm->worker_task_group_count += 1U;
+    vm->worker_logical_task_count = accepted_task_count;
+    vm->worker_logical_input_bytes = accepted_input_bytes;
     if (!aivm_vm_refill_worker_task_groups(vm)) {
         return 0;
     }

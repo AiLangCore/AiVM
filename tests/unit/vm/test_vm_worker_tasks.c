@@ -289,13 +289,63 @@ static int test_worker_run_all_refills_bounded_window(void)
     return 0;
 }
 
+static int test_worker_run_all_rejects_profile_limit_before_allocation(void)
+{
+    static AivmVm vm;
+    uint8_t artifact[64];
+    AivmWorkerCatalogEntry entry;
+    AivmProgram program;
+    static const uint8_t batch[] = {
+        0U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U
+    };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_BYTES,
+          .bytes_value = { .data = batch, .length = sizeof(batch) } }
+    };
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_WORKER_REF, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_WORKER_RUN_ALL, .operand_int = 1 }
+    };
+
+    make_identity_worker(artifact);
+    memset(&entry, 0, sizeof(entry));
+    entry.function_target = 0U;
+    entry.transport_abi = AIVM_WORKER_TRANSPORT_ABI_BYTES_V1;
+    entry.bytecode_version = 2U;
+    entry.artifact = artifact;
+    entry.artifact_length = sizeof(artifact);
+    aivm_program_init(&program, instructions, 3U);
+    program.constants = constants;
+    program.constant_count = 1U;
+    program.worker_catalog.entries = &entry;
+    program.worker_catalog.count = 1U;
+
+    aivm_init(&vm, &program);
+    vm.worker_logical_task_limit = 2U;
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0 ||
+        expect(strcmp(aivm_vm_error_detail(&vm),
+            "WORKER_RUN_ALL exceeds the runtime-profile logical workload bound.") == 0) != 0 ||
+        expect(vm.worker_task_group_count == 0U) != 0 ||
+        expect(vm.worker_logical_task_count == 0U) != 0) {
+        aivm_dispose(&vm);
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
 int main(void)
 {
     if (test_worker_ref_run_await() != 0 ||
         test_worker_ref_rejects_invalid_catalog_index() != 0 ||
         test_worker_run_all_task_at_preserves_canonical_index() != 0 ||
         test_worker_run_all_rejects_truncated_batch() != 0 ||
-        test_worker_run_all_refills_bounded_window() != 0) {
+        test_worker_run_all_refills_bounded_window() != 0 ||
+        test_worker_run_all_rejects_profile_limit_before_allocation() != 0) {
         return 1;
     }
     printf("aivm VM worker task tests passed\n");

@@ -37,6 +37,9 @@ AivmWorkerProgramStatus aivm_worker_program_prepare(
         return AIVM_WORKER_PROGRAM_ERR_ARGUMENT;
     }
     aivm_worker_program_clear(out_program);
+    if (!aivm_worker_capabilities_supported(entry->required_capabilities)) {
+        return AIVM_WORKER_PROGRAM_ERR_CAPABILITY;
+    }
     required = aivm_worker_capability_syscall_mask(entry->required_capabilities);
     if ((required & ~parent_policy->allowed_capability_mask) != 0U) {
         return AIVM_WORKER_PROGRAM_ERR_CAPABILITY;

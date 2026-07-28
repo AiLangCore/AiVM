@@ -84,9 +84,10 @@ int main(void)
     make_catalog(bytes + 24U);
     write_u32(bytes, 28U, 2U);
     {
-        uint8_t identity[AIVM_WORKER_IDENTITY_BYTES];
-        aivm_worker_identity(2U, 1U, 1U, 2U, bytes + 80U, 40U, identity);
-        memcpy(bytes + 48U, identity, sizeof(identity));
+        uint8_t changed_identity[AIVM_WORKER_IDENTITY_BYTES];
+        aivm_worker_identity(
+            2U, 1U, 1U, 2U, bytes + 80U, 40U, changed_identity);
+        memcpy(bytes + 48U, changed_identity, sizeof(changed_identity));
     }
     result = aivm_program_load_aibc1(bytes, sizeof(bytes), &program);
     if (expect(result.status == AIVM_PROGRAM_ERR_WORKER_CATALOG) != 0) {

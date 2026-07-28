@@ -13,6 +13,7 @@
 #include "aivm_program.h"
 #include "aivm_runtime.h"
 #include "aivm_vm.h"
+#include "aivm_worker_scheduler.h"
 #include "sys/aivm_syscall.h"
 
 #ifndef AIVM_BUILD_COMMIT
@@ -550,6 +551,10 @@ static int bench_constants_and_strings(PerfResult* results, size_t* result_count
         { .opcode = AIVM_OP_CONST, .operand_int = 1 },
         { .opcode = AIVM_OP_STR_CONCAT, .operand_int = 0 },
         { .opcode = AIVM_OP_STR_UTF8_BYTE_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_POP, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_STR_CONCAT, .operand_int = 0 },
         { .opcode = AIVM_OP_STR_SCALAR_LENGTH, .operand_int = 0 },
         { .opcode = AIVM_OP_HALT, .operand_int = 0 }
     };
@@ -785,18 +790,9 @@ static int perf_console_write(
     return AIVM_SYSCALL_OK;
 }
 
-static int perf_worker_poll(
-    const char* target,
-    const AivmValue* args,
-    size_t arg_count,
-    AivmValue* result)
+static void perf_worker_task(void* context)
 {
-    (void)target;
-    if (args == NULL || arg_count != 1U || args[0].type != AIVM_VAL_INT) {
-        return AIVM_SYSCALL_ERR_INVALID;
-    }
-    *result = aivm_value_int(0);
-    return AIVM_SYSCALL_OK;
+    (void)context;
 }
 
 static int perf_large_file_read(
@@ -1118,36 +1114,41 @@ static int bench_par_join_queue(PerfResult* results, size_t* result_count, size_
 
 static int bench_worker(PerfResult* results, size_t* result_count, size_t iterations)
 {
-    static const AivmSyscallBinding bindings[] = {
-        { .target = "sys.worker.poll", .handler = perf_worker_poll }
-    };
-    AivmValue arg = aivm_value_int(1);
-    AivmValue result = aivm_value_void();
+    AivmWorkerScheduler* scheduler = NULL;
+    AivmWorkerTaskStatus status;
     size_t index;
     double start;
     double elapsed;
 
+    if (aivm_worker_scheduler_create(1U, 1U, &scheduler) !=
+        AIVM_WORKER_SCHEDULER_OK) {
+        return 1;
+    }
     start = now_seconds();
     for (index = 0U; index < iterations; index += 1U) {
-        AivmSyscallStatus status = aivm_syscall_dispatch_checked(
-            bindings,
-            sizeof(bindings) / sizeof(bindings[0]),
-            "sys.worker.poll",
-            &arg,
-            1U,
-            &result);
-        if (status != AIVM_SYSCALL_OK) {
-            (void)fprintf(stderr, "worker benchmark failed: %s\n", aivm_syscall_status_code(status));
+        uint64_t submission_id = (uint64_t)index + 1U;
+        if (aivm_worker_scheduler_submit(
+                scheduler, submission_id, perf_worker_task, NULL) !=
+                AIVM_WORKER_SCHEDULER_OK ||
+            aivm_worker_scheduler_await(
+                scheduler, submission_id, &status) !=
+                AIVM_WORKER_SCHEDULER_OK ||
+            status != AIVM_WORKER_TASK_COMPLETED ||
+            aivm_worker_scheduler_release(scheduler, submission_id) !=
+                AIVM_WORKER_SCHEDULER_OK) {
+            aivm_worker_scheduler_destroy(scheduler);
+            (void)fprintf(stderr, "worker scheduler benchmark failed\n");
             return 1;
         }
-        g_perf_sink += (uint64_t)result.int_value;
+        g_perf_sink += submission_id;
     }
     elapsed = now_seconds() - start;
+    aivm_worker_scheduler_destroy(scheduler);
 
     return add_result(
         results,
         result_count,
-        "worker_poll_dispatch",
+        "worker_scheduler_submit_await_release",
         "worker",
         "tiny",
         iterations,

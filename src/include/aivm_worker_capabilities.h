@@ -21,5 +21,6 @@ enum {
  * capability representation. The two masks are deliberately not conflated.
  */
 uint64_t aivm_worker_capability_syscall_mask(uint32_t worker_mask);
+int aivm_worker_capabilities_supported(uint32_t worker_mask);
 
 #endif

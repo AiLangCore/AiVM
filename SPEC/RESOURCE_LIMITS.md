@@ -118,8 +118,8 @@ Tracked host-resource limit records:
 | `network_read_bytes` | 1048576 | `sys.net.tcp.read`, `sys.net.tcp.readStart`, `sys.net.udp.recv` | Enforced as max read request size per call and cumulative bytes returned per VM run. |
 | `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as max write payload size per call and cumulative bytes written per VM run. |
 | `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
-| `worker_logical_tasks` | profile-controlled | Accepted logical tasks per owner workload | Checked atomically before workload acceptance. |
-| `worker_logical_input_bytes` | profile-controlled | Aggregate immutable input bytes per workload | Checked atomically before workload acceptance. |
+| `worker_logical_tasks` | 4096 | Accepted logical tasks per owner VM | Checked atomically before workload acceptance. |
+| `worker_logical_input_bytes` | profile byte-arena capacity | Aggregate immutable input bytes per owner VM | Checked atomically before workload acceptance. |
 | `worker_active_ceiling` | profile-controlled | Maximum simultaneously active isolated invocations | Combined with discovered CPU/container and memory capacity. |
 | `worker_pending_materialized` | profile-controlled | Materialized runnable/pending descriptors | Lazy materialization keeps larger accepted workloads bounded. |
 | `worker_retained_results` | profile-controlled | Terminal unconsumed results | Includes results hidden behind a canonical straggler. |
@@ -153,7 +153,8 @@ where required by the selected profile, and deterministic failure behavior.
 - `sys.process.spawn` enforces `process_count` before host process creation.
 - Worker workload admission checks logical task and input-byte ceilings using
   owner-visible state only. Rejection allocates no failed Task or scheduler
-  record.
+  record. Production/debug input is bounded by the 131072-byte profile arena;
+  tooling input is bounded by the 16777216-byte tooling arena.
 
 ## Adaptive Worker Execution
 
