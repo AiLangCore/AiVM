@@ -1,0 +1,24 @@
+Program {
+  Export(name=start)
+
+  Let(name=start) {
+    Fn(params=args) {
+      Block {
+        If {
+          Lit(value=false)
+          Block {
+            CallDynamic(candidates="settingsRender") {
+              Lit(value="")
+              Lit(value=0)
+              Lit(value=0)
+            }
+          }
+          Block {
+            Call(target=sys.stdout.writeLine) { Lit(value="optional dynamic hook skipped") }
+          }
+        }
+        Return { Lit(value=0) }
+      }
+    }
+  }
+}

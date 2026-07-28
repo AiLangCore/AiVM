@@ -1,0 +1,234 @@
+#include <stdio.h>
+
+#include "aivm_c_api.h"
+
+static int expect_line(int condition, int line)
+{
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
+}
+
+#define expect(condition) expect_line((condition), __LINE__)
+
+static int host_remote_call(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL ||
+        arg_count != 3U ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_int(args[2].int_value);
+    return AIVM_SYSCALL_OK;
+}
+
+int main(void)
+{
+    AivmCResult result;
+    static AivmVm vm;
+    uint32_t abi_version;
+    static const AivmInstruction ok_instructions[] = {
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmInstruction bad_opcode[] = {
+        { .opcode = (AivmOpcode)99, .operand_int = 0 }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.remote.call", host_remote_call }
+    };
+    static const uint8_t bad_magic_program[16] = {
+        'X', 'I', 'B', 'C',
+        2, 0, 0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0
+    };
+    static const uint8_t valid_aibc1_program[56] = {
+        'A', 'I', 'B', 'C',
+        2, 0, 0, 0,
+        0, 0, 0, 0,
+        1, 0, 0, 0,
+        1, 0, 0, 0,   /* section type: instructions */
+        28, 0, 0, 0,  /* section size */
+        2, 0, 0, 0,   /* instruction_count */
+        3, 0, 0, 0,   /* PUSH_INT */
+        5, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0,   /* HALT */
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
+    static const AivmInstruction call_sys_instructions[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue call_sys_constants[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
+    };
+    static const AivmProgram call_sys_program = {
+        .instructions = call_sys_instructions,
+        .instruction_count = 6U,
+        .constants = call_sys_constants,
+        .constant_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+
+    abi_version = aivm_c_abi_version();
+    if (expect(abi_version == 1U) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions(ok_instructions, 2U);
+    if (expect(result.ok == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.loaded == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.load_status == AIVM_PROGRAM_OK) != 0) {
+        return 1;
+    }
+    if (expect(result.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(result.has_exit_code == 0) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions(bad_opcode, 1U);
+    if (expect(result.ok == 0) != 0) {
+        return 1;
+    }
+    if (expect(result.error == AIVM_VM_ERR_INVALID_OPCODE) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions(NULL, 0U);
+    if (expect(result.ok == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(result.has_exit_code == 0) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions(NULL, 1U);
+    if (expect(result.ok == 0) != 0) {
+        return 1;
+    }
+    if (expect(result.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions_with_constants(
+        call_sys_instructions,
+        6U,
+        call_sys_constants,
+        4U);
+    if (expect(result.ok == 0) != 0) {
+        return 1;
+    }
+    if (expect(result.error == AIVM_VM_ERR_SYSCALL) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_instructions_with_syscalls(
+        call_sys_instructions,
+        6U,
+        call_sys_constants,
+        4U,
+        bindings,
+        1U);
+    if (expect(result.ok == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_program_with_syscalls(&call_sys_program, bindings, 1U);
+    if (expect(result.ok == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_aibc1(valid_aibc1_program, 56U);
+    if (expect(result.loaded == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.load_status == AIVM_PROGRAM_OK) != 0) {
+        return 1;
+    }
+    if (expect(result.ok == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(result.has_exit_code == 1) != 0) {
+        return 1;
+    }
+    if (expect(result.exit_code == 5) != 0) {
+        return 1;
+    }
+
+    result = aivm_c_execute_aibc1(bad_magic_program, 16U);
+    if (expect(result.loaded == 0) != 0) {
+        return 1;
+    }
+    if (expect(result.load_status == AIVM_PROGRAM_ERR_BAD_MAGIC) != 0) {
+        return 1;
+    }
+    if (expect(result.ok == 0) != 0) {
+        return 1;
+    }
+    if (expect(result.error == AIVM_VM_ERR_INVALID_PROGRAM) != 0) {
+        return 1;
+    }
+
+    if (expect(aivm_c_vm_task_reclaim_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_exhausted_count(NULL) == 0U) != 0) {
+        return 1;
+    }
+
+    aivm_init(&vm, NULL);
+    vm.task_reclaim_count = 7U;
+    vm.task_reclaim_skip_pinned_count = 5U;
+    vm.task_reclaim_exhausted_count = 2U;
+    if (expect(aivm_c_vm_task_reclaim_count(&vm) == 7U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_skip_pinned_count(&vm) == 5U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_c_vm_task_reclaim_exhausted_count(&vm) == 2U) != 0) {
+        return 1;
+    }
+
+    return 0;
+}

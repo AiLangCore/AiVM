@@ -124,6 +124,18 @@ workloads may create large volumes of temporary parser nodes and parse results.
 Those temporaries should be placed in scratch regions or shortened lifetimes
 before raising semantic node limits again.
 
+Scratch result pairs are the first runtime mechanism for removing parser result
+wrapper nodes. AiVM owns a bounded scratch-pair arena and `MAKE_PAIR`,
+`PAIR_FIRST`, and `PAIR_SECOND` opcodes. Pair values are VM/compiler
+implementation values, not syscalls or public semantic objects.
+
+Scratch-pair roots are derived from live VM roots. Only scratch pairs reachable
+from stack values, locals, completed task results, or parallel branch values
+may retain contained strings or node handles during compaction. Dead scratch
+pairs must not keep compiler/parser strings or nodes alive. Contained node
+references in reachable scratch pairs are roots during safe-point compaction
+and are remapped with other live node values.
+
 ## Retained Intermediate Node Reduction
 
 Compiler and parser workloads must minimize retained intermediate nodes.
@@ -154,9 +166,55 @@ mechanical tasks. They are not shared semantic heaps.
 Worker-local heaps must:
 
 - be owned by one worker
+- own worker task inputs and temporary execution payloads before work starts
 - be released when the worker task completes or is canceled
 - produce immutable message payloads or copied semantic values at the boundary
 - avoid exposing worker-local pointers to the UI/Semantic thread
+
+Current host worker tasks use a worker-owned heap context for task name,
+payload, result, and error strings.
+
+`AIVM_OP_ASYNC_CALL` bytecode execution runs through an isolated worker VM
+state. The worker VM owns its stack, locals, arenas, node records, scratch
+pairs, and temporary execution state. Arguments and results cross the boundary
+only by copy. The current beta handoff supports void, null, bool, int, string,
+bytes, node graphs, and scratch pairs. Node graphs are copied into the
+destination VM with child handles remapped to copied destination handles.
+Scratch pairs are copied recursively so pair contents never expose worker-local
+handles. Unknown values are rejected at the boundary.
+
+The current isolated `AIVM_OP_ASYNC_CALL` implementation uses a native worker
+thread. The target Task contract returns an opaque owner-bound Task value,
+never an integer handle. `AIVM_OP_AWAIT` consumes the terminal result into the
+owner VM. VM reset and disposal release unconsumed work.
+
+## Opaque Worker Tasks and Workloads
+
+The worker scheduler replaces string task names and integer worker handles with
+loader-created WorkerRef capabilities, opaque owner-bound Task values, and
+opaque ordered workload values.
+
+A Task may internally identify its owner, slot, and generation. Those fields
+are never language-visible, serializable, comparable, hashable, transportable,
+or canonical data. First Await consumes a terminal result exactly once.
+Aliases retained after consumption observe `TASK_CONSUMED`; generation checks
+prevent stale aliases from observing reused slots.
+
+Task records own their payload/result reservations and source-specific cleanup.
+Cancellation does not consume a Task. Queued, active, terminal, canceled, and
+abandoned tasks are reclaimed through deterministic Await/release safe points
+or owner shutdown.
+
+One accepted workload may describe more logical tasks than the materialized
+pending queue. Compact canonical-index state and immutable ordered input
+references represent the remaining logical work. Active VM state, materialized
+pending descriptors, intermediate bytes, retained results, and result bytes
+remain independently bounded.
+
+Immutable validated worker programs may be shared by invocations. Every
+invocation receives fresh mutable stacks, locals, frames, heaps, globals,
+handles, Tasks, syscall state, and capability state. No mutable pointer crosses
+the worker boundary.
 
 ## Immutable Shared Memory
 
@@ -172,9 +230,20 @@ Mutable semantic values are not shared across workers. If a value must cross a
 worker boundary, it must be copied, frozen, or represented as a deterministic
 message.
 
-An immutable shared module cache is a production direction after worker-local
-heap and deterministic message rules are stable. The cache must not contain
+The immutable shared module cache is exposed through `AivmModuleCache`. Cache
+entries deep-copy loaded `AivmProgram` data into cache-owned storage and expose
+only `const AivmProgram*` views to callers. Cached modules must not contain
 mutable per-execution semantic state.
+
+Module cache operations must:
+
+- reject duplicate module names deterministically
+- reject invalid or oversized names deterministically
+- enforce `AIVM_MODULE_CACHE_MAX_MODULES`
+- enforce `AIVM_MODULE_CACHE_MAX_BYTES`
+- preserve cached program contents even if the caller mutates or clears the
+  source program after insertion
+- keep string and byte constants pointed at cache-owned immutable storage
 
 ## Deterministic Queue Dispatch
 
@@ -184,6 +253,8 @@ into observable execution.
 Queue requirements:
 
 - messages are immutable when enqueued
+- enqueue validation rejects live VM node handles, scratch-pair handles,
+  unknown values, null strings, and non-empty null byte views
 - messages have deterministic ordering metadata
 - dequeue/application order is deterministic
 - batching is allowed when it preserves deterministic ordering
@@ -195,19 +266,32 @@ semantics in its canonical specs. AiVectra owns UI runtime integration rules.
 
 ## Large Object and Blob Storage
 
-Large object/blob storage is a production direction for assets, byte buffers,
-large UI payloads, and host data that should not pressure node/string arenas.
+Large object/blob storage exists for assets, byte buffers, large UI payloads,
+and host data that should not pressure node/string arenas.
 
 Blob storage must:
 
 - be handle-based
 - have explicit resource limits
-- report deterministic allocation/read/write failures
+- report deterministic allocation, read, and release failures
 - avoid changing semantic ordering
 - be released deterministically by VM lifetime, profile policy, or explicit
   resource ownership rules
 
 Large object storage must not become a shared mutable semantic heap.
+
+Initial native support is exposed through the AiVM C API:
+
+- `aivm_blob_create`
+- `aivm_blob_read`
+- `aivm_blob_release`
+- `aivm_blob_active_count`
+
+Blob handles are VM-local. They are not AiLang semantic values and must not be
+shared across VMs or workers as mutable state. Runtime profiles expose
+`blob_capacity` and `blob_bytes`; exceeding either limit returns a deterministic
+`AIVMB002` failure and increments blob pressure accounting. `aivm_reset_state`
+and `aivm_dispose` release all active blobs deterministically.
 
 ## Safe Points
 
@@ -217,10 +301,13 @@ Required safe points include:
 
 - before arena capacity failure is reported
 - before proactive node compaction
+- explicit `aivm_collect_safe_point` calls from host/tooling phase boundaries
 - at explicit VM reset/dispose boundaries
 - at allocation paths that can prove all temporary handles are protected
 - at deterministic compiler/tooling phase boundaries
 - at deterministic worker result handoff boundaries
+- at function return boundaries after enough node allocation pressure has
+  accumulated
 
 Compaction must not depend on wall-clock timing, host thread scheduling, or
 non-deterministic host state.
@@ -245,6 +332,12 @@ stable limits for:
 - node child capacity
 - task capacity
 - parallel value capacity
+
+Host-resource limits are guardrails over bounded primitives. Large files,
+network streams, debug artifacts, UI assets, and blobs should not rely on
+unbounded all-at-once allocation. The preferred runtime shape is handle/chunk
+processing, immutable message passing, worker handoff, and explicit blob
+storage with deterministic release rules.
 
 Future runtime profiles may tune those limits for production, debug, and
 compiler/tooling workloads. A profile change must be explicit and visible in

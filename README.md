@@ -4,38 +4,58 @@ Standalone repository for the AiVM runtime layer.
 
 ![AiVM](assets/AiVM_Logo.png)
 
+For contributor setup and verification, see [CONTRIBUTING.md](CONTRIBUTING.md).
+For stable usage documentation, see [Docs/README.md](Docs/README.md).
+For normative runtime specifications, see [SPEC/README.md](SPEC/README.md).
+
 ## Status
 
 This repository owns the native C AiVM implementation. It is intentionally
 independent from the AiLang compiler and AiVectra UI SDK.
 
+Current public release candidate: `v0.0.1-rc.4`.
+
+Install the public AiLangCore SDK, including `aivm`:
+
+```bash
+curl -fsSL https://ailang.codes/install.sh | sh
+export PATH="$HOME/.ailang/bin:$PATH"
+aivm --version
+```
+
+Branch status: `develop` is the public default branch while the native C VM is
+being hardened for RC. Release tags and GitHub prereleases are the public
+artifact source; `main` is not the current integration branch during this beta
+cycle.
+
 The native C VM lives under:
 
 ```text
-native/
+src/
 ```
 
 ## Layout
 
-- `native` - imported native C VM source, tests, native launcher code, and CMake build.
-- `native/ailang_cli` - temporary native AiLang launcher/host adapter code.
+- `src` - imported native C VM source, tests, native launcher code, and CMake build.
+- `src/ailang_cli` - temporary native AiLang launcher/host adapter code.
+- `SPEC` - normative AiVM runtime contracts.
+- `Docs` - stable usage documentation.
+- `Design` - non-normative design notes.
+- `Planning` - active gated work, readiness, and release checklists.
+- `Archive` - historical or superseded documents.
 - `.github/workflows` - CI and release workflows.
 
-Target native layout:
+Source layout:
 
 ```text
-include/
 src/
+src/include/
 tests/
-examples/
+src/examples/
 scripts/
-CMakeLists.txt
-CMakePresets.json
+src/CMakeLists.txt
+src/CMakePresets.json
 ```
-
-The native tree is intentionally under `native/` during the first import. A
-later cleanup can flatten it to the repository root after AiLang is rewired to
-consume this repository.
 
 ## Deliverables
 
@@ -53,15 +73,21 @@ call into AiVM rather than expanding the production VM command surface.
 
 ## Specifications
 
-- `Docs/Syscalls.md` defines the syscall boundary and syscall addition rules.
-- `SPEC/MEMORY.md` defines the deterministic AiVM memory implementation model.
-- `Docs/Production-VM-Readiness.md` tracks production hardening work.
+- `SPEC/README.md` defines AiVM specification authority.
+- `SPEC/MEMORY.md` defines deterministic AiVM memory implementation mechanics.
+- `SPEC/SYSCALLS.md` defines the syscall boundary and syscall addition rules.
+- `SPEC/RESOURCE_LIMITS.md` defines runtime resource limits and error-code families.
+- `SPEC/DEBUG_ARTIFACTS.md` defines machine-readable debug artifact shape.
+- `Docs/Native-Test-Infrastructure.md` defines the CTest native test layout.
+- `Planning/ProductionVMReadiness.rc1.md` tracks production hardening work.
+- [AiLangCore roadmap](https://ailang.codes/docs/roadmap.html) tracks the
+  Alpha -> Beta -> RC -> 1.0 direction across AiLang, AiVM, and AiVectra.
 
 ## Versioning
 
-The CMake project declaration in `native/CMakeLists.txt` is the base semantic
+The CMake project declaration in `src/CMakeLists.txt` is the base semantic
 version for AiVM release automation. Release tags use `v` plus the derived
-version, for example `v0.0.1-alpha.12`.
+version, for example `v0.0.1-beta.1`.
 
 ## Build and Test
 
@@ -80,6 +106,16 @@ Run the standalone native unit test surface:
 Optional host/parity tests that exercise AiLang tooling must be run explicitly
 with an installed AiLang toolchain. The default AiVM build and test path does
 not require an AiLang checkout.
+
+Focused native CTest labels are available for implementation work:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L vm --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L memory --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L bytecode --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L syscalls --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L stdlib --output-on-failure
+```
 
 ## CI
 

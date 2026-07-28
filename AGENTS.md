@@ -27,12 +27,19 @@ AiVM owns the native virtual machine for AiLangCore.
   replacement, collection operations, template rendering, parsing, validation,
   compiler policy, or compatibility adapters.
 - Every syscall change must update `Docs/Syscalls.md`,
-  `native/sys/aivm_syscall_contracts.c`, and
-  `native/tests/test_syscall_contracts.c`.
+  `src/sys/aivm_syscall_contracts.c`, and
+  `tests/unit/syscalls/test_syscall_contracts.c`.
 - `scripts/check-syscall-contracts.sh` must pass before a syscall change is
   complete.
 - Keep VM behavior deterministic.
 - Keep host/syscall behavior behind explicit boundaries.
+- Host/runtime changes must remain mechanical and must not introduce language,
+  library, UI, package, parsing, validation, formatting, or application
+  semantics. If behavior can be implemented deterministically in AiLang,
+  AiVectra, or an `.aos` package/module, do not put it in AiVM.
+- Do not create or continue "blob" files. Split C implementation by VM
+  responsibility, and keep syscall/host adapters narrowly scoped to the host
+  boundary they serve.
 - Do not add AiLang compiler or AiVectra UI behavior here.
 - Run verification from the AiVM repository root.
 - Preserve user work and avoid destructive git operations.

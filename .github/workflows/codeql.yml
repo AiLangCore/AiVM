@@ -1,0 +1,39 @@
+name: AiVM CodeQL
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+      - "codex/**"
+  schedule:
+    - cron: "37 8 * * *"
+
+permissions:
+  security-events: write
+  packages: read
+  actions: read
+  contents: read
+
+jobs:
+  analyze:
+    name: codeql-c
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+
+      - name: Configure
+        run: cmake --preset aivm-native-unix -S ./src
+
+      - name: Build
+        run: cmake --build ./.tmp/aivm-c-build-native
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

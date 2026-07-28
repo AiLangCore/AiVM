@@ -1,0 +1,26 @@
+Program#p1 {
+  Export#e1(name=start)
+  Let#l1(name=start) {
+    Fn#f1(params=argv) {
+      Block#b1 {
+        Let#l2(name=i) { Lit#i1(value=0) }
+        Let#l3(name=ok) { Lit#i2(value=0) }
+        Loop#lp1 {
+          Block#b2 {
+            Let#l4(name=cwd) { Call#c1(target=sys.process.cwd) { } }
+            Let#l5(name=home) { Call#c2(target=sys.process.env.get) { Lit#s1(value="HOME") } }
+            Let#l6(name=args) { Call#c3(target=sys.process.args) { } }
+            Let#l7(name=ok) { Add#a1 { Var#v1(name=ok) Lit#i3(value=1) } }
+            Let#l8(name=i) { Add#a2 { Var#v2(name=i) Lit#i4(value=1) } }
+            If#if1 {
+              Eq#e2 { Var#v3(name=i) Lit#i5(value=8) }
+              Block#b3 { Break#br1 { } }
+              Block#b4 { }
+            }
+          }
+        }
+        Return#r1 { Lit#i6(value=0) }
+      }
+    }
+  }
+}

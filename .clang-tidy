@@ -1,0 +1,6 @@
+---
+# AiVM clang-tidy configuration
+# Disable insecure API warnings - we use standard C functions which are portable
+# Disable va_list uninitialized warnings - false positives from analyzer
+# Disable dead store warnings - some stores are for safety/bounds checking
+Checks: '-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-valist.Uninitialized,-clang-analyzer-deadcode.DeadStores'

@@ -1,0 +1,3 @@
+Ok#ok1(type=void)
+Ok#ok2(type=void)
+Err#err3(code=VAL295 message="sys.ui.drawPath expects 5 arguments." nodeId=c3)

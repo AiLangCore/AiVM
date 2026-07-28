@@ -1,0 +1,47 @@
+Program {
+  Export(name=start)
+
+  Let(name=init) {
+    Fn(params=args) {
+      Block {
+        Return { Lit(value="ready") }
+      }
+    }
+  }
+
+  Let(name=decorate) {
+    Fn(params=value,suffix) {
+      Block {
+        Return {
+          StrConcat {
+            Var(name=value)
+            Var(name=suffix)
+          }
+        }
+      }
+    }
+  }
+
+  Let(name=start) {
+    Fn(params=args) {
+      Block {
+        Let(name=initName) { Lit(value="init") }
+        Let(name=decorateName) { Lit(value="decorate") }
+        Let(name=state) {
+          CallDynamic(candidates="init") {
+            Var(name=initName)
+            Var(name=args)
+          }
+        }
+        Call(target=sys.stdout.writeLine) {
+          CallDynamic(candidates="decorate") {
+            Var(name=decorateName)
+            Var(name=state)
+            Lit(value="-dynamic")
+          }
+        }
+        Return { Lit(value=0) }
+      }
+    }
+  }
+}

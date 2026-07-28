@@ -1,0 +1,12 @@
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Func#f1(name=main params="" locals="") {
+    Inst#i1(op=PAR_BEGIN a=2)
+    Inst#i2(op=PUSH_INT a=41)
+    Inst#i3(op=PAR_FORK)
+    Inst#i4(op=PUSH_INT a=1)
+    Inst#i5(op=PAR_FORK)
+    Inst#i6(op=PAR_JOIN a=2)
+    Inst#i7(op=PAR_CANCEL)
+    Inst#i8(op=HALT)
+  }
+}

@@ -1,0 +1,125 @@
+# AiVM Performance Verification
+
+This directory contains AiVM performance verification. These tests measure
+runtime scalability and regression risk; they do not define language behavior.
+
+Correctness, determinism, memory safety, and security failures take precedence
+over performance results.
+
+## Layout
+
+```text
+decode/      AiBC1 decode and loading benchmarks
+eval/        VM evaluation and instruction dispatch benchmarks
+memory/      arena reset, safe-point, and memory pressure benchmarks
+syscall/     syscall dispatch and payload benchmarks
+worker/      worker dispatch and queue benchmarks
+golden/      golden replay timing benchmarks
+stress/      long-running performance stress benchmarks
+baselines/   checked-in baseline metadata and threshold policy
+tools/       benchmark harnesses and comparison tools
+```
+
+## CTest Labels
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L perf-smoke --output-on-failure
+ctest --test-dir .tmp/aivm-c-build-native -L perf-full --output-on-failure
+```
+
+`perf-smoke` is for pull requests and local checks. `perf-full` is for nightly,
+release candidate, and explicit hardening runs.
+
+## JSON Output
+
+The harness writes:
+
+```text
+artifacts/perf/results-smoke.json
+artifacts/perf/results-full.json
+```
+
+The result schema includes:
+
+```text
+test name
+category
+input size
+iteration count
+elapsed time
+operations/sec
+bytes/sec
+peak memory bytes
+allocation count
+platform
+compiler
+git commit
+```
+
+`peak_memory_bytes` is currently `0` where cross-platform process memory
+measurement is not yet implemented.
+
+## Budgets
+
+The benchmark harness supports explicit iteration budgets:
+
+```bash
+AIVM_PERF_DECODE_ITERATIONS=10000
+AIVM_PERF_EVAL_ITERATIONS=1000
+AIVM_PERF_MEMORY_ITERATIONS=10000
+AIVM_PERF_SYSCALL_ITERATIONS=100000
+AIVM_PERF_WORKER_ITERATIONS=100000
+AIVM_PERF_ASYNC_ITERATIONS=200
+AIVM_PERF_PARALLEL_ITERATIONS=200
+AIVM_PERF_QUEUE_ITERATIONS=200
+AIVM_PERF_PROFILE_ITERATIONS=100000
+AIVM_PERF_GOLDEN_ITERATIONS=10000
+```
+
+## Current Coverage
+
+The first harness covers:
+
+```text
+decode   aibc1_decode_256_instruction
+decode   aibc1_invalid_section_limit_rejection
+eval     vm_eval_stack_churn
+eval     vm_numeric_ops_sub_mul_div_mod_lt
+eval     vm_branch_jump_if_false
+eval     vm_call_return
+eval     vm_store_load_local
+eval     vm_const_string_concat_utf8_count
+eval     vm_const_bytes_length
+eval     vm_loop_64_countdown
+eval     vm_recursive_tail_call
+memory   vm_reset_stack_safepoint
+syscall  syscall_checked_console_write
+syscall  syscall_checked_contract_failure
+syscall  syscall_checked_large_bytes_payload
+syscall  vm_call_sys_console_write
+worker   worker_poll_dispatch
+worker   worker_async_call_await
+worker   worker_async_parallel_four_await
+worker   worker_par_join_queue
+worker   runtime_event_queue_saturation
+runtime-profile runtime_profile_limits_production_debug_tooling
+golden   golden_add_int_replay
+```
+
+`aivm_perf_opcode_coverage` is a separate CTest gate under `perf-release`. It
+does not emit benchmark timing JSON; it enforces that every VM opcode is either
+covered by a perf benchmark or explicitly recorded as a tracked perf gap.
+
+Baseline comparison tooling is available through:
+
+```bash
+ctest --test-dir .tmp/aivm-c-build-native -L perf-release --output-on-failure
+```
+
+The current CTest gate verifies the comparator against stable fixtures. Release
+validation can point `aivm_perf_compare` at a stored release baseline and a new
+`artifacts/perf/results-full.json` file once platform baselines are curated.
+
+Known gaps are tracked in `baselines/README.md`. New opcodes, runtime profiles,
+module loading APIs, and host profiles should add benchmark coverage as they
+become stable.

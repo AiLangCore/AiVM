@@ -1,3 +1,0 @@
-Ok#ok1(type=void)
-Ok#ok2(type=void)
-Err#err3(code=VAL234 message="sys.crypto.hmacSha256 expects 2 arguments." nodeId=c3)

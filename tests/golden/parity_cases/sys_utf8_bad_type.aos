@@ -1,0 +1,3 @@
+Program#p1 {
+  StringUtf8ByteCount#c1 { Lit#i1(value=1) }
+}

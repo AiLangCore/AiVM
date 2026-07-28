@@ -1,0 +1,459 @@
+#ifndef AIVM_VM_H
+#define AIVM_VM_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "aivm_program.h"
+#include "sys/aivm_syscall.h"
+#include "aivm_types.h"
+
+typedef struct AivmWorkerRuntime AivmWorkerRuntime;
+
+typedef enum {
+    AIVM_VM_STATUS_READY = 0,
+    AIVM_VM_STATUS_RUNNING = 1,
+    AIVM_VM_STATUS_HALTED = 2,
+    AIVM_VM_STATUS_ERROR = 3
+} AivmVmStatus;
+
+typedef enum {
+    AIVM_VM_ERR_NONE = 0,
+    AIVM_VM_ERR_INVALID_OPCODE = 1,
+    AIVM_VM_ERR_STACK_OVERFLOW = 2,
+    AIVM_VM_ERR_STACK_UNDERFLOW = 3,
+    AIVM_VM_ERR_FRAME_OVERFLOW = 4,
+    AIVM_VM_ERR_FRAME_UNDERFLOW = 5,
+    AIVM_VM_ERR_LOCAL_OUT_OF_RANGE = 6,
+    AIVM_VM_ERR_TYPE_MISMATCH = 7,
+    AIVM_VM_ERR_INVALID_PROGRAM = 8,
+    AIVM_VM_ERR_STRING_OVERFLOW = 9,
+    AIVM_VM_ERR_SYSCALL = 10,
+    AIVM_VM_ERR_MEMORY_PRESSURE = 11
+} AivmVmError;
+
+typedef enum {
+    AIVM_RUNTIME_PROFILE_PRODUCTION = 0,
+    AIVM_RUNTIME_PROFILE_DEBUG = 1,
+    AIVM_RUNTIME_PROFILE_TOOLING = 2
+} AivmRuntimeProfile;
+
+typedef struct {
+    size_t stack_capacity;
+    size_t call_frame_capacity;
+    size_t locals_capacity;
+    size_t string_arena_capacity;
+    size_t bytes_arena_capacity;
+    size_t node_capacity;
+    size_t node_attr_capacity;
+    size_t node_child_capacity;
+    size_t task_capacity;
+    size_t par_value_capacity;
+    size_t scratch_pair_capacity;
+    size_t file_read_bytes;
+    size_t file_write_bytes;
+    size_t network_read_bytes;
+    size_t network_write_bytes;
+    size_t process_count;
+    size_t worker_count;
+    size_t worker_logical_task_capacity;
+    size_t worker_logical_input_bytes;
+    size_t ui_window_count;
+    size_t debug_artifact_bytes;
+    size_t blob_capacity;
+    size_t blob_bytes;
+    size_t syscall_elapsed_ms;
+} AivmRuntimeProfileLimits;
+
+typedef enum {
+    AIVM_BLOB_OK = 0,
+    AIVM_BLOB_ERR_INVALID = 1,
+    AIVM_BLOB_ERR_LIMIT = 2,
+    AIVM_BLOB_ERR_NOT_FOUND = 3,
+    AIVM_BLOB_ERR_OOM = 4
+} AivmBlobStatus;
+
+typedef struct {
+    size_t return_instruction_pointer;
+    size_t frame_base;
+    size_t locals_base;
+} AivmCallFrame;
+
+typedef struct {
+    size_t instruction_pointer;
+    size_t target;
+    size_t arg_count;
+    size_t stack_count;
+} AivmCallHistoryEntry;
+
+typedef struct {
+    size_t instruction_pointer;
+    size_t stack_count;
+    size_t pre_restore_stack_count;
+    size_t frame_base;
+    int has_return_value;
+} AivmReturnHistoryEntry;
+
+typedef struct {
+    size_t instruction_pointer;
+    int opcode;
+    size_t stack_count;
+} AivmOpcodeHistoryEntry;
+
+#if defined(AIVM_DEBUG_RUNTIME)
+enum {
+    AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY = 64,
+    AIVM_VM_PROFILE_SYSCALL_TARGET_LENGTH = 96
+};
+
+typedef struct {
+    char target[AIVM_VM_PROFILE_SYSCALL_TARGET_LENGTH];
+    size_t count;
+    double elapsed_seconds;
+} AivmProfileSyscallTargetCount;
+#endif
+
+typedef enum {
+    AIVM_NODE_ATTR_IDENTIFIER = 0,
+    AIVM_NODE_ATTR_STRING = 1,
+    AIVM_NODE_ATTR_INT = 2,
+    AIVM_NODE_ATTR_BOOL = 3
+} AivmNodeAttrKind;
+
+typedef struct {
+    const char* key;
+    AivmNodeAttrKind kind;
+    union {
+        const char* string_value;
+        int64_t int_value;
+        int bool_value;
+    };
+} AivmNodeAttr;
+
+typedef struct {
+    const char* kind;
+    const char* id;
+    size_t attr_start;
+    size_t attr_count;
+    size_t child_start;
+    size_t child_count;
+} AivmNodeRecord;
+
+typedef enum {
+    AIVM_TASK_STATE_PENDING = 0,
+    AIVM_TASK_STATE_COMPLETED = 1,
+    AIVM_TASK_STATE_FAILED = 2,
+    AIVM_TASK_STATE_CANCELED = 3
+} AivmTaskState;
+
+typedef struct {
+    AivmTaskState state;
+    int64_t handle;
+    AivmValue result;
+    void* worker_context;
+    size_t worker_catalog_index;
+    int is_worker_task;
+} AivmCompletedTask;
+
+typedef struct {
+    int64_t handle;
+    size_t worker_catalog_index;
+    size_t task_count;
+    size_t next_materialize_index;
+    uint8_t* batch_bytes;
+    size_t batch_length;
+    size_t* payload_offsets;
+    size_t* payload_lengths;
+    int64_t* task_handles;
+} AivmWorkerTaskGroup;
+
+typedef struct {
+    size_t expected_count;
+    size_t start_index;
+} AivmParContext;
+
+typedef struct {
+    AivmValue first;
+    AivmValue second;
+} AivmScratchPair;
+
+/* Mechanical index for content-addressable strings in the VM arena. */
+typedef struct {
+    uint64_t hash;
+    size_t offset;
+    size_t length;
+} AivmStringInternEntry;
+
+/* Temporary compiler construction state. Finishing produces an immutable node. */
+typedef struct {
+    int active;
+    char* kind;
+    char* id;
+    AivmNodeAttr* attrs;
+    size_t attr_count;
+    size_t attr_capacity;
+    int64_t* children;
+    size_t child_count;
+    size_t child_capacity;
+} AivmNodeBuilderRecord;
+
+/* Mechanical string-to-int bulk map storage. Finished records are immutable. */
+typedef struct {
+    uint64_t hash;
+    char* key;
+    int64_t value;
+    int occupied;
+} AivmMapSlot;
+
+typedef struct {
+    int active;
+    int frozen;
+    AivmMapSlot* slots;
+    size_t slot_capacity;
+    size_t count;
+} AivmMapRecord;
+
+typedef struct {
+    int64_t handle;
+    uint8_t* data;
+    size_t length;
+    int active;
+} AivmBlobRecord;
+
+enum {
+    AIVM_VM_STACK_CAPACITY = 20000,
+    AIVM_VM_STACK_INITIAL_CAPACITY = 1024,
+    AIVM_VM_STACK_GROWTH_STEP = 512,
+    AIVM_VM_CALLFRAME_CAPACITY = 2048,
+    AIVM_VM_CALLFRAME_INITIAL_CAPACITY = 256,
+    AIVM_VM_CALLFRAME_GROWTH_STEP = 256,
+    AIVM_VM_LOCALS_CAPACITY = 16384,
+    AIVM_VM_LOCALS_INITIAL_CAPACITY = 2048,
+    AIVM_VM_LOCALS_GROWTH_STEP = 1024,
+    AIVM_VM_STRING_ARENA_CAPACITY = 2097152,
+    AIVM_VM_STRING_ARENA_INITIAL_CAPACITY = 8192,
+    AIVM_VM_STRING_ARENA_GROWTH_STEP = 16384,
+    /* Tooling keeps compiler source and syntax trees alive for an entire build. */
+    AIVM_VM_TOOLING_STRING_ARENA_CAPACITY = 16 * 1024 * 1024,
+    AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
+    AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
+    AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
+    /* Compiler object emission temporarily retains several source-sized byte values. */
+    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 16 * 1024 * 1024,
+    AIVM_VM_MAX_SYSCALL_ARGS = 16,
+    AIVM_VM_NODE_CAPACITY = 16384,
+    AIVM_VM_NODE_ATTR_CAPACITY = 65536,
+    AIVM_VM_NODE_CHILD_CAPACITY = 131072,
+    AIVM_VM_NODE_BUILDER_CAPACITY = 512,
+    AIVM_VM_MAP_CAPACITY = 128,
+    AIVM_VM_TOOLING_NODE_CAPACITY = 65536,
+    AIVM_VM_TOOLING_NODE_ATTR_CAPACITY = 262144,
+    AIVM_VM_TOOLING_NODE_CHILD_CAPACITY = 524288,
+    AIVM_VM_TASK_CAPACITY = 256,
+    AIVM_VM_PAR_CONTEXT_CAPACITY = 64,
+    AIVM_VM_PAR_VALUE_CAPACITY = 1024,
+    AIVM_VM_SCRATCH_PAIR_CAPACITY = 32768,
+    AIVM_VM_FILE_READ_BYTES = 16 * 1024 * 1024,
+    AIVM_VM_FILE_WRITE_BYTES = 16 * 1024 * 1024,
+    AIVM_VM_NETWORK_READ_BYTES = 1024 * 1024,
+    AIVM_VM_NETWORK_WRITE_BYTES = 1024 * 1024,
+    AIVM_VM_PROCESS_COUNT = 32,
+    AIVM_VM_WORKER_COUNT = 64,
+    AIVM_VM_UI_WINDOW_COUNT = 16,
+    AIVM_VM_DEBUG_ARTIFACT_BYTES = 64 * 1024 * 1024,
+    AIVM_VM_BLOB_CAPACITY = 64,
+    AIVM_VM_BLOB_BYTES = 16 * 1024 * 1024,
+    AIVM_VM_SYSCALL_ELAPSED_MS = 30000,
+    AIVM_VM_NODE_GC_INTERVAL_ALLOCATIONS = 64,
+    AIVM_VM_NODE_GC_RETURN_SAFEPOINT_ALLOCATIONS = 512,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR = 3,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR = 4,
+    AIVM_VM_NODE_GC_PRESSURE_THRESHOLD =
+        (AIVM_VM_NODE_CAPACITY * AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR) /
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR,
+    AIVM_VM_NODE_ATTR_GC_PRESSURE_THRESHOLD =
+        (AIVM_VM_NODE_ATTR_CAPACITY * AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR) /
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR,
+    AIVM_VM_NODE_CHILD_GC_PRESSURE_THRESHOLD =
+        (AIVM_VM_NODE_CHILD_CAPACITY * AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_NUMERATOR) /
+        AIVM_VM_NODE_GC_PRESSURE_THRESHOLD_DENOMINATOR
+};
+
+typedef struct {
+    unsigned int storage_magic;
+    const AivmProgram* program;
+    AivmRuntimeProfile runtime_profile;
+    size_t syscall_elapsed_limit_ms;
+    size_t instruction_pointer;
+    AivmVmStatus status;
+    AivmVmError error;
+    const char* error_detail;
+    char error_detail_storage[4096];
+
+    AivmValue* stack;
+    size_t stack_count;
+    size_t stack_limit;
+
+    AivmCallFrame call_frames[AIVM_VM_CALLFRAME_CAPACITY];
+    size_t call_frame_count;
+    size_t call_frame_limit;
+    AivmCallHistoryEntry recent_calls[4];
+    size_t recent_call_count;
+    AivmReturnHistoryEntry recent_returns[4];
+    size_t recent_return_count;
+    AivmOpcodeHistoryEntry recent_opcodes[24];
+    size_t recent_opcode_count;
+#if defined(AIVM_DEBUG_RUNTIME)
+    size_t profile_instruction_count;
+    size_t profile_opcode_counts[(size_t)AIVM_OP_MAX + 1U];
+    size_t profile_syscall_count;
+    double profile_syscall_elapsed_seconds;
+    AivmProfileSyscallTargetCount profile_syscall_targets[AIVM_VM_PROFILE_SYSCALL_TARGET_CAPACITY];
+    size_t profile_syscall_target_count;
+#endif
+
+    AivmValue* locals;
+    size_t locals_count;
+    size_t locals_limit;
+    char* string_arena;
+    size_t string_arena_used;
+    size_t string_arena_limit;
+    size_t string_arena_capacity;
+    size_t string_arena_storage_capacity;
+    AivmStringInternEntry* string_intern_entries;
+    size_t string_intern_capacity;
+    size_t string_intern_count;
+    int string_intern_complete;
+    /* Mechanical UTF-8 traversal cache. It never changes string semantics. */
+    const char* utf8_offset_cache_text;
+    size_t utf8_offset_cache_rune;
+    size_t utf8_offset_cache_byte;
+    uint8_t* bytes_arena;
+    size_t bytes_arena_capacity;
+    size_t bytes_arena_storage_capacity;
+    size_t bytes_arena_used;
+    size_t bytes_arena_limit;
+    size_t bytes_arena_gc_threshold;
+    AivmSyscallCapabilityPolicy syscall_policy;
+    const AivmSyscallBinding* syscall_bindings;
+    size_t syscall_binding_count;
+    const char* const* process_argv;
+    size_t process_argv_count;
+    int64_t process_argv_node_handle;
+    AivmCompletedTask completed_tasks[AIVM_VM_TASK_CAPACITY];
+    size_t completed_task_count;
+    int64_t consumed_task_handles[AIVM_VM_TASK_CAPACITY];
+    size_t consumed_task_handle_count;
+    int64_t next_task_handle;
+    size_t task_reclaim_count;
+    size_t task_reclaim_skip_pinned_count;
+    size_t task_reclaim_exhausted_count;
+    AivmWorkerRuntime* worker_runtime;
+    AivmWorkerTaskGroup worker_task_groups[AIVM_VM_TASK_CAPACITY];
+    size_t worker_task_group_count;
+    size_t worker_logical_task_count;
+    size_t worker_logical_input_bytes;
+    size_t worker_logical_task_limit;
+    size_t worker_logical_input_limit;
+    int64_t next_worker_task_group_handle;
+    AivmParContext par_contexts[AIVM_VM_PAR_CONTEXT_CAPACITY];
+    size_t par_context_count;
+    AivmValue par_values[AIVM_VM_PAR_VALUE_CAPACITY];
+    size_t par_value_count;
+    AivmScratchPair* scratch_pairs;
+    size_t scratch_pair_count;
+    AivmBlobRecord blobs[AIVM_VM_BLOB_CAPACITY];
+    size_t blob_count;
+    size_t blob_bytes_used;
+    size_t blob_bytes_high_water;
+    size_t blob_pressure_count;
+    int64_t next_blob_handle;
+    int64_t next_par_node_id;
+    AivmNodeRecord* nodes;
+    size_t node_count;
+    size_t node_capacity;
+    AivmNodeAttr* node_attrs;
+    size_t node_attr_count;
+    size_t node_attr_capacity;
+    int64_t* node_children;
+    size_t node_child_count;
+    size_t node_child_capacity;
+    AivmNodeBuilderRecord node_builders[AIVM_VM_NODE_BUILDER_CAPACITY];
+    AivmMapRecord maps[AIVM_VM_MAP_CAPACITY];
+    int64_t ui_default_window_size_node_handle;
+    int64_t ui_empty_event_node_handle;
+    size_t string_arena_high_water;
+    size_t bytes_arena_high_water;
+    size_t node_high_water;
+    size_t node_attr_high_water;
+    size_t node_child_high_water;
+    size_t node_gc_compaction_count;
+    size_t node_gc_attempt_count;
+    size_t node_gc_reclaimed_nodes;
+    size_t node_gc_reclaimed_attrs;
+    size_t node_gc_reclaimed_children;
+    size_t node_allocations_since_gc;
+    size_t string_arena_pressure_count;
+    size_t bytes_arena_pressure_count;
+    size_t node_arena_pressure_count;
+    int host_memory_growth_suspended;
+    size_t network_read_bytes_used;
+    size_t network_write_bytes_used;
+} AivmVm;
+
+void aivm_init(AivmVm* vm, const AivmProgram* program);
+void aivm_init_with_profile(AivmVm* vm, const AivmProgram* program, AivmRuntimeProfile profile);
+void aivm_init_with_syscalls(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count);
+void aivm_init_with_syscalls_and_argv(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count);
+void aivm_init_with_syscalls_and_argv_profile(
+    AivmVm* vm,
+    const AivmProgram* program,
+    const AivmSyscallBinding* bindings,
+    size_t binding_count,
+    const char* const* process_argv,
+    size_t process_argv_count,
+    AivmRuntimeProfile profile);
+void aivm_reset_state(AivmVm* vm);
+void aivm_dispose(AivmVm* vm);
+int aivm_collect_safe_point(AivmVm* vm);
+void aivm_halt(AivmVm* vm);
+int aivm_stack_push(AivmVm* vm, AivmValue value);
+int aivm_stack_pop(AivmVm* vm, AivmValue* out_value);
+int aivm_frame_push(AivmVm* vm, size_t return_instruction_pointer, size_t frame_base);
+int aivm_frame_pop(AivmVm* vm, AivmCallFrame* out_frame);
+int aivm_local_set(AivmVm* vm, size_t index, AivmValue value);
+int aivm_local_get(const AivmVm* vm, size_t index, AivmValue* out_value);
+void aivm_step(AivmVm* vm);
+void aivm_run(AivmVm* vm);
+const char* aivm_vm_error_code(AivmVmError error);
+const char* aivm_vm_error_message(AivmVmError error);
+const char* aivm_vm_error_detail(const AivmVm* vm);
+const char* aivm_runtime_profile_name(AivmRuntimeProfile profile);
+int aivm_runtime_profile_from_name(const char* name, AivmRuntimeProfile* out_profile);
+AivmRuntimeProfile aivm_runtime_default_profile(void);
+AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile);
+void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile);
+void aivm_set_syscall_policy(AivmVm* vm, const AivmSyscallCapabilityPolicy* policy);
+AivmBlobStatus aivm_blob_create(AivmVm* vm, const uint8_t* data, size_t length, int64_t* out_handle);
+AivmBlobStatus aivm_blob_read(
+    const AivmVm* vm,
+    int64_t handle,
+    size_t offset,
+    uint8_t* out_data,
+    size_t length,
+    size_t* out_read);
+AivmBlobStatus aivm_blob_release(AivmVm* vm, int64_t handle);
+size_t aivm_blob_active_count(const AivmVm* vm);
+const char* aivm_blob_status_code(AivmBlobStatus status);
+
+#endif

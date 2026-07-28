@@ -1,0 +1,16 @@
+{
+  "schema": "aivm-perf-results-v1",
+  "suite": "fixture",
+  "results": [
+    {
+      "name": "fixture_decode",
+      "category": "decode",
+      "operations_per_second": 1000.0
+    },
+    {
+      "name": "fixture_eval",
+      "category": "eval",
+      "operations_per_second": 2000.0
+    }
+  ]
+}

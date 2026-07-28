@@ -1,3 +1,0 @@
-Program#p1 {
-  Call#c1(target=sys.str.utf8ByteCount) { Lit#i1(value=1) }
-}

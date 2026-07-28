@@ -32,13 +32,13 @@ of adding VM syscalls for library-level behavior.
 Current C header:
 
 ```text
-native/include/ailang_native_bridge.h
+src/include/ailang_native_bridge.h
 ```
 
 Current implementation:
 
 ```text
-native/ailang_native_bridge.c
+src/ailang_native_bridge.c
 ```
 
 Supported value types:

@@ -1,0 +1,31 @@
+# name|left_command|right_command|expected_status(optional, default 0)|expected_left_status(optional)|expected_right_status(optional)
+parity_same_file|cat tests/golden/parity_left.txt|cat tests/golden/parity_left.txt
+parity_crlf_vs_lf|printf $'line1\r\nline2\r\n'|printf $'line1\nline2\n'
+parity_trailing_newline|printf $'alpha\nbeta\n'|printf $'alpha\nbeta'
+parity_nonzero_exit|printf 'fail-path\n'; exit 7|printf 'fail-path\n'; exit 7|7
+parity_asymmetric_status|printf 'same-status-text\n'; exit 1|printf 'same-status-text\n'; exit 2||1|2
+parity_sys_utf8_bad_type|./tools/ailang run tests/golden/parity_cases/sys_utf8_bad_type.aos|cat tests/golden/parity_cases/sys_utf8_bad_type.out; exit 2|2
+parity_sys_substring_bad_arity|./tools/ailang run tests/golden/parity_cases/sys_substring_bad_arity.aos|cat tests/golden/parity_cases/sys_substring_bad_arity.out; exit 2|2
+parity_sys_remove_bad_type|./tools/ailang run tests/golden/parity_cases/sys_remove_bad_type.aos|cat tests/golden/parity_cases/sys_remove_bad_type.out; exit 2|2
+parity_loop_stmt_break_exit|./tools/ailang run tests/golden/parity_cases/loop_stmt_break_exit.aos|cat tests/golden/parity_cases/loop_stmt_break_exit.out
+parity_loop_break_continue|./tools/ailang run tests/golden/parity_cases/loop_break_continue.aos|cat tests/golden/parity_cases/loop_break_continue.out
+parity_sdk_import_formatted_attrs|./tools/ailang run tests/golden/parity_cases/sdk_import_formatted_attrs.aos|cat tests/golden/parity_cases/sdk_import_formatted_attrs.out
+parity_dynamic_call|./tools/ailang run tests/golden/parity_cases/dynamic_call.aos|cat tests/golden/parity_cases/dynamic_call.out
+parity_dynamic_optional_call|./tools/ailang run tests/golden/parity_cases/dynamic_optional_call.aos|cat tests/golden/parity_cases/dynamic_optional_call.out
+parity_repl_sys_success|./tools/ailang repl < tests/golden/parity_cases/repl_sys_success.in|cat tests/golden/parity_cases/repl_sys_success.out
+parity_repl_sys_error|./tools/ailang repl < tests/golden/parity_cases/repl_sys_error.in|cat tests/golden/parity_cases/repl_sys_error.out
+parity_repl_ui_drawline_error|./tools/ailang repl < tests/golden/parity_cases/repl_ui_drawline_error.in|cat tests/golden/parity_cases/repl_ui_drawline_error.out
+parity_repl_ui_drawpath_arity_error|./tools/ailang repl < tests/golden/parity_cases/repl_ui_drawpath_arity_error.in|cat tests/golden/parity_cases/repl_ui_drawpath_arity_error.out
+parity_repl_ui_getwindowsize_type_error|./tools/ailang repl < tests/golden/parity_cases/repl_ui_getwindowsize_type_error.in|cat tests/golden/parity_cases/repl_ui_getwindowsize_type_error.out
+parity_repl_ui_createwindow_arity_error|./tools/ailang repl < tests/golden/parity_cases/repl_ui_createwindow_arity_error.in|cat tests/golden/parity_cases/repl_ui_createwindow_arity_error.out
+parity_repl_net_tcpconnect_type_error|./tools/ailang repl < tests/golden/parity_cases/repl_net_tcpconnect_type_error.in|cat tests/golden/parity_cases/repl_net_tcpconnect_type_error.out
+parity_repl_crypto_hmac_arity_error|./tools/ailang repl < tests/golden/parity_cases/repl_crypto_hmac_arity_error.in|cat tests/golden/parity_cases/repl_crypto_hmac_arity_error.out
+parity_repl_worker_cancel_type_error|./tools/ailang repl < tests/golden/parity_cases/repl_worker_cancel_type_error.in|cat tests/golden/parity_cases/repl_worker_cancel_type_error.out
+parity_repl_process_syscalls|./tools/ailang repl < tests/golden/parity_cases/repl_process_syscalls.in|cat tests/golden/parity_cases/repl_process_syscalls.out
+parity_vm_c_unlinked_gate|./tools/ailang run examples/hello.aos --vm=c|cat tests/golden/parity_cases/vm_c_run_hello_current.out; exit 3|3
+parity_vm_c_unlinked_gate_bundle|./tools/ailang run examples/golden/publishcases/include_success/app_include_ok.aibundle --vm=c|printf ''
+parity_vm_default_is_canonical|./tools/ailang run examples/golden/vm_default_is_canonical.in.aos|cat examples/golden/vm_default_is_canonical.out.aos; exit 3|3
+parity_vm_unsupported_construct|./tools/ailang run examples/golden/vm_unsupported_construct.in.aos|cat examples/golden/vm_unsupported_construct.err; exit 3|3
+parity_vm_c_execute_src_await_edge_invalid|./tools/ailang run tests/golden/parity_cases/vm_c_execute_src_await_edge_invalid.aos --vm=c|cat tests/golden/parity_cases/vm_c_execute_src_await_edge_invalid.out; exit 3|3
+parity_vm_c_execute_src_par_join_edge_invalid|./tools/ailang run tests/golden/parity_cases/vm_c_execute_src_par_join_edge_invalid.aos --vm=c|cat tests/golden/parity_cases/vm_c_execute_src_par_join_edge_invalid.out; exit 3|3
+parity_vm_c_execute_src_par_cancel_edge_noop|./tools/ailang run tests/golden/parity_cases/vm_c_execute_src_par_cancel_edge_noop.aos --vm=c|printf ''|0

@@ -1,0 +1,465 @@
+#include <string.h>
+#include <stdio.h>
+
+#include "aivm_program.h"
+#include "aivm_runtime.h"
+
+static int expect_line(int condition, int line)
+{
+    if (condition) {
+        return 0;
+    }
+    (void)fprintf(stderr, "expect failed at line %d\n", line);
+    return 1;
+}
+
+#define expect(condition) expect_line((condition), __LINE__)
+
+typedef struct {
+    size_t enqueued_count;
+    size_t drained_count;
+    int enqueue_fail;
+    int drain_fail;
+    size_t forced_drain_count;
+} HostAdapterState;
+
+typedef struct {
+    int64_t values[2048];
+    size_t head;
+    size_t tail;
+    size_t count;
+    size_t drained_total;
+    size_t drained_checksum;
+} StressQueueState;
+
+static int host_remote_call(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    if (args == NULL ||
+        arg_count != 3U ||
+        args[0].type != AIVM_VAL_STRING ||
+        args[1].type != AIVM_VAL_STRING ||
+        args[2].type != AIVM_VAL_INT) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_int(args[2].int_value);
+    return AIVM_SYSCALL_OK;
+}
+
+static int host_process_argv(
+    const char* target,
+    const AivmValue* args,
+    size_t arg_count,
+    AivmValue* result)
+{
+    (void)target;
+    (void)args;
+    if (arg_count != 0U) {
+        return AIVM_SYSCALL_ERR_INVALID;
+    }
+    *result = aivm_value_node(1);
+    return AIVM_SYSCALL_OK;
+}
+
+static int host_adapter_enqueue(void* context, const char* event_name, AivmValue payload)
+{
+    HostAdapterState* state = (HostAdapterState*)context;
+    if (state == NULL || event_name == NULL) {
+        return 1;
+    }
+    if (state->enqueue_fail != 0) {
+        return 1;
+    }
+    (void)payload;
+    state->enqueued_count += 1U;
+    return 0;
+}
+
+static int host_adapter_drain(void* context, size_t max_events, size_t* out_drained_count)
+{
+    HostAdapterState* state = (HostAdapterState*)context;
+    if (state == NULL || out_drained_count == NULL) {
+        return 1;
+    }
+    if (state->drain_fail != 0) {
+        return 1;
+    }
+    (void)max_events;
+    *out_drained_count = state->forced_drain_count;
+    state->drained_count += *out_drained_count;
+    return 0;
+}
+
+static int stress_adapter_enqueue(void* context, const char* event_name, AivmValue payload)
+{
+    StressQueueState* state = (StressQueueState*)context;
+    if (state == NULL || event_name == NULL || payload.type != AIVM_VAL_INT) {
+        return 1;
+    }
+    if (state->count >= (sizeof(state->values) / sizeof(state->values[0]))) {
+        return 1;
+    }
+    state->values[state->tail] = payload.int_value;
+    state->tail = (state->tail + 1U) % (sizeof(state->values) / sizeof(state->values[0]));
+    state->count += 1U;
+    return 0;
+}
+
+static int stress_adapter_drain(void* context, size_t max_events, size_t* out_drained_count)
+{
+    size_t drained = 0U;
+    StressQueueState* state = (StressQueueState*)context;
+    if (state == NULL || out_drained_count == NULL) {
+        return 1;
+    }
+    while (state->count > 0U && drained < max_events) {
+        int64_t value = state->values[state->head];
+        state->head = (state->head + 1U) % (sizeof(state->values) / sizeof(state->values[0]));
+        state->count -= 1U;
+        drained += 1U;
+        state->drained_total += 1U;
+        state->drained_checksum = (state->drained_checksum * 131U) + (size_t)(value + 17);
+    }
+    *out_drained_count = drained;
+    return 0;
+}
+
+static int run_high_inflight_event_queue_stress(size_t* out_checksum)
+{
+    int64_t value;
+    size_t drained = 0U;
+    StressQueueState state;
+    AivmRuntimeHostAdapter adapter;
+
+    if (out_checksum == NULL) {
+        return 1;
+    }
+
+    memset(&state, 0, sizeof(state));
+    adapter.context = &state;
+    adapter.enqueue = stress_adapter_enqueue;
+    adapter.drain = stress_adapter_drain;
+
+    for (value = 1; value <= 1500; value += 1) {
+        if (aivm_runtime_host_enqueue_event(&adapter, "host.event.stress", aivm_value_int(value)) !=
+            AIVM_RUNTIME_HOST_EVENT_OK) {
+            return 1;
+        }
+    }
+    while (state.count > 0U) {
+        if (aivm_runtime_host_drain_events(&adapter, 7U, &drained) != AIVM_RUNTIME_HOST_EVENT_OK) {
+            return 1;
+        }
+        if (drained == 0U) {
+            return 1;
+        }
+    }
+    if (state.drained_total != 1500U) {
+        return 1;
+    }
+
+    *out_checksum = state.drained_checksum;
+    return 0;
+}
+
+int main(void)
+{
+    static AivmVm vm;
+    HostAdapterState adapter_state;
+    AivmRuntimeHostAdapter adapter;
+    size_t drained_count = 0U;
+    static const AivmInstruction instructions_ok[] = {
+        { .opcode = AIVM_OP_NOP, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmProgram program_ok = {
+        .instructions = instructions_ok,
+        .instruction_count = 2U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmInstruction instructions_err[] = {
+        { .opcode = (AivmOpcode)99, .operand_int = 0 }
+    };
+    static const AivmProgram program_err = {
+        .instructions = instructions_err,
+        .instruction_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmInstruction instructions_sys[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 1 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 2 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 3 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 3 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants_sys[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.remote.call" },
+        { .type = AIVM_VAL_STRING, .string_value = "cap.remote" },
+        { .type = AIVM_VAL_STRING, .string_value = "echoInt" },
+        { .type = AIVM_VAL_INT, .int_value = 7 }
+    };
+    static const AivmSyscallBinding bindings[] = {
+        { "sys.remote.call", host_remote_call }
+    };
+    static const AivmProgram program_sys = {
+        .instructions = instructions_sys,
+        .instruction_count = 6U,
+        .constants = constants_sys,
+        .constant_count = 4U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const AivmInstruction instructions_argv[] = {
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_CALL_SYS, .operand_int = 0 },
+        { .opcode = AIVM_OP_CHILD_COUNT, .operand_int = 0 },
+        { .opcode = AIVM_OP_HALT, .operand_int = 0 }
+    };
+    static const AivmValue constants_argv[] = {
+        { .type = AIVM_VAL_STRING, .string_value = "sys.process.args" }
+    };
+    static const AivmSyscallBinding argv_bindings[] = {
+        { "sys.process.args", host_process_argv }
+    };
+    static const AivmProgram program_argv = {
+        .instructions = instructions_argv,
+        .instruction_count = 4U,
+        .constants = constants_argv,
+        .constant_count = 1U,
+        .format_version = 0U,
+        .format_flags = 0U,
+        .section_count = 0U
+    };
+    static const char* process_argv_values[] = {
+        "one",
+        "two"
+    };
+    static AivmInstruction instructions_safe_point[128U * 3U + 3U];
+    AivmValue constants_safe_point[1];
+    AivmProgram program_safe_point;
+    size_t ip = 0U;
+    size_t i;
+    size_t transient_nodes = 128U;
+
+    constants_safe_point[0] = aivm_value_string("tmp");
+    for (i = 0U; i < transient_nodes; i += 1U) {
+        instructions_safe_point[ip].opcode = AIVM_OP_CONST;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+        instructions_safe_point[ip].opcode = AIVM_OP_MAKE_BLOCK;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+        instructions_safe_point[ip].opcode = AIVM_OP_POP;
+        instructions_safe_point[ip].operand_int = 0;
+        ip += 1U;
+    }
+    instructions_safe_point[ip].opcode = AIVM_OP_CONST;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+    instructions_safe_point[ip].opcode = AIVM_OP_MAKE_BLOCK;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+    instructions_safe_point[ip].opcode = AIVM_OP_HALT;
+    instructions_safe_point[ip].operand_int = 0;
+    ip += 1U;
+
+    memset(&program_safe_point, 0, sizeof(program_safe_point));
+    program_safe_point.instructions = instructions_safe_point;
+    program_safe_point.instruction_count = ip;
+    program_safe_point.constants = constants_safe_point;
+    program_safe_point.constant_count = 1U;
+
+    if (expect(aivm_execute_program(&program_ok, &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+
+    if (expect(aivm_execute_program(&program_err, &vm) == 0) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0) {
+        return 1;
+    }
+
+    if (expect(aivm_execute_program(NULL, &vm) == 0) != 0) {
+        return 1;
+    }
+
+    if (expect(aivm_execute_program_with_syscalls(&program_sys, bindings, 1U, &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(aivm_execute_program_with_syscalls_and_argv(
+            &program_argv,
+            argv_bindings,
+            1U,
+            process_argv_values,
+            2U,
+            &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack[0].type == AIVM_VAL_INT && vm.stack[0].int_value == 2) != 0) {
+        return 1;
+    }
+    if (expect(aivm_execute_program(&program_safe_point, &vm) == 1) != 0) {
+        return 1;
+    }
+    if (expect(vm.status == AIVM_VM_STATUS_HALTED) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_compaction_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_gc_reclaimed_nodes == transient_nodes) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(vm.node_allocations_since_gc == 0U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack_count == 1U) != 0) {
+        return 1;
+    }
+    if (expect(vm.stack[0].type == AIVM_VAL_NODE && vm.stack[0].node_handle == 2) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueued_count = 0U;
+    adapter_state.drained_count = 0U;
+    adapter_state.enqueue_fail = 0;
+    adapter_state.drain_fail = 0;
+    adapter_state.forced_drain_count = 2U;
+    adapter.context = &adapter_state;
+    adapter.enqueue = host_adapter_enqueue;
+    adapter.drain = host_adapter_drain;
+
+    if (expect(aivm_runtime_host_enqueue_event(NULL, "host.event.tick", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_node(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_pair(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_unknown()) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_string(NULL)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_bytes(NULL, 1U)) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.enqueued_count == 0U) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_int(1)) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_string("frozen")) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_bytes(NULL, 0U)) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.enqueued_count == 3U) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueue_fail = 1;
+    if (expect(aivm_runtime_host_enqueue_event(&adapter, "host.event.tick", aivm_value_int(2)) ==
+               AIVM_RUNTIME_HOST_EVENT_REJECTED) != 0) {
+        return 1;
+    }
+
+    adapter_state.enqueue_fail = 0;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 0U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_drain_events(NULL, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_OK) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 2U) != 0) {
+        return 1;
+    }
+    if (expect(adapter_state.drained_count == 2U) != 0) {
+        return 1;
+    }
+
+    adapter_state.drain_fail = 1;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_REJECTED) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 0U) != 0) {
+        return 1;
+    }
+
+    adapter_state.drain_fail = 0;
+    adapter_state.forced_drain_count = 5U;
+    if (expect(aivm_runtime_host_drain_events(&adapter, 4U, &drained_count) ==
+               AIVM_RUNTIME_HOST_EVENT_INVALID) != 0) {
+        return 1;
+    }
+    if (expect(drained_count == 0U) != 0) {
+        return 1;
+    }
+
+    {
+        size_t first_checksum = 0U;
+        size_t second_checksum = 0U;
+        if (expect(run_high_inflight_event_queue_stress(&first_checksum) == 0) != 0) {
+            return 1;
+        }
+        if (expect(run_high_inflight_event_queue_stress(&second_checksum) == 0) != 0) {
+            return 1;
+        }
+        if (expect(first_checksum == second_checksum) != 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}

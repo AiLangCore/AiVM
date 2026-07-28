@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="${1:-}"
+if [[ -z "${ROOT_DIR}" ]]; then
+  echo "usage: ctest_debug_memory_smoke.sh <repo-root>" >&2
+  exit 2
+fi
+
+AILANG_BIN="${ROOT_DIR}/tools/ailang"
+if [[ ! -x "${AILANG_BIN}" ]]; then
+  echo "skip: missing ${AILANG_BIN}"
+  exit 0
+fi
+
+TMP_NATIVE_DEBUG_MEM_DIR="${ROOT_DIR}/.tmp/ctest-debug-memory"
+TMP_NATIVE_DEBUG_MEM_OUT="${ROOT_DIR}/.tmp/ctest-debug-memory-out"
+TMP_NATIVE_DEBUG_MEM_APP="${TMP_NATIVE_DEBUG_MEM_DIR}/memory_pressure.aos"
+rm -rf "${TMP_NATIVE_DEBUG_MEM_DIR}" "${TMP_NATIVE_DEBUG_MEM_OUT}"
+mkdir -p "${TMP_NATIVE_DEBUG_MEM_DIR}"
+{
+  echo 'Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {'
+  echo '  Const#k0(kind=string value="n")'
+  echo '  Func#f1(name=main params="argv" locals="") {'
+  echo '    Inst#i1(op=PUSH_INT a=0)'
+  echo '    Inst#i2(op=STORE_LOCAL a=0)'
+  echo '    Inst#i3(op=CONST a=0)'
+  echo '    Inst#i4(op=MAKE_BLOCK)'
+  echo '    Inst#i5(op=LOAD_LOCAL a=0)'
+  echo '    Inst#i6(op=PUSH_INT a=1)'
+  echo '    Inst#i7(op=ADD_INT)'
+  echo '    Inst#i8(op=STORE_LOCAL a=0)'
+  echo '    Inst#i9(op=LOAD_LOCAL a=0)'
+  echo '    Inst#i10(op=PUSH_INT a=17000)'
+  echo '    Inst#i11(op=EQ_INT)'
+  echo '    Inst#i12(op=JUMP_IF_FALSE a=2)'
+  echo '    Inst#i13(op=HALT)'
+  echo '  }'
+  echo '}'
+} > "${TMP_NATIVE_DEBUG_MEM_APP}"
+
+if ! "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_MEM_APP}" --out "${TMP_NATIVE_DEBUG_MEM_OUT}" >/dev/null 2>&1; then
+  echo "debug memory smoke: expected dynamic node arena success" >&2
+  exit 1
+fi
+
+if [[ ! -f "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml" || ! -f "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml" || ! -f "${TMP_NATIVE_DEBUG_MEM_OUT}/config.toml" ]]; then
+  echo "debug memory smoke: expected debug artifacts missing" >&2
+  exit 1
+fi
+if ! grep -q 'status = "ok"' "${TMP_NATIVE_DEBUG_MEM_OUT}/config.toml"; then
+  echo "debug memory smoke: expected status=ok in config.toml" >&2
+  exit 1
+fi
+if ! grep -q "vm_code=AIVM000" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected vm_code=AIVM000" >&2
+  exit 1
+fi
+if ! grep -Eq "node_gc_compactions = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected gc compaction activity" >&2
+  exit 1
+fi
+if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected gc attempt activity" >&2
+  exit 1
+fi
+if ! grep -q "node_count = 17001" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_count=17001 in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_high_water = 17001" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_high_water=17001 in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_capacity" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_capacity in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_gc_pressure_threshold_nodes = 12288" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_gc_pressure_threshold_nodes=12288" >&2
+  exit 1
+fi
+if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_roots table in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_kind_counts in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q 'kind = "Block"' "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected Block node kind attribution" >&2
+  exit 1
+fi
+if ! grep -q "string_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected string_arena_pressure_count in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "bytes_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected bytes_arena_pressure_count in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -Eq "node_gc_attempts = [1-9][0-9]*" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_gc_attempts>0 in state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_root_stack_slots in state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_capacity" "${TMP_NATIVE_DEBUG_MEM_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_capacity in state snapshots" >&2
+  exit 1
+fi
+
+TMP_NATIVE_DEBUG_OK_DIR="${ROOT_DIR}/.tmp/ctest-debug-ok"
+TMP_NATIVE_DEBUG_OK_OUT="${ROOT_DIR}/.tmp/ctest-debug-ok-out"
+TMP_NATIVE_DEBUG_OK_APP="${TMP_NATIVE_DEBUG_OK_DIR}/success_path.aos"
+rm -rf "${TMP_NATIVE_DEBUG_OK_DIR}" "${TMP_NATIVE_DEBUG_OK_OUT}"
+mkdir -p "${TMP_NATIVE_DEBUG_OK_DIR}"
+cat > "${TMP_NATIVE_DEBUG_OK_APP}" <<'EOF'
+Bytecode#bc1(magic="AIBC" format="AiBC1" version=2 flags=0) {
+  Func#f1(name=main params="argv" locals="") {
+    Inst#i1(op=HALT)
+  }
+}
+EOF
+if ! "${AILANG_BIN}" debug run "${TMP_NATIVE_DEBUG_OK_APP}" --out "${TMP_NATIVE_DEBUG_OK_OUT}" >/dev/null 2>&1; then
+  echo "debug memory smoke: expected successful debug run" >&2
+  exit 1
+fi
+if ! grep -q 'status = "ok"' "${TMP_NATIVE_DEBUG_OK_OUT}/config.toml"; then
+  echo "debug memory smoke: expected status=ok in config.toml" >&2
+  exit 1
+fi
+if ! grep -q "vm_code=AIVM000" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected vm_code=AIVM000" >&2
+  exit 1
+fi
+if ! grep -Eq "node_gc_attempts = [0-9]+" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_gc_attempts field in diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in success diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_root_stack_slots" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected node_root_stack_slots in success state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "scratch_pair_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/state_snapshots.toml"; then
+  echo "debug memory smoke: expected scratch_pair_count=0 in success state snapshots" >&2
+  exit 1
+fi
+if ! grep -q "node_roots = {" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_roots table in success diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_kind_counts = \\[" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_kind_counts in success diagnostics.toml" >&2
+  exit 1
+fi
+if ! grep -q "node_arena_pressure_count = 0" "${TMP_NATIVE_DEBUG_OK_OUT}/diagnostics.toml"; then
+  echo "debug memory smoke: expected node_arena_pressure_count=0 in success diagnostics.toml" >&2
+  exit 1
+fi
+
+echo "debug dynamic node memory smoke: PASS"
