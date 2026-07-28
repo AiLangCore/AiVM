@@ -117,7 +117,11 @@ static void print_vm_failure(const AivmProgram* program, const AivmVm* vm, const
         pc = vm->instruction_pointer;
         display_pc = pc;
         if (program != NULL && program->instruction_count > 0U && display_pc >= program->instruction_count) {
-            display_pc = program->instruction_count - 1U;
+            if (vm->recent_opcode_count > 0U) {
+                display_pc = vm->recent_opcodes[0].instruction_pointer;
+            } else {
+                display_pc = program->instruction_count - 1U;
+            }
         }
         detail = aivm_vm_error_detail(vm);
         if (detail == NULL || detail[0] == '\0') {
