@@ -46,6 +46,12 @@ static void make_identity_worker(uint8_t artifact[64])
     write_instruction(artifact, 52U, AIVM_OP_RET, 0);
 }
 
+static void make_empty_result_worker(uint8_t artifact[64])
+{
+    make_identity_worker(artifact);
+    write_instruction(artifact, 40U, AIVM_OP_NOP, 0);
+}
+
 static int expect(int condition)
 {
     return condition ? 0 : 1;
@@ -126,7 +132,8 @@ int main(void)
     }
     aivm_worker_runtime_destroy(runtime);
 
-    entry.required_capabilities = AIVM_WORKER_CAPABILITY_FILESYSTEM;
+    make_empty_result_worker(artifact);
+    entry.required_capabilities = 0U;
     runtime = NULL;
     if (expect(aivm_worker_runtime_create(
         &owner, &parent_policy, NULL, 0U,
@@ -134,6 +141,24 @@ int main(void)
         AIVM_WORKER_RUNTIME_OK) != 0 ||
         expect(aivm_worker_runtime_submit(
             runtime, 0U, 3U, first_payload, sizeof(first_payload)) ==
+        AIVM_WORKER_RUNTIME_OK) != 0 ||
+        expect(aivm_worker_runtime_await(runtime, 3U, &first) ==
+        AIVM_WORKER_RUNTIME_ERR_EXECUTION) != 0 ||
+        expect(strcmp(first.error_detail,
+            "Worker function must return exactly one transport value.") == 0) != 0) {
+        return 1;
+    }
+    aivm_worker_runtime_destroy(runtime);
+
+    make_identity_worker(artifact);
+    entry.required_capabilities = AIVM_WORKER_CAPABILITY_FILESYSTEM;
+    runtime = NULL;
+    if (expect(aivm_worker_runtime_create(
+        &owner, &parent_policy, NULL, 0U,
+        AIVM_RUNTIME_PROFILE_TOOLING, 1U, &runtime) ==
+        AIVM_WORKER_RUNTIME_OK) != 0 ||
+        expect(aivm_worker_runtime_submit(
+            runtime, 0U, 4U, first_payload, sizeof(first_payload)) ==
         AIVM_WORKER_RUNTIME_ERR_CAPABILITY) != 0) {
         return 1;
     }

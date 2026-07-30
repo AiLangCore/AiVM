@@ -1,4 +1,5 @@
 #include "aivm_worker_invocation.h"
+#include "aivm_vm_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,15 +20,24 @@ static int run_worker_function(
             break;
         }
         if (vm->instruction_pointer >= vm->program->instruction_count) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+                "Worker instruction pointer is outside the bundled artifact.");
             return 0;
         }
         aivm_step(vm);
         if (vm->status == AIVM_VM_STATUS_HALTED &&
             vm->instruction_pointer != vm->program->instruction_count) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+                "Worker halted before its declared function returned.");
             return 0;
         }
     }
-    if (vm->status == AIVM_VM_STATUS_ERROR || vm->stack_count != 1U) {
+    if (vm->status == AIVM_VM_STATUS_ERROR) {
+        return 0;
+    }
+    if (vm->stack_count != 1U) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+            "Worker function must return exactly one transport value.");
         return 0;
     }
     *out_result = vm->stack[0];
@@ -104,12 +114,16 @@ void aivm_worker_invocation_run(void* raw_invocation)
     if (!aivm_stack_push(vm,
         aivm_value_bytes(invocation->payload, invocation->payload_length)) ||
         !run_worker_function(vm, invocation->program->function_target, &result)) {
+        const char* detail;
         invocation->status = AIVM_WORKER_INVOCATION_FAILED;
         invocation->vm_error = vm->error == AIVM_VM_ERR_NONE
             ? AIVM_VM_ERR_INVALID_PROGRAM : vm->error;
+        detail = aivm_vm_error_detail(vm);
+        if (detail == NULL || detail[0] == '\0') {
+            detail = aivm_vm_error_message(invocation->vm_error);
+        }
         (void)snprintf(invocation->error_detail, sizeof(invocation->error_detail),
-            "%s", aivm_vm_error_detail(vm) == NULL ? "Worker execution failed." :
-            aivm_vm_error_detail(vm));
+            "%s", detail == NULL ? "Worker execution failed." : detail);
         aivm_dispose(vm);
         free(vm);
         return;

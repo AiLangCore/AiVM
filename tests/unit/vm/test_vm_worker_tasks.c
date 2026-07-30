@@ -45,6 +45,12 @@ static void make_identity_worker(uint8_t artifact[64])
     write_instruction(artifact, 52U, AIVM_OP_RET, 0);
 }
 
+static void make_empty_result_worker(uint8_t artifact[64])
+{
+    make_identity_worker(artifact);
+    write_instruction(artifact, 40U, AIVM_OP_NOP, 0);
+}
+
 static int expect(int condition)
 {
     return condition ? 0 : 1;
@@ -111,6 +117,49 @@ static int test_worker_ref_rejects_invalid_catalog_index(void)
     if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0 ||
         expect(strcmp(aivm_vm_error_detail(&vm),
             "WORKER_REF requires a valid WorkerCatalog index.") == 0) != 0) {
+        aivm_dispose(&vm);
+        return 1;
+    }
+    aivm_dispose(&vm);
+    return 0;
+}
+
+static int test_worker_failure_detail_survives_task_release(void)
+{
+    static AivmVm vm;
+    uint8_t artifact[64];
+    AivmWorkerCatalogEntry entry;
+    AivmProgram program;
+    static const uint8_t payload[] = { 4U };
+    static const AivmValue constants[] = {
+        { .type = AIVM_VAL_BYTES,
+          .bytes_value = { .data = payload, .length = sizeof(payload) } }
+    };
+    static const AivmInstruction instructions[] = {
+        { .opcode = AIVM_OP_WORKER_REF, .operand_int = 0 },
+        { .opcode = AIVM_OP_CONST, .operand_int = 0 },
+        { .opcode = AIVM_OP_WORKER_RUN, .operand_int = 0 },
+        { .opcode = AIVM_OP_AWAIT, .operand_int = 0 }
+    };
+
+    make_empty_result_worker(artifact);
+    memset(&entry, 0, sizeof(entry));
+    entry.function_target = 0U;
+    entry.transport_abi = AIVM_WORKER_TRANSPORT_ABI_BYTES_V1;
+    entry.bytecode_version = 2U;
+    entry.artifact = artifact;
+    entry.artifact_length = sizeof(artifact);
+    aivm_program_init(&program, instructions, 4U);
+    program.constants = constants;
+    program.constant_count = 1U;
+    program.worker_catalog.entries = &entry;
+    program.worker_catalog.count = 1U;
+
+    aivm_init(&vm, &program);
+    aivm_run(&vm);
+    if (expect(vm.status == AIVM_VM_STATUS_ERROR) != 0 ||
+        expect(strcmp(aivm_vm_error_detail(&vm),
+            "Worker function must return exactly one transport value.") == 0) != 0) {
         aivm_dispose(&vm);
         return 1;
     }
@@ -342,6 +391,7 @@ int main(void)
 {
     if (test_worker_ref_run_await() != 0 ||
         test_worker_ref_rejects_invalid_catalog_index() != 0 ||
+        test_worker_failure_detail_survives_task_release() != 0 ||
         test_worker_run_all_task_at_preserves_canonical_index() != 0 ||
         test_worker_run_all_rejects_truncated_batch() != 0 ||
         test_worker_run_all_refills_bounded_window() != 0 ||

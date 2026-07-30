@@ -3,6 +3,7 @@
 #include "aivm_worker_runtime.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
 
 static AivmCompletedTask* find_owner_task(AivmVm* vm, int64_t handle)
@@ -14,6 +15,23 @@ static AivmCompletedTask* find_owner_task(AivmVm* vm, int64_t handle)
         }
     }
     return NULL;
+}
+
+static void set_worker_task_error(
+    AivmVm* vm,
+    AivmVmError error,
+    const char* detail)
+{
+    const char* source = detail;
+    if (vm == NULL) {
+        return;
+    }
+    if (source == NULL || source[0] == '\0') {
+        source = "Worker execution failed.";
+    }
+    (void)snprintf(vm->error_detail_storage,
+        sizeof(vm->error_detail_storage), "%s", source);
+    aivm_set_vm_error(vm, error, vm->error_detail_storage);
 }
 
 int aivm_vm_ensure_worker_runtime(AivmVm* vm)
@@ -140,11 +158,10 @@ int aivm_vm_complete_worker_task(AivmVm* vm, AivmCompletedTask* task)
         return 1;
     }
     if (status != AIVM_WORKER_RUNTIME_OK) {
-        aivm_set_vm_error(vm,
+        set_worker_task_error(vm,
             status == AIVM_WORKER_RUNTIME_ERR_TRANSPORT
                 ? AIVM_VM_ERR_TYPE_MISMATCH : AIVM_VM_ERR_INVALID_PROGRAM,
-            result.error_detail == NULL
-                ? "Worker execution failed." : result.error_detail);
+            result.error_detail);
         (void)aivm_worker_runtime_release(
             vm->worker_runtime, (uint64_t)task->handle);
         return 0;
