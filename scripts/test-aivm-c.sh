@@ -7,6 +7,7 @@ TEST_LABEL="${AIVM_CTEST_LABEL:-unit|integration|golden|security|spec}"
 
 bash "${ROOT_DIR}/scripts/check-doc-taxonomy.sh"
 "${ROOT_DIR}/scripts/check-syscall-contracts.sh"
+"${ROOT_DIR}/scripts/check-debug-event-contracts.sh"
 
 cmake --preset "${PRESET}" -S "${ROOT_DIR}/src"
 cmake --build "${ROOT_DIR}/.tmp/aivm-c-build-native"

@@ -673,7 +673,7 @@ static int airun_queue_injected_close(void)
 {
     NativeHostUiEvent event;
     memset(&event, 0, sizeof(event));
-    (void)snprintf(event.type, sizeof(event.type), "close");
+    (void)snprintf(event.type, sizeof(event.type), "closed");
     event.x = -1;
     event.y = -1;
     return airun_queue_injected_event(&event);
@@ -2832,7 +2832,6 @@ static int wasm_browser_net_target_is_supported(const char* target)
          strcmp(target, "sys.net.async.poll") == 0 ||
          strcmp(target, "sys.net.async.await") == 0 ||
          strcmp(target, "sys.net.async.cancel") == 0 ||
-         strcmp(target, "sys.net.asyncCancel") == 0 ||
          strcmp(target, "sys.net.async.resultInt") == 0 ||
          strcmp(target, "sys.net.async.resultBytes") == 0 ||
          strcmp(target, "sys.net.async.error") == 0);
