@@ -4083,11 +4083,13 @@ void aivm_step(AivmVm* vm)
             AivmValue left_value;
             size_t total_length;
             uint8_t* output;
-            if (!aivm_stack_pop(vm, &right_value) ||
-                !aivm_stack_pop(vm, &left_value)) {
+            if (vm->stack_count < 2U) {
+                aivm_set_vm_error(vm, AIVM_VM_ERR_STACK_UNDERFLOW, "BYTES_CONCAT requires two operands.");
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            right_value = vm->stack[vm->stack_count - 1U];
+            left_value = vm->stack[vm->stack_count - 2U];
             if (left_value.type != AIVM_VAL_BYTES || right_value.type != AIVM_VAL_BYTES) {
                 aivm_set_vm_error(vm, AIVM_VM_ERR_TYPE_MISMATCH, "BYTES_CONCAT requires (bytes,bytes).");
                 vm->instruction_pointer = vm->program->instruction_count;
@@ -4098,6 +4100,14 @@ void aivm_step(AivmVm* vm)
                 vm->instruction_pointer = vm->program->instruction_count;
                 break;
             }
+            /* Keep operands rooted while reservation may compact and relocate bytes. */
+            if (!aivm_bytes_arena_reserve(vm, total_length)) {
+                vm->instruction_pointer = vm->program->instruction_count;
+                break;
+            }
+            right_value = vm->stack[vm->stack_count - 1U];
+            left_value = vm->stack[vm->stack_count - 2U];
+            vm->stack_count -= 2U;
             output = aivm_bytes_arena_alloc(vm, total_length);
             if (output == NULL) {
                 vm->instruction_pointer = vm->program->instruction_count;

@@ -108,3 +108,20 @@ int aivm_vm_host_memory_growth_available(AivmVm* vm, size_t growth_bytes)
     vm->host_memory_growth_suspended = suspended;
     return 1;
 }
+
+size_t aivm_host_memory_worker_capacity(size_t maximum_workers)
+{
+    size_t total_bytes = 0U;
+    size_t available_bytes = 0U;
+    size_t reserve;
+    size_t capacity;
+    if (maximum_workers == 0U) return 1U;
+    if (!host_memory_snapshot(&total_bytes, &available_bytes)) return maximum_workers;
+    reserve = total_bytes / 100U * AIVM_HOST_MEMORY_RESERVE_PERCENT;
+    if (reserve < AIVM_HOST_MEMORY_RESERVE_MIN) reserve = AIVM_HOST_MEMORY_RESERVE_MIN;
+    if (available_bytes <= reserve) return 1U;
+    capacity = (available_bytes - reserve) /
+        AIVM_VM_TOOLING_BYTES_ARENA_INITIAL_CAPACITY;
+    if (capacity == 0U) capacity = 1U;
+    return capacity < maximum_workers ? capacity : maximum_workers;
+}

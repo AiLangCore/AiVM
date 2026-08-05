@@ -29,7 +29,7 @@ profile limit record.
 | `call_frame_capacity` | 2048 | Maximum active call frames. |
 | `locals_capacity` | 16384 | Maximum VM local slots. |
 | `string_arena_capacity` | profile-dependent | Maximum VM-owned string arena bytes. |
-| `bytes_arena_capacity` | profile-dependent | Maximum VM-owned byte arena bytes. |
+| `bytes_arena_capacity` | profile-dependent | Hard byte limit for constrained profiles; zero denotes hosted adaptive backing. |
 | `node_capacity` | 16384 | Maximum semantic node records. |
 | `node_attr_capacity` | 65536 | Maximum semantic node attributes. |
 | `node_child_capacity` | 131072 | Maximum semantic node child handles. |
@@ -48,22 +48,22 @@ Additional bytecode loader limits:
 | `program_string_storage_capacity` | 8192 | Maximum loaded program string bytes. |
 | `program_bytes_storage_capacity` | 32768 | Maximum loaded program byte storage. |
 
-The VM must fail deterministically when these limits are exceeded. Raising a
-limit is not the default fix for compiler/parser failures; first measure
-retained roots and reduce temporary structures.
+Constrained profiles fail deterministically when their declared hard limits are
+exceeded. Hosted tooling first compacts reclaimable values, grows backing on
+demand, and may use spill storage or host virtual memory. It reports memory
+pressure only after the host denies both memory and spill backing.
 
 ### Profile-Specific Arena Limits
 
-The production VM remains bounded for deployed applications. The tooling
-profile has separately bounded string and byte arenas because compiler and
-package workloads retain source modules and intermediate artifacts larger than
-the production payload budget.
+The production and debug VMs remain bounded for deployed applications. Hosted
+tooling has adaptive byte backing because compiler and package workloads retain
+source modules and intermediate artifacts larger than deployed payload budgets.
 
 | Profile | `string_arena_capacity` | `bytes_arena_capacity` | Intended workload |
 | --- | ---: | ---: | --- |
 | `production` | 2097152 | 131072 | Published application execution. |
 | `debug` | 2097152 | 131072 | Diagnostic execution with production-sized memory behavior. |
-| `tooling` | 16777216 | 67108864 | Compiler, parser, linker, package, and SDK execution. |
+| `tooling` | 16777216 | hosted/adaptive | Compiler, parser, linker, package, and SDK execution. |
 
 The `ailang` tool host defaults to `tooling`. `AILANG_VM_PROFILE` may select a
 different named profile explicitly. This changes only bounded runtime resource
@@ -90,7 +90,7 @@ Production `aivm` keeps output concise. Full memory/profile detail belongs to
 
 ## Allocation Failure Behavior
 
-When memory cannot be reclaimed or grown within the selected runtime profile,
+When memory cannot be reclaimed, grown, or spilled within the selected runtime profile,
 AiVM must:
 
 - enter VM error state
@@ -99,8 +99,9 @@ AiVM must:
 - include a deterministic detail string when useful
 - preserve debug telemetry when running under `aivm-debug`
 
-The VM must not silently fall back to unbounded host allocation to complete a
-semantic allocation.
+Hosted physical residency and spill placement are operational and cannot alter
+observable values, Task admission, observation order, or diagnostics. Explicitly
+constrained profiles do not fall back beyond their declared bound.
 
 ## Host Resource Limits
 
@@ -119,7 +120,7 @@ Tracked host-resource limit records:
 | `network_write_bytes` | 1048576 | `sys.net.tcp.write`, `sys.net.tcp.writeStart`, `sys.net.udp.send` | Enforced as max write payload size per call and cumulative bytes written per VM run. |
 | `process_count` | 32 | `sys.process.spawn` child process handles | Enforced before host process creation. |
 | `worker_logical_tasks` | 4096 | Accepted logical tasks per owner VM | Checked atomically before workload acceptance. |
-| `worker_logical_input_bytes` | profile byte-arena capacity | Aggregate immutable input bytes per owner VM | Checked atomically before workload acceptance. |
+| `worker_logical_input_bytes` | profile-controlled | Aggregate immutable input bytes per owner VM | Constrained profiles enforce a hard bound; hosted tooling reclaims materialized batch copies and uses pressure backpressure. |
 | `worker_active_ceiling` | profile-controlled | Maximum simultaneously active isolated invocations | Combined with discovered CPU/container and memory capacity. |
 | `worker_pending_materialized` | profile-controlled | Materialized runnable/pending descriptors | Lazy materialization keeps larger accepted workloads bounded. |
 | `worker_retained_results` | profile-controlled | Terminal unconsumed results | Includes results hidden behind a canonical straggler. |
@@ -154,7 +155,8 @@ where required by the selected profile, and deterministic failure behavior.
 - Worker workload admission checks logical task and input-byte ceilings using
   owner-visible state only. Rejection allocates no failed Task or scheduler
   record. Production/debug input is bounded by the 131072-byte profile arena;
-  tooling input is bounded by the 67108864-byte tooling arena.
+  tooling input uses the hosted pressure-aware backing policy. Explicitly
+  constrained targets remain bounded by their declared profile.
 
 ## Adaptive Worker Execution
 
@@ -179,8 +181,13 @@ already accepted workload may lazily materialize and refill internal work
 within its reservations. Task/result accounting is released exactly once by
 deterministic owner Await/release or owner shutdown.
 
-Result and intermediate byte capacity is reserved before dispatch. Saturated
-buffers apply backpressure; AiVM never creates unbounded completion overflow.
+Completed tooling-worker byte results may be written to opaque temporary spill
+storage and reloaded only when the owner awaits them. Spill offsets, files, RAM
+residency, and completion timing are not language-visible. Materialized batch
+input is released once every payload has been copied into its isolated
+invocation. The scheduler recomputes a memory-safe physical active target before
+dispatching queued work; at least one slot remains eligible so pressure degrades
+throughput instead of creating a semantic queue failure.
 Wall-clock watchdogs are operational aborts and cannot become canonical Task or
 compiler failures.
 - `sys.ui.createWindow` enforces `ui_window_count` before host window creation.

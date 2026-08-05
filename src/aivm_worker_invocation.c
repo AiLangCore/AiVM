@@ -53,6 +53,7 @@ void aivm_worker_invocation_clear(AivmWorkerInvocation* invocation)
     invocation->payload_length = 0U;
     invocation->result = NULL;
     invocation->result_length = 0U;
+    invocation->result_spill = NULL;
     invocation->status = AIVM_WORKER_INVOCATION_PENDING;
     invocation->vm_error = AIVM_VM_ERR_NONE;
     invocation->error_detail[0] = '\0';
@@ -65,7 +66,26 @@ void aivm_worker_invocation_release(AivmWorkerInvocation* invocation)
     }
     free(invocation->payload);
     free(invocation->result);
+    aivm_worker_spill_destroy(invocation->result_spill);
     aivm_worker_invocation_clear(invocation);
+}
+
+int aivm_worker_invocation_materialize_result(AivmWorkerInvocation* invocation)
+{
+    if (invocation == NULL) return 0;
+    if (invocation->result != NULL || invocation->result_spill == NULL) return 1;
+    invocation->result = (uint8_t*)malloc(
+        invocation->result_length == 0U ? 1U : invocation->result_length);
+    if (invocation->result == NULL) return 0;
+    if (!aivm_worker_spill_read(invocation->result_spill,
+        invocation->result, invocation->result_length)) goto fail;
+    aivm_worker_spill_destroy(invocation->result_spill);
+    invocation->result_spill = NULL;
+    return 1;
+fail:
+    free(invocation->result);
+    invocation->result = NULL;
+    return 0;
 }
 
 int aivm_worker_invocation_set_payload(
@@ -138,6 +158,16 @@ void aivm_worker_invocation_run(void* raw_invocation)
         free(vm);
         return;
     }
+    invocation->result_length = result.bytes_value.length;
+    if (invocation->profile == AIVM_RUNTIME_PROFILE_TOOLING) {
+        if (aivm_worker_spill_write(result.bytes_value.data,
+            result.bytes_value.length, &invocation->result_spill)) {
+            invocation->status = AIVM_WORKER_INVOCATION_COMPLETED;
+            aivm_dispose(vm);
+            free(vm);
+            return;
+        }
+    }
     invocation->result = (uint8_t*)malloc(
         result.bytes_value.length == 0U ? 1U : result.bytes_value.length);
     if (invocation->result == NULL) {
@@ -152,7 +182,6 @@ void aivm_worker_invocation_run(void* raw_invocation)
     if (result.bytes_value.length > 0U) {
         memcpy(invocation->result, result.bytes_value.data, result.bytes_value.length);
     }
-    invocation->result_length = result.bytes_value.length;
     invocation->status = AIVM_WORKER_INVOCATION_COMPLETED;
     aivm_dispose(vm);
     free(vm);

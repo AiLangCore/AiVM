@@ -238,8 +238,8 @@ enum {
     AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
     AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
     AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
-    /* Measured full self-hosting retains more than 32 MiB of byte values. */
-    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 64 * 1024 * 1024,
+    /* Hosted tooling has no semantic byte-arena ceiling; this is its initial backing size. */
+    AIVM_VM_TOOLING_BYTES_ARENA_INITIAL_CAPACITY = 16 * 1024 * 1024,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 16384,
     AIVM_VM_NODE_ATTR_CAPACITY = 65536,
@@ -330,6 +330,7 @@ typedef struct {
     size_t utf8_offset_cache_byte;
     uint8_t* bytes_arena;
     size_t bytes_arena_capacity;
+    int bytes_arena_adaptive;
     size_t bytes_arena_storage_capacity;
     size_t bytes_arena_used;
     size_t bytes_arena_limit;

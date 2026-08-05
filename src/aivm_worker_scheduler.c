@@ -1,4 +1,5 @@
 #include "aivm_worker_scheduler.h"
+#include "aivm_host_memory.h"
 
 #include <stdlib.h>
 
@@ -125,7 +126,17 @@ static AivmWorkerSchedulerTask* find_task(
 static AivmWorkerSchedulerTask* find_queued_task(AivmWorkerScheduler* scheduler)
 {
     size_t index;
+    size_t running_count = 0U;
+    size_t memory_capacity;
     AivmWorkerSchedulerTask* selected = NULL;
+    for (index = 0U; index < scheduler->outstanding_limit; index += 1U) {
+        if (scheduler->tasks[index].occupied != 0 &&
+            scheduler->tasks[index].status == AIVM_WORKER_TASK_RUNNING) {
+            running_count += 1U;
+        }
+    }
+    memory_capacity = aivm_host_memory_worker_capacity(scheduler->active_limit);
+    if (running_count >= memory_capacity) return NULL;
     for (index = 0U; index < scheduler->outstanding_limit; index += 1U) {
         AivmWorkerSchedulerTask* candidate = &scheduler->tasks[index];
         if (candidate->occupied == 0 || candidate->status != AIVM_WORKER_TASK_QUEUED) {

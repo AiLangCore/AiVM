@@ -159,8 +159,10 @@ int aivm_vm_complete_worker_task(AivmVm* vm, AivmCompletedTask* task)
     }
     if (status != AIVM_WORKER_RUNTIME_OK) {
         set_worker_task_error(vm,
-            status == AIVM_WORKER_RUNTIME_ERR_TRANSPORT
-                ? AIVM_VM_ERR_TYPE_MISMATCH : AIVM_VM_ERR_INVALID_PROGRAM,
+            status == AIVM_WORKER_RUNTIME_ERR_MEMORY
+                ? AIVM_VM_ERR_MEMORY_PRESSURE
+                : (status == AIVM_WORKER_RUNTIME_ERR_TRANSPORT
+                    ? AIVM_VM_ERR_TYPE_MISMATCH : AIVM_VM_ERR_INVALID_PROGRAM),
             result.error_detail);
         (void)aivm_worker_runtime_release(
             vm->worker_runtime, (uint64_t)task->handle);

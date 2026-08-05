@@ -31,18 +31,25 @@ static int ensure_string_arena_capacity(AivmVm* vm, size_t needed)
     return needed <= vm->string_arena_limit;
 }
 
-static int ensure_bytes_arena_capacity(AivmVm* vm, size_t needed)
+static size_t bytes_growth_target(const AivmVm* vm, size_t needed)
 {
-    size_t next;
-    if (vm == NULL) {
-        return 0;
+    size_t target;
+    if (vm == NULL || needed <= vm->bytes_arena_storage_capacity) {
+        return vm == NULL ? 0U : vm->bytes_arena_storage_capacity;
     }
-    while (needed > vm->bytes_arena_limit && vm->bytes_arena_limit < vm->bytes_arena_capacity) {
-        next = arena_grow_limit(vm->bytes_arena_limit, AIVM_VM_BYTES_ARENA_GROWTH_STEP, vm->bytes_arena_capacity);
-        if (!aivm_vm_admit_host_memory_growth(vm, next - vm->bytes_arena_limit)) return 0;
-        vm->bytes_arena_limit = next;
+    target = vm->bytes_arena_storage_capacity;
+    while (target < needed) {
+        size_t increment = target / 2U;
+        size_t next;
+        if (increment < AIVM_VM_BYTES_ARENA_GROWTH_STEP) {
+            increment = AIVM_VM_BYTES_ARENA_GROWTH_STEP;
+        }
+        if (!aivm_size_add_checked(target, increment, &next)) {
+            return needed;
+        }
+        target = next;
     }
-    return needed <= vm->bytes_arena_limit;
+    return target;
 }
 
 int aivm_pointer_in_string_arena(const AivmVm* vm, const char* text)
@@ -146,12 +153,18 @@ uint8_t* aivm_bytes_arena_alloc(AivmVm* vm, size_t size)
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         return NULL;
     }
-    if (needed > vm->bytes_arena_limit &&
-        !ensure_bytes_arena_capacity(vm, needed)) {
+    if (needed > vm->bytes_arena_limit && !aivm_bytes_arena_reserve(vm, size)) {
         aivm_counter_increment_saturating(&vm->bytes_arena_pressure_count);
         if (vm->status != AIVM_VM_STATUS_ERROR) {
             aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded.");
         }
+        return NULL;
+    }
+    if (!aivm_size_add_checked(vm->bytes_arena_used, size, &needed) ||
+        needed > vm->bytes_arena_limit) {
+        aivm_counter_increment_saturating(&vm->bytes_arena_pressure_count);
+        aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE,
+            "AIVMM002: bytes arena backing allocation failed.");
         return NULL;
     }
     start = &vm->bytes_arena[vm->bytes_arena_used];
@@ -189,7 +202,8 @@ static int compact_relocate_value_bytes(
     size_t* new_used,
     AivmBytesRelocation* relocations,
     size_t* relocation_count,
-    size_t relocation_capacity)
+    size_t relocation_capacity,
+    size_t target_capacity)
 {
     size_t i;
     size_t next_used;
@@ -211,7 +225,7 @@ static int compact_relocate_value_bytes(
     }
     if (*relocation_count >= relocation_capacity ||
         !aivm_size_add_checked(*new_used, value->bytes_value.length, &next_used) ||
-        next_used > vm->bytes_arena_capacity) {
+        next_used > target_capacity) {
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena capacity exceeded during compaction.");
         return 0;
     }
@@ -228,7 +242,7 @@ static int compact_relocate_value_bytes(
     return 1;
 }
 
-int aivm_compact_bytes_arena(AivmVm* vm)
+static int compact_bytes_arena_to(AivmVm* vm, size_t minimum_capacity)
 {
     uint8_t* live_pairs = NULL;
     uint8_t* old_arena;
@@ -239,12 +253,18 @@ int aivm_compact_bytes_arena(AivmVm* vm)
     size_t new_used = 0U;
     size_t pair_value_capacity = 0U;
     size_t i;
+    size_t target_capacity;
     if (vm == NULL) {
         return 0;
     }
-    if (vm->bytes_arena_used == 0U) {
-        return 1;
+    target_capacity = vm->bytes_arena_storage_capacity;
+    if (minimum_capacity > target_capacity) {
+        target_capacity = bytes_growth_target(vm, minimum_capacity);
     }
+    if (vm->bytes_arena_adaptive == 0 && target_capacity > vm->bytes_arena_capacity) {
+        target_capacity = vm->bytes_arena_capacity;
+    }
+    if (minimum_capacity > target_capacity) return 0;
     if (!aivm_size_add_checked(vm->stack_count, vm->locals_count, &relocation_capacity) ||
         !aivm_size_add_checked(relocation_capacity, vm->completed_task_count, &relocation_capacity) ||
         !aivm_size_add_checked(relocation_capacity, vm->par_value_count, &relocation_capacity) ||
@@ -255,13 +275,20 @@ int aivm_compact_bytes_arena(AivmVm* vm)
     }
     if (relocation_capacity == 0U) {
         vm->bytes_arena_used = 0U;
-        vm->bytes_arena_gc_threshold = vm->bytes_arena_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
-            ? vm->bytes_arena_capacity
+        vm->bytes_arena_gc_threshold = target_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
+            ? target_capacity
             : AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
+        if (target_capacity > vm->bytes_arena_storage_capacity) {
+            uint8_t* replacement = (uint8_t*)realloc(vm->bytes_arena, target_capacity);
+            if (replacement == NULL) return 0;
+            vm->bytes_arena = replacement;
+            vm->bytes_arena_storage_capacity = target_capacity;
+        }
+        vm->bytes_arena_limit = vm->bytes_arena_storage_capacity;
         return 1;
     }
     live_pairs = (uint8_t*)calloc(AIVM_VM_SCRATCH_PAIR_CAPACITY, sizeof(live_pairs[0]));
-    new_arena = (uint8_t*)calloc(vm->bytes_arena_capacity, sizeof(new_arena[0]));
+    new_arena = (uint8_t*)malloc(target_capacity == 0U ? 1U : target_capacity);
     relocations = (AivmBytesRelocation*)calloc(relocation_capacity, sizeof(relocations[0]));
     if (live_pairs == NULL || new_arena == NULL || relocations == NULL) {
         aivm_set_vm_error(vm, AIVM_VM_ERR_MEMORY_PRESSURE, "AIVMM002: bytes arena compaction workspace allocation failed.");
@@ -273,7 +300,7 @@ int aivm_compact_bytes_arena(AivmVm* vm)
 #define RELOCATE_BYTES(value_ptr) \
     do { \
         if (!compact_relocate_value_bytes( \
-                vm, (value_ptr), new_arena, &new_used, relocations, &relocation_count, relocation_capacity)) { \
+                vm, (value_ptr), new_arena, &new_used, relocations, &relocation_count, relocation_capacity, target_capacity)) { \
             goto fail; \
         } \
     } while (0)
@@ -298,12 +325,13 @@ int aivm_compact_bytes_arena(AivmVm* vm)
 #undef RELOCATE_BYTES
     old_arena = vm->bytes_arena;
     vm->bytes_arena = new_arena;
-    vm->bytes_arena_storage_capacity = vm->bytes_arena_capacity;
+    vm->bytes_arena_storage_capacity = target_capacity;
     vm->bytes_arena_used = new_used;
+    vm->bytes_arena_limit = target_capacity;
     vm->bytes_arena_gc_threshold = arena_grow_limit(
         new_used,
         AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY,
-        vm->bytes_arena_capacity);
+        target_capacity);
     free(old_arena);
     free(live_pairs);
     free(relocations);
@@ -315,4 +343,22 @@ fail:
     free(new_arena);
     free(relocations);
     return 0;
+}
+
+int aivm_compact_bytes_arena(AivmVm* vm)
+{
+    return compact_bytes_arena_to(vm, vm == NULL ? 0U : vm->bytes_arena_storage_capacity);
+}
+
+int aivm_bytes_arena_reserve(AivmVm* vm, size_t additional_size)
+{
+    size_t needed;
+    if (vm == NULL || !aivm_size_add_checked(vm->bytes_arena_used, additional_size, &needed)) {
+        return 0;
+    }
+    if (needed <= vm->bytes_arena_limit) return 1;
+    if (!compact_bytes_arena_to(vm, vm->bytes_arena_storage_capacity)) return 0;
+    if (!aivm_size_add_checked(vm->bytes_arena_used, additional_size, &needed)) return 0;
+    if (needed <= vm->bytes_arena_limit) return 1;
+    return compact_bytes_arena_to(vm, needed);
 }

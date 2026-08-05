@@ -59,7 +59,7 @@ static int host_core_bytes_compiler_sized(
     size_t arg_count,
     AivmValue* result)
 {
-    static uint8_t payload[8U * 1024U * 1024U];
+    static uint8_t payload[20U * 1024U * 1024U];
     (void)target;
     if (arg_count != 1U || args[0].type != AIVM_VAL_STRING) {
         return AIVM_SYSCALL_ERR_INVALID;
@@ -842,8 +842,8 @@ static int test_tooling_profile_allocates_tooling_node_arenas(void)
         expect(tooling_vm.string_arena_storage_capacity == tooling_limits.string_arena_capacity) != 0 ||
         expect(production_vm.bytes_arena_capacity == AIVM_VM_BYTES_ARENA_CAPACITY) != 0 ||
         expect(tooling_vm.bytes_arena_capacity == tooling_limits.bytes_arena_capacity) != 0 ||
-        expect(tooling_limits.bytes_arena_capacity == 64U * 1024U * 1024U) != 0 ||
-        expect(tooling_vm.bytes_arena_capacity > production_vm.bytes_arena_capacity) != 0 ||
+        expect(tooling_vm.bytes_arena_adaptive != 0) != 0 ||
+        expect(production_vm.bytes_arena_adaptive == 0) != 0 ||
         expect(tooling_vm.string_arena_capacity > production_vm.string_arena_capacity) != 0 ||
         expect(tooling_vm.node_capacity > production_vm.node_capacity) != 0) {
         return 1;
@@ -902,7 +902,9 @@ static int test_tooling_profile_materializes_large_bytes(void)
         expect(vm.bytes_arena_pressure_count == 0U) != 0 ||
         expect(aivm_stack_pop(&vm, &result) == 1) != 0 ||
         expect(result.type == AIVM_VAL_BYTES) != 0 ||
-        expect(result.bytes_value.length == 8U * 1024U * 1024U) != 0) {
+        expect(result.bytes_value.length == 20U * 1024U * 1024U) != 0 ||
+        expect(vm.bytes_arena_storage_capacity >
+            AIVM_VM_TOOLING_BYTES_ARENA_INITIAL_CAPACITY) != 0) {
         aivm_dispose(&vm);
         return 1;
     }
