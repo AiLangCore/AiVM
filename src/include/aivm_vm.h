@@ -238,8 +238,8 @@ enum {
     AIVM_VM_BYTES_ARENA_CAPACITY = 131072,
     AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY = 32768,
     AIVM_VM_BYTES_ARENA_GROWTH_STEP = 16384,
-    /* Measured generation-2 self-hosting retains more than 16 MiB of byte values. */
-    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 32 * 1024 * 1024,
+    /* Measured full self-hosting retains more than 32 MiB of byte values. */
+    AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY = 64 * 1024 * 1024,
     AIVM_VM_MAX_SYSCALL_ARGS = 16,
     AIVM_VM_NODE_CAPACITY = 16384,
     AIVM_VM_NODE_ATTR_CAPACITY = 65536,

@@ -842,7 +842,7 @@ static int test_tooling_profile_allocates_tooling_node_arenas(void)
         expect(tooling_vm.string_arena_storage_capacity == tooling_limits.string_arena_capacity) != 0 ||
         expect(production_vm.bytes_arena_capacity == AIVM_VM_BYTES_ARENA_CAPACITY) != 0 ||
         expect(tooling_vm.bytes_arena_capacity == tooling_limits.bytes_arena_capacity) != 0 ||
-        expect(tooling_limits.bytes_arena_capacity == 32U * 1024U * 1024U) != 0 ||
+        expect(tooling_limits.bytes_arena_capacity == 64U * 1024U * 1024U) != 0 ||
         expect(tooling_vm.bytes_arena_capacity > production_vm.bytes_arena_capacity) != 0 ||
         expect(tooling_vm.string_arena_capacity > production_vm.string_arena_capacity) != 0 ||
         expect(tooling_vm.node_capacity > production_vm.node_capacity) != 0) {

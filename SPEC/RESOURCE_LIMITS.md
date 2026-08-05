@@ -63,7 +63,7 @@ the production payload budget.
 | --- | ---: | ---: | --- |
 | `production` | 2097152 | 131072 | Published application execution. |
 | `debug` | 2097152 | 131072 | Diagnostic execution with production-sized memory behavior. |
-| `tooling` | 16777216 | 33554432 | Compiler, parser, linker, package, and SDK execution. |
+| `tooling` | 16777216 | 67108864 | Compiler, parser, linker, package, and SDK execution. |
 
 The `ailang` tool host defaults to `tooling`. `AILANG_VM_PROFILE` may select a
 different named profile explicitly. This changes only bounded runtime resource
@@ -154,7 +154,7 @@ where required by the selected profile, and deterministic failure behavior.
 - Worker workload admission checks logical task and input-byte ceilings using
   owner-visible state only. Rejection allocates no failed Task or scheduler
   record. Production/debug input is bounded by the 131072-byte profile arena;
-  tooling input is bounded by the 33554432-byte tooling arena.
+  tooling input is bounded by the 67108864-byte tooling arena.
 
 ## Adaptive Worker Execution
 
