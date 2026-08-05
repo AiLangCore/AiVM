@@ -10,4 +10,7 @@ int aivm_host_memory_growth_allowed(
     int was_suspended,
     int* out_suspended);
 
+/* Physical scheduling hint only; never changes task admission or observation. */
+size_t aivm_host_memory_worker_capacity(size_t maximum_workers);
+
 #endif

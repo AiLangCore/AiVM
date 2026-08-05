@@ -47,10 +47,12 @@ int aivm_vm_ensure_storage(AivmVm* vm)
             vm->string_arena_storage_capacity = string_capacity;
         }
     }
-    if (vm->bytes_arena_capacity == 0U) {
+    if (vm->bytes_arena_capacity == 0U && vm->bytes_arena_adaptive == 0) {
         vm->bytes_arena_capacity = AIVM_VM_BYTES_ARENA_CAPACITY;
     }
-    bytes_capacity = vm->bytes_arena_capacity;
+    bytes_capacity = vm->bytes_arena_adaptive != 0
+        ? AIVM_VM_TOOLING_BYTES_ARENA_INITIAL_CAPACITY
+        : vm->bytes_arena_capacity;
     if (vm->bytes_arena == NULL) {
         vm->bytes_arena = (uint8_t*)calloc(bytes_capacity, sizeof(vm->bytes_arena[0]));
         if (vm->bytes_arena != NULL) {

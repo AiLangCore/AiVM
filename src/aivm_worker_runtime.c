@@ -160,7 +160,8 @@ AivmWorkerRuntimeStatus aivm_worker_runtime_submit(
         return AIVM_WORKER_RUNTIME_ERR_ARGUMENT;
     }
     limits = aivm_runtime_profile_limits(runtime->profile);
-    if (payload_length > limits.bytes_arena_capacity) {
+    if (limits.bytes_arena_capacity != 0U &&
+        payload_length > limits.bytes_arena_capacity) {
         return AIVM_WORKER_RUNTIME_ERR_LIMIT;
     }
     if (find_runtime_task(runtime, submission_id) != NULL) {
@@ -232,6 +233,12 @@ AivmWorkerRuntimeStatus aivm_worker_runtime_await(
     out_result->vm_error = task->invocation.vm_error;
     out_result->error_detail = task->invocation.error_detail;
     if (task->invocation.status == AIVM_WORKER_INVOCATION_COMPLETED) {
+        if (!aivm_worker_invocation_materialize_result(&task->invocation)) {
+            out_result->status = AIVM_WORKER_RUNTIME_ERR_MEMORY;
+            out_result->error_detail = "Worker result spill reload failed.";
+            return AIVM_WORKER_RUNTIME_ERR_MEMORY;
+        }
+        out_result->data = task->invocation.result;
         out_result->status = AIVM_WORKER_RUNTIME_OK;
         return AIVM_WORKER_RUNTIME_OK;
     }

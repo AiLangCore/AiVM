@@ -1,4 +1,5 @@
 #include "aivm_worker_invocation.h"
+#include "aivm_vm_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,15 +20,24 @@ static int run_worker_function(
             break;
         }
         if (vm->instruction_pointer >= vm->program->instruction_count) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+                "Worker instruction pointer is outside the bundled artifact.");
             return 0;
         }
         aivm_step(vm);
         if (vm->status == AIVM_VM_STATUS_HALTED &&
             vm->instruction_pointer != vm->program->instruction_count) {
+            aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+                "Worker halted before its declared function returned.");
             return 0;
         }
     }
-    if (vm->status == AIVM_VM_STATUS_ERROR || vm->stack_count != 1U) {
+    if (vm->status == AIVM_VM_STATUS_ERROR) {
+        return 0;
+    }
+    if (vm->stack_count != 1U) {
+        aivm_set_vm_error(vm, AIVM_VM_ERR_INVALID_PROGRAM,
+            "Worker function must return exactly one transport value.");
         return 0;
     }
     *out_result = vm->stack[0];
@@ -43,6 +53,7 @@ void aivm_worker_invocation_clear(AivmWorkerInvocation* invocation)
     invocation->payload_length = 0U;
     invocation->result = NULL;
     invocation->result_length = 0U;
+    invocation->result_spill = NULL;
     invocation->status = AIVM_WORKER_INVOCATION_PENDING;
     invocation->vm_error = AIVM_VM_ERR_NONE;
     invocation->error_detail[0] = '\0';
@@ -55,7 +66,26 @@ void aivm_worker_invocation_release(AivmWorkerInvocation* invocation)
     }
     free(invocation->payload);
     free(invocation->result);
+    aivm_worker_spill_destroy(invocation->result_spill);
     aivm_worker_invocation_clear(invocation);
+}
+
+int aivm_worker_invocation_materialize_result(AivmWorkerInvocation* invocation)
+{
+    if (invocation == NULL) return 0;
+    if (invocation->result != NULL || invocation->result_spill == NULL) return 1;
+    invocation->result = (uint8_t*)malloc(
+        invocation->result_length == 0U ? 1U : invocation->result_length);
+    if (invocation->result == NULL) return 0;
+    if (!aivm_worker_spill_read(invocation->result_spill,
+        invocation->result, invocation->result_length)) goto fail;
+    aivm_worker_spill_destroy(invocation->result_spill);
+    invocation->result_spill = NULL;
+    return 1;
+fail:
+    free(invocation->result);
+    invocation->result = NULL;
+    return 0;
 }
 
 int aivm_worker_invocation_set_payload(
@@ -104,12 +134,16 @@ void aivm_worker_invocation_run(void* raw_invocation)
     if (!aivm_stack_push(vm,
         aivm_value_bytes(invocation->payload, invocation->payload_length)) ||
         !run_worker_function(vm, invocation->program->function_target, &result)) {
+        const char* detail;
         invocation->status = AIVM_WORKER_INVOCATION_FAILED;
         invocation->vm_error = vm->error == AIVM_VM_ERR_NONE
             ? AIVM_VM_ERR_INVALID_PROGRAM : vm->error;
+        detail = aivm_vm_error_detail(vm);
+        if (detail == NULL || detail[0] == '\0') {
+            detail = aivm_vm_error_message(invocation->vm_error);
+        }
         (void)snprintf(invocation->error_detail, sizeof(invocation->error_detail),
-            "%s", aivm_vm_error_detail(vm) == NULL ? "Worker execution failed." :
-            aivm_vm_error_detail(vm));
+            "%s", detail == NULL ? "Worker execution failed." : detail);
         aivm_dispose(vm);
         free(vm);
         return;
@@ -123,6 +157,16 @@ void aivm_worker_invocation_run(void* raw_invocation)
         aivm_dispose(vm);
         free(vm);
         return;
+    }
+    invocation->result_length = result.bytes_value.length;
+    if (invocation->profile == AIVM_RUNTIME_PROFILE_TOOLING) {
+        if (aivm_worker_spill_write(result.bytes_value.data,
+            result.bytes_value.length, &invocation->result_spill)) {
+            invocation->status = AIVM_WORKER_INVOCATION_COMPLETED;
+            aivm_dispose(vm);
+            free(vm);
+            return;
+        }
     }
     invocation->result = (uint8_t*)malloc(
         result.bytes_value.length == 0U ? 1U : result.bytes_value.length);
@@ -138,7 +182,6 @@ void aivm_worker_invocation_run(void* raw_invocation)
     if (result.bytes_value.length > 0U) {
         memcpy(invocation->result, result.bytes_value.data, result.bytes_value.length);
     }
-    invocation->result_length = result.bytes_value.length;
     invocation->status = AIVM_WORKER_INVOCATION_COMPLETED;
     aivm_dispose(vm);
     free(vm);

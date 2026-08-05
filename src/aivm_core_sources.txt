@@ -27,6 +27,7 @@ aivm_worker_invocation.c
 aivm_worker_program.c
 aivm_worker_runtime.c
 aivm_worker_scheduler.c
+aivm_worker_spill.c
 aivm_program.c
 aivm_program_constants.c
 aivm_program_instructions.c

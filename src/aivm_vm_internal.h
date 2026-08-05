@@ -23,6 +23,7 @@ int aivm_compact_bytes_arena(AivmVm* vm);
 char* aivm_string_arena_alloc(AivmVm* vm, size_t size);
 int aivm_string_arena_reserve(AivmVm* vm, size_t additional_size);
 uint8_t* aivm_bytes_arena_alloc(AivmVm* vm, size_t size);
+int aivm_bytes_arena_reserve(AivmVm* vm, size_t additional_size);
 const char* aivm_vm_snapshot_arena_backed_string(
     AivmVm* vm,
     const char* input,

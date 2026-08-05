@@ -6,6 +6,7 @@
 
 #include "aivm_vm.h"
 #include "aivm_worker_program.h"
+#include "aivm_worker_spill.h"
 
 typedef enum {
     AIVM_WORKER_INVOCATION_PENDING = 0,
@@ -23,6 +24,7 @@ typedef struct {
     size_t payload_length;
     uint8_t* result;
     size_t result_length;
+    AivmWorkerSpill* result_spill;
     AivmWorkerInvocationStatus status;
     AivmVmError vm_error;
     char error_detail[256];
@@ -35,5 +37,6 @@ int aivm_worker_invocation_set_payload(
     const uint8_t* payload,
     size_t payload_length);
 void aivm_worker_invocation_run(void* raw_invocation);
+int aivm_worker_invocation_materialize_result(AivmWorkerInvocation* invocation);
 
 #endif

@@ -60,8 +60,8 @@ void aivm_reset_state(AivmVm* vm)
     vm->utf8_offset_cache_rune = 0U;
     vm->utf8_offset_cache_byte = 0U;
     vm->bytes_arena_used = 0U;
-    vm->bytes_arena_limit = vm->bytes_arena_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
-        ? vm->bytes_arena_capacity
+    vm->bytes_arena_limit = vm->bytes_arena_storage_capacity < AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY
+        ? vm->bytes_arena_storage_capacity
         : AIVM_VM_BYTES_ARENA_INITIAL_CAPACITY;
     vm->bytes_arena_gc_threshold = vm->bytes_arena_limit;
     vm->bytes_arena[0] = 0U;

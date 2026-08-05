@@ -58,7 +58,8 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.node_child_capacity = AIVM_VM_NODE_CHILD_CAPACITY;
     if (profile == AIVM_RUNTIME_PROFILE_TOOLING) {
         limits.string_arena_capacity = AIVM_VM_TOOLING_STRING_ARENA_CAPACITY;
-        limits.bytes_arena_capacity = AIVM_VM_TOOLING_BYTES_ARENA_CAPACITY;
+        /* Zero denotes hosted, pressure-aware backing rather than a semantic cap. */
+        limits.bytes_arena_capacity = 0U;
         limits.node_capacity = AIVM_VM_TOOLING_NODE_CAPACITY;
         limits.node_attr_capacity = AIVM_VM_TOOLING_NODE_ATTR_CAPACITY;
         limits.node_child_capacity = AIVM_VM_TOOLING_NODE_CHILD_CAPACITY;
@@ -73,7 +74,8 @@ AivmRuntimeProfileLimits aivm_runtime_profile_limits(AivmRuntimeProfile profile)
     limits.process_count = AIVM_VM_PROCESS_COUNT;
     limits.worker_count = AIVM_VM_WORKER_COUNT;
     limits.worker_logical_task_capacity = 4096U;
-    limits.worker_logical_input_bytes = limits.bytes_arena_capacity;
+    limits.worker_logical_input_bytes = profile == AIVM_RUNTIME_PROFILE_TOOLING
+        ? (size_t)-1 : limits.bytes_arena_capacity;
     limits.ui_window_count = AIVM_VM_UI_WINDOW_COUNT;
     limits.debug_artifact_bytes = AIVM_VM_DEBUG_ARTIFACT_BYTES;
     limits.blob_capacity = AIVM_VM_BLOB_CAPACITY;
@@ -93,6 +95,7 @@ void aivm_set_runtime_profile(AivmVm* vm, AivmRuntimeProfile profile)
     limits = aivm_runtime_profile_limits(profile);
     vm->string_arena_capacity = limits.string_arena_capacity;
     vm->bytes_arena_capacity = limits.bytes_arena_capacity;
+    vm->bytes_arena_adaptive = profile == AIVM_RUNTIME_PROFILE_TOOLING;
     vm->node_capacity = limits.node_capacity;
     vm->node_attr_capacity = limits.node_attr_capacity;
     vm->node_child_capacity = limits.node_child_capacity;

@@ -2431,18 +2431,6 @@ int main(int argc, char** argv)
         fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm image decode binding missing.\" nodeId=syscall)\n");
         return 2;
     }
-#ifdef AIVM_WASM_WEB
-    if (!ensure_binding_handler(
-            bindings,
-            &binding_count,
-            sizeof(bindings) / sizeof(bindings[0]),
-            "sys.net.asyncCancel",
-            native_syscall_web_net_cancel)) {
-        fprintf(stderr, "Err#err1(code=RUN001 message=\"Wasm async cancel alias binding missing.\" nodeId=syscall)\n");
-        return 2;
-    }
-#endif
-
     g_wasm_active_vm = &vm;
 
     if (!aivm_execute_program_with_syscalls_and_argv(

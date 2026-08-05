@@ -91,6 +91,18 @@ int aivm_vm_refill_worker_task_groups(AivmVm* vm)
             }
             group->next_materialize_index += 1U;
         }
+        if (group->next_materialize_index == group->task_count &&
+            group->batch_bytes != NULL) {
+            if (vm->worker_logical_input_bytes >= group->batch_length) {
+                vm->worker_logical_input_bytes -= group->batch_length;
+            }
+            free(group->batch_bytes);
+            free(group->payload_offsets);
+            free(group->payload_lengths);
+            group->batch_bytes = NULL;
+            group->payload_offsets = NULL;
+            group->payload_lengths = NULL;
+        }
     }
     return 1;
 }
